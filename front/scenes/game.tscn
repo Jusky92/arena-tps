@@ -34,9 +34,9 @@ shadow_enabled = true
 [node name="Hint" type="Label" parent="HUD"]
 offset_left = 16.0
 offset_top = 12.0
-offset_right = 900.0
+offset_right = 1200.0
 offset_bottom = 40.0
-text = "Souris : viser   ZQSD : bouger   Maj : courir   Espace : sauter   Échap : menu"
+text = "Souris : viser   Clic : tirer   R : recharger   ZQSD : bouger   Maj : courir   Espace : sauter   Échap : menu"
 
 [node name="Crosshair" type="Label" parent="HUD"]
 anchors_preset = 8
@@ -54,3 +54,19 @@ theme_override_font_sizes/font_size = 28
 text = "+"
 horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="AmmoLabel" type="Label" parent="HUD"]
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -320.0
+offset_top = -70.0
+offset_right = -24.0
+offset_bottom = -20.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_font_sizes/font_size = 36
+text = "12 / 12"
+horizontal_alignment = 2
