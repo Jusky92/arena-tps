@@ -70,7 +70,7 @@ docs: complète le README
 - [x] Arène 3D avec obstacles
 - [x] Apparition aléatoire du joueur
 - [x] Déplacement, course, saut, caméra à la troisième personne
-- [ ] Tir
+- [x] Tir (cadence, chargeur, rechargement) et cibles d'entraînement
 - [ ] Connexion au serveur de jeu
 - [ ] Affichage des autres joueurs
 - [ ] Micro-services et bases de données

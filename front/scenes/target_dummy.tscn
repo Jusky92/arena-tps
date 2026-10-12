@@ -1,0 +1,35 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/target_dummy.gd" id="1_dummy"]
+
+[sub_resource type="CapsuleShape3D" id="Shape_dummy"]
+radius = 0.4
+height = 1.8
+
+[sub_resource type="StandardMaterial3D" id="Mat_dummy"]
+albedo_color = Color(0.9, 0.25, 0.25, 1)
+
+[sub_resource type="CapsuleMesh" id="Mesh_dummy"]
+material = SubResource("Mat_dummy")
+radius = 0.4
+height = 1.8
+
+[node name="TargetDummy" type="StaticBody3D"]
+script = ExtResource("1_dummy")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("Shape_dummy")
+
+[node name="Body" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+mesh = SubResource("Mesh_dummy")
+
+[node name="HealthLabel" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.15, 0)
+billboard = 1
+no_depth_test = true
+pixel_size = 0.01
+font_size = 48
+outline_size = 10
+text = "100 PV"

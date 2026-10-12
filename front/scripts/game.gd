@@ -1,6 +1,7 @@
 extends Node3D
-## Scène de jeu : construit l'arène 3D, fait apparaître le joueur à un endroit
-## aléatoire libre, capture la souris, et revient au menu avec Échap.
+## Scène de jeu : construit l'arène 3D, fait apparaître le joueur et des cibles
+## d'entraînement à des endroits aléatoires libres, gère le HUD, capture la
+## souris, et revient au menu avec Échap.
 
 const MAP_SIZE := 60.0          # l'arène fait 60 x 60 mètres, centrée sur (0, 0)
 const WALL_HEIGHT := 4.0
@@ -8,6 +9,7 @@ const WALL_THICKNESS := 1.0
 const FLOOR_COLOR := Color(0.32, 0.36, 0.3)
 const WALL_COLOR := Color(0.45, 0.47, 0.55)
 const OBSTACLE_COLOR := Color(0.7, 0.55, 0.35)
+const TARGET_COUNT := 6         # nombre de cibles d'entraînement
 
 # Obstacles : [position du centre au sol (x, z), taille (largeur x, hauteur, profondeur z)].
 const OBSTACLES := [
@@ -22,14 +24,20 @@ const OBSTACLES := [
 ]
 
 const PlayerScene := preload("res://scenes/player.tscn")
+const TargetScene := preload("res://scenes/target_dummy.tscn")
+
+@onready var ammo_label: Label = $HUD/AmmoLabel
+@onready var crosshair: Label = $HUD/Crosshair
 
 # Zones au sol occupées (pour éviter d'apparaître dans un mur), en 2D vue du dessus.
 var _blocked: Array[Rect2] = []
+var _crosshair_tween: Tween
 
 
 func _ready() -> void:
 	_build_floor()
 	_build_walls()
+	_spawn_targets()
 	_spawn_player()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
@@ -42,6 +50,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
+
+# ---------------------------------------------------------------- Arène
 
 func _build_floor() -> void:
 	# Le sol a une épaisseur de 1 m, sa surface est à y = 0.
@@ -90,12 +100,27 @@ func _make_box(center: Vector3, size: Vector3, color: Color) -> StaticBody3D:
 	return body
 
 
+# ---------------------------------------------------------------- Apparitions
+
+func _spawn_targets() -> void:
+	for i in TARGET_COUNT:
+		var target := TargetScene.instantiate()
+		add_child(target)
+		var spot := _random_free_spot(1.5)
+		target.global_position = Vector3(spot.x, 0.0, spot.y)
+		# La cible occupe sa place : rien d'autre n'apparaîtra dessus.
+		_blocked.append(Rect2(spot.x - 0.5, spot.y - 0.5, 1.0, 1.0))
+
+
 func _spawn_player() -> void:
 	var player := PlayerScene.instantiate()
 	add_child(player)
 	var spot := _random_free_spot(1.0)
 	player.global_position = Vector3(spot.x, 0.1, spot.y)
 	player.rotation.y = randf() * TAU  # orientation de départ aléatoire
+
+	player.ammo_changed.connect(_on_ammo_changed)
+	player.hit_confirmed.connect(_on_hit_confirmed)
 
 
 ## Tire une position au sol au hasard jusqu'à en trouver une hors des obstacles.
@@ -111,3 +136,26 @@ func _random_free_spot(margin: float) -> Vector2:
 		if free:
 			return spot
 	return Vector2(-25, -25)  # coin, toujours libre
+
+
+# ---------------------------------------------------------------- HUD
+
+func _on_ammo_changed(ammo: int, mag_size: int, reloading: bool) -> void:
+	if reloading:
+		ammo_label.text = "Rechargement…"
+	else:
+		ammo_label.text = "%d / %d" % [ammo, mag_size]
+
+
+## Le réticule devient rouge (touché) ou se transforme en X (élimination).
+func _on_hit_confirmed(killed: bool) -> void:
+	if _crosshair_tween:
+		_crosshair_tween.kill()
+	crosshair.text = "X" if killed else "+"
+	crosshair.modulate = Color(1, 0.2, 0.2)
+	_crosshair_tween = create_tween()
+	_crosshair_tween.tween_interval(0.25 if killed else 0.1)
+	_crosshair_tween.tween_callback(func() -> void:
+		crosshair.text = "+"
+		crosshair.modulate = Color.WHITE
+	)
