@@ -1,0 +1,29 @@
+; Fichier de configuration du projet Godot 4.
+
+config_version=5
+
+[application]
+
+config/name="Arena TPS"
+run/main_scene="res://scenes/menu.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+
+[autoload]
+
+Inputs="*res://scripts/inputs.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+
+[physics]
+
+common/physics_ticks_per_second=60
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+anti_aliasing/quality/msaa_3d=2

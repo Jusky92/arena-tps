@@ -1,0 +1,34 @@
+# ---------- Godot (front) ----------
+# Cache régénéré automatiquement par Godot : ne jamais versionner
+.godot/
+# Builds exportés
+front/export/
+front/builds/
+
+# ---------- Services (back) ----------
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+target/
+bin/
+obj/
+dist/
+*.log
+
+# Secrets et configuration locale (mots de passe de BDD, clés…)
+.env
+.env.*
+!.env.example
+
+# ---------- Docker ----------
+# Données locales des bases de données
+data/
+volumes/
+
+# ---------- Éditeurs et systèmes ----------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
