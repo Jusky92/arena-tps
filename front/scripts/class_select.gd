@@ -3,11 +3,11 @@ extends Control
 ## ses statistiques, son arme et sa capacité.
 ## Les cartes sont générées depuis GameState.CLASSES : ajouter une classe
 ## l'ajoute automatiquement ici.
-## Souris ou touches 1, 2, 3 pour choisir. Échap pour revenir au menu.
+## Souris ou touches 1, 2, 3 pour choisir (retour au menu principal). Échap pour revenir.
 
 const CARD_WIDTH := 340.0
 const PREVIEW_SIZE := Vector2i(296, 230)
-const BG_CARD := Color(0.11, 0.12, 0.16, 0.95)
+const BG_CARD := Color(0.05, 0.065, 0.1, 0.92)
 
 # Valeurs de référence pour remplir les barres de stats.
 const MAX_HEALTH_REF := 150.0
@@ -20,7 +20,12 @@ const MAX_RANGE_REF := 200.0
 
 
 func _ready() -> void:
+	theme = UiTheme.get_theme()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	var background := UiTheme.background()
+	add_child(background)
+	move_child(background, 1)
+	($Margin/VBox/TopBar/Title as Label).add_theme_font_override("font", UiTheme.title_font())
 	back_button.pressed.connect(_go_back)
 	for i in GameState.CLASSES.size():
 		cards_box.add_child(_make_card(GameState.CLASSES[i], i))
@@ -38,11 +43,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _choose(class_data: ClassData) -> void:
 	GameState.selected_class = class_data
-	get_tree().change_scene_to_file("res://scenes/game.tscn")
+	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 
 
 func _go_back() -> void:
-	get_tree().change_scene_to_file("res://scenes/menu.tscn")
+	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 
 
 # ---------------------------------------------------------------- Construction des cartes
@@ -77,7 +82,8 @@ func _make_card(data: ClassData, index: int) -> Control:
 	var preview := CharacterPreview.new()
 	preview_holder.add_child(preview)
 	preview.setup(data.character_design, data.weapon.model, PREVIEW_SIZE)
-	var name_label := _label(data.display_name.to_upper(), 28, Color.WHITE)
+	var name_label := _label(data.display_name.to_upper(), 26, Color.WHITE)
+	name_label.add_theme_font_override("font", UiTheme.title_font())
 	name_label.position = Vector2(10, 4)
 	name_label.add_theme_constant_override("outline_size", 6)
 	name_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.5))
@@ -118,9 +124,10 @@ func _make_card(data: ClassData, index: int) -> Control:
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_child(spacer)
 	var button := Button.new()
-	button.text = "Jouer %s" % data.display_name
+	button.text = "%s %s" % ["CLASSE ACTUELLE ·" if data == GameState.selected_class else "CHOISIR", data.display_name.to_upper()]
+	button.add_theme_font_override("font", UiTheme.title_font())
+	button.add_theme_font_size_override("font_size", 14)
 	button.custom_minimum_size = Vector2(0, 42)
-	button.add_theme_font_size_override("font_size", 18)
 	button.add_theme_stylebox_override("normal", _button_style(data.color.darkened(0.35)))
 	button.add_theme_stylebox_override("hover", _button_style(data.color))
 	button.add_theme_stylebox_override("pressed", _button_style(data.color.lightened(0.2)))

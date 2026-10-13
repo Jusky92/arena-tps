@@ -206,7 +206,7 @@ enum { SHOTGUN, SMG, SNIPER }
 
 ## Modélise l'arme dans `weapon_node` (ou sur la main si null) et place son Muzzle.
 ## Renvoie {"foregrip": distance de la main gauche}.
-static func build_weapon(rig: CharacterRig, kind: int, design_id: String, weapon_node: Node3D) -> Dictionary:
+static func build_weapon(rig, kind: int, design_id: String, weapon_node: Node3D) -> Dictionary:
 	var m := materials(design_id)
 	var g: Node3D = weapon_node if weapon_node else rig.gun_mount
 	var muzzle := Vector3.ZERO

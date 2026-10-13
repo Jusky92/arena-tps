@@ -134,8 +134,9 @@ func _build() -> void:
 	add_child(_vignette)
 
 	# Aide des touches (haut gauche).
-	var help := _label("Clic : tirer   Clic droit : viser   R : recharger   E : capacité   Maj : courir   Espace : sauter   Ctrl / C : s'accroupir   Échap : menu   F9 : test dégâts", 13, Color(1, 1, 1, 0.55))
-	_place(help, Control.PRESET_TOP_LEFT, Rect2(16, 10, 1200, 24))
+	var help := _label("R : recharger · E : capacité · Ctrl/C : accroupi · Tab : scores · Échap : menu", 14, Color(1, 1, 1, 0.55))
+	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_place(help, Control.PRESET_CENTER_BOTTOM, Rect2(-240, -8, 480, 22))
 	add_child(help)
 
 	# Réticule (centre).

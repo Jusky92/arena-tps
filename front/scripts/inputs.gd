@@ -14,6 +14,7 @@ const KEY_ACTIONS := {
 	"reload":       [KEY_R],
 	"ability":      [KEY_E],
 	"back_to_menu": [KEY_ESCAPE],
+	"scoreboard":   [KEY_TAB],
 	"debug_hurt":   [KEY_F9],   # test : s'infliger 25 dégâts (à retirer plus tard)
 }
 

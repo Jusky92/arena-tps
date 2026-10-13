@@ -15,7 +15,7 @@ const POSES := [
 ]
 const POSE_DURATION := 2.2
 
-var rig: CharacterRig
+var rig   # HumanRig ou CharacterRig
 var pose_label: Label
 var _pose_index := 0
 var _pose_time := 0.0
@@ -23,8 +23,16 @@ var _viewport: SubViewport
 var _time := 0.0
 
 
+## Poses jouées (noms de POSES). Vide = toutes.
+var pose_names: Array = []
+var show_pose_label := true
+var _poses: Array = []
+
+
 ## design_id : apparence (tank, assassin, tireur), weapon_kind : modèle d'arme.
-func setup(design_id: String, weapon_kind: int, size_px: Vector2i) -> void:
+## camera_distance / camera_height : cadrage (plus loin = personnage plus petit).
+func setup(design_id: String, weapon_kind: int, size_px: Vector2i, camera_distance := 4.3, camera_height := 1.05) -> void:
+	_poses = POSES.filter(func(p): return pose_names.is_empty() or pose_names.has(p[0]))
 	stretch = true
 	custom_minimum_size = size_px
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -47,8 +55,9 @@ func setup(design_id: String, weapon_kind: int, size_px: Vector2i) -> void:
 	camera.environment = env
 	camera.fov = 30.0
 	_viewport.add_child(camera)
-	camera.position = Vector3(0, 1.05, 4.3)
-	camera.look_at(Vector3(0, 0.88, 0))
+	# Orientation calculée à la main : le nœud n'est pas forcément déjà dans la scène.
+	var eye := Vector3(0, camera_height, camera_distance)
+	camera.transform = Transform3D(Basis.looking_at(Vector3(0, 0.88, 0) - eye, Vector3.UP), eye)
 
 	var key := DirectionalLight3D.new()
 	key.light_energy = 1.5
@@ -60,7 +69,7 @@ func setup(design_id: String, weapon_kind: int, size_px: Vector2i) -> void:
 	_viewport.add_child(rim)
 	rim.rotation_degrees = Vector3(-20, 160, 0)
 
-	rig = CharacterRig.new()
+	rig = HumanRig.new() if HumanDesigns.has_design(design_id) else CharacterRig.new()
 	_viewport.add_child(rig)
 	rig.build(design_id, weapon_kind)
 	rig.rotation.y = PI
@@ -69,6 +78,7 @@ func setup(design_id: String, weapon_kind: int, size_px: Vector2i) -> void:
 	pose_label.add_theme_font_size_override("font_size", 12)
 	pose_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.5))
 	pose_label.position = Vector2(8, size_px.y - 22)
+	pose_label.visible = show_pose_label
 	add_child(pose_label)
 	_apply_pose()
 
@@ -82,11 +92,11 @@ func _process(delta: float) -> void:
 	_pose_time += delta
 	if _pose_time > POSE_DURATION:
 		_pose_time = 0.0
-		_pose_index = (_pose_index + 1) % POSES.size()
+		_pose_index = (_pose_index + 1) % _poses.size()
 	_apply_pose()
 
 
 func _apply_pose() -> void:
-	var p: Array = POSES[_pose_index]
+	var p: Array = _poses[_pose_index]
 	rig.set_state(p[1], p[2], p[3], p[4], p[5], false)
 	pose_label.text = p[0]

@@ -1,11 +1,19 @@
 extends CharacterBody3D
-## Joueur local en vue à la troisième personne (caméra par-dessus l'épaule).
+## Joueur (local ou bot) en vue à la troisième personne.
 ## Ses statistiques, son arme, sa capacité et son apparence 3D viennent de sa classe.
 ##
-## Souris : viser          Clic gauche : tirer     Clic droit : viser (zoom)
-## ZQSD : se déplacer      Maj : courir            Espace : sauter
-## Ctrl ou C : s'accroupir (maintenir)
-## R : recharger           E : capacité            F9 : s'infliger 25 dégâts (test)
+## Entrées et simulation sont séparées :
+##   - à chaque image, on récupère des PlayerCommands (clavier/souris pour le joueur
+##     local, IA pour un bot via `brain`) ;
+##   - puis on simule déplacement, tir, capacité... à partir de ces commandes.
+## En multijoueur, le serveur de jeu fera tourner la même simulation à partir des
+## commandes envoyées par chaque client.
+##
+## Joueur local :
+##   Souris : viser          Clic gauche : tirer     Clic droit : viser (zoom)
+##   ZQSD : se déplacer      Maj : courir            Espace : sauter
+##   Ctrl ou C : s'accroupir R : recharger           E : capacité
+##   F9 : s'infliger 25 dégâts (test)
 
 signal health_changed(health: int, max_health: int)
 signal damaged(amount: int)
@@ -33,6 +41,10 @@ const CROUCH_CAMERA_HEIGHT := 1.12
 
 ## Classe du joueur. Si rien n'est donné, on prend celle choisie dans le menu.
 @export var class_data: ClassData
+## Nom affiché (tableau des scores, fil des éliminations).
+@export var player_name := "Joueur"
+## true = contrôlé au clavier/souris et suivi par la caméra.
+@export var is_local := true
 
 @onready var shield_mesh: MeshInstance3D = $Shield
 @onready var collision: CollisionShape3D = $CollisionShape3D
@@ -41,15 +53,22 @@ const CROUCH_CAMERA_HEIGHT := 1.12
 @onready var camera: Camera3D = $CameraPivot/SpringArm3D/Camera3D
 @onready var weapon: Node3D = $Gun
 
-## Corps 3D animé (construit au démarrage selon la classe).
-var rig: CharacterRig
+## Corps 3D animé : HumanRig (humain cyberpunk) ou CharacterRig (robot procédural).
+## Les deux exposent les mêmes fonctions (set_state, kick, flash, play_death, reset).
+var rig
+## IA du bot (null pour le joueur local). Doit avoir fill(player, commands, delta).
+var brain
 
 var health: int
 var alive: bool = true
 var kills: int = 0
 var deaths: int = 0
+var streak: int = 0
+var best_streak: int = 0
 var crouching: bool = false
 
+var _cmd := PlayerCommands.new()
+var _look_accum := Vector2.ZERO
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _aiming: bool = false
 var _crouch_amount: float = 0.0      # 0 = debout, 1 = accroupi (lissé, pour la caméra)
@@ -64,6 +83,7 @@ func _ready() -> void:
 	if class_data == null:
 		class_data = GameState.selected_class
 	spring_arm.add_excluded_object(get_rid())
+	camera.current = is_local
 	# Rampes : on reste collé à la pente en descendant au lieu de "sauter" de petits bonds.
 	floor_snap_length = 0.4
 	floor_max_angle = deg_to_rad(46.0)
@@ -72,8 +92,8 @@ func _ready() -> void:
 	collision.shape = _capsule
 	shield_mesh.visible = false
 
-	# Corps 3D : squelette + armure de la classe + modèle d'arme dans les mains.
-	rig = CharacterRig.new()
+	# Corps 3D : personnage de la classe + modèle d'arme dans les mains.
+	rig = HumanRig.new() if HumanDesigns.has_design(class_data.character_design) else CharacterRig.new()
 	rig.name = "Rig"
 	add_child(rig)
 	rig.build(class_data.character_design, class_data.weapon.model, weapon)
@@ -87,19 +107,14 @@ func _ready() -> void:
 	health_changed.emit.call_deferred(health, class_data.max_health)
 
 
+## Souris : on cumule le mouvement, il sera appliqué dans la simulation.
 func _unhandled_input(event: InputEvent) -> void:
-	if not alive:
+	if not is_local or not alive:
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		# Sensibilité réduite en visant, proportionnelle au zoom.
-		var zoom_factor := camera.fov / BASE_FOV
+		var zoom_factor := camera.fov / BASE_FOV   # moins sensible en visant
 		var sensitivity: float = Inputs.mouse_sensitivity * zoom_factor
-		rotate_y(-event.relative.x * sensitivity)
-		camera_pivot.rotation.x = clamp(camera_pivot.rotation.x - event.relative.y * sensitivity, MIN_PITCH, MAX_PITCH)
-	elif event.is_action_pressed("reload"):
-		weapon.start_reload()
-	elif event.is_action_pressed("ability"):
-		use_ability()
+		_look_accum += Vector2(-event.relative.x, -event.relative.y) * sensitivity
 	elif event.is_action_pressed("debug_hurt"):
 		take_damage(25, null)
 
@@ -109,27 +124,51 @@ func _physics_process(delta: float) -> void:
 	if not alive:
 		return
 
-	var captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
-	_aiming = captured and Input.is_action_pressed("aim")
+	# 1. Entrées -> commandes.
+	_cmd.clear()
+	if is_local:
+		_read_local_commands()
+	elif brain:
+		brain.fill(self, _cmd, delta)
+
+	# 2. Simulation à partir des commandes.
+	rotate_y(_cmd.look.x)
+	camera_pivot.rotation.x = clamp(camera_pivot.rotation.x + _cmd.look.y, MIN_PITCH, MAX_PITCH)
+	_aiming = _cmd.aim
+	if _cmd.reload:
+		weapon.start_reload()
+	if _cmd.ability:
+		use_ability()
 
 	_update_crouch(delta)
 	_update_movement(delta)
-	weapon.update(delta,
-		captured and Input.is_action_pressed("fire"),
-		captured and Input.is_action_just_pressed("fire"),
-		_aiming,
-		CROUCH_SPREAD_FACTOR if crouching else 1.0)
+	weapon.update(delta, _cmd.fire, _cmd.fire_pressed, _aiming, CROUCH_SPREAD_FACTOR if crouching else 1.0)
 	_update_camera(delta)
 
-	# Le corps 3D est animé à partir de l'état du joueur (vitesse dans son repère).
+	# 3. Le corps 3D est animé à partir de l'état (vitesse dans le repère du joueur).
 	rig.set_state(basis.inverse() * velocity, is_on_floor(), 1.0 if crouching else 0.0,
 		camera_pivot.rotation.x, is_sprinting(), _aiming)
+
+
+func _read_local_commands() -> void:
+	var captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+	_cmd.move = Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	_cmd.look = _look_accum
+	_look_accum = Vector2.ZERO
+	_cmd.jump = Input.is_action_just_pressed("jump")
+	_cmd.crouch = Input.is_action_pressed("crouch")
+	_cmd.sprint = Input.is_action_pressed("sprint")
+	_cmd.fire = captured and Input.is_action_pressed("fire")
+	_cmd.fire_pressed = captured and Input.is_action_just_pressed("fire")
+	_cmd.aim = captured and Input.is_action_pressed("aim")
+	_cmd.reload = Input.is_action_just_pressed("reload")
+	_cmd.ability = Input.is_action_just_pressed("ability")
 
 
 # ---------------------------------------------------------------- Accroupi
 
 func _update_crouch(delta: float) -> void:
-	var wants := Input.is_action_pressed("crouch") and not is_dashing()
+	var wants := _cmd.crouch and not is_dashing()
 	if wants and not crouching:
 		_set_crouching(true)
 	elif not wants and crouching and _can_stand():
@@ -161,31 +200,30 @@ func _can_stand() -> bool:
 func _update_movement(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y -= _gravity * delta
-	elif Input.is_action_just_pressed("jump"):
+	elif _cmd.jump:
 		# Sauter depuis la position accroupie relève le joueur (s'il y a la place).
 		if crouching and _can_stand():
 			_set_crouching(false)
 		if not crouching:
 			velocity.y = class_data.jump_velocity
 
-	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-	var direction := (transform.basis * Vector3(input.x, 0.0, input.y)).normalized()
+	var direction := (transform.basis * Vector3(_cmd.move.x, 0.0, _cmd.move.y)).normalized()
 
-	# Dash en cours : vitesse imposée, on ignore les touches.
+	# Dash en cours : vitesse imposée, on ignore les commandes.
 	if is_dashing():
 		velocity.x = _dash_direction.x * class_data.ability_strength
 		velocity.z = _dash_direction.z * class_data.ability_strength
 		move_and_slide()
 		return
 
-	var sprinting := Input.is_action_pressed("sprint") and not _aiming and not crouching and input.y < 0.0
+	var sprinting := _cmd.sprint and not _aiming and not crouching and _cmd.move.y < 0.0
 	var speed := class_data.sprint_speed if sprinting else class_data.walk_speed
 	if _aiming:
 		speed *= AIM_SPEED_FACTOR
 	if crouching:
 		speed *= CROUCH_SPEED_FACTOR
 
-	var target := direction * speed
+	var target := direction * speed * minf(_cmd.move.length(), 1.0)
 	var accel := ACCELERATION if is_on_floor() else ACCELERATION * AIR_CONTROL
 	velocity.x = lerp(velocity.x, target.x, accel * delta)
 	velocity.z = lerp(velocity.z, target.z, accel * delta)
@@ -193,7 +231,7 @@ func _update_movement(delta: float) -> void:
 
 
 func is_sprinting() -> bool:
-	return Input.is_action_pressed("sprint") and not _aiming and not crouching \
+	return _cmd.sprint and not _aiming and not crouching \
 		and Vector2(velocity.x, velocity.z).length() > class_data.walk_speed + 0.5
 
 
@@ -232,6 +270,11 @@ func is_aiming() -> bool:
 	return _aiming
 
 
+## Point visé par les autres (milieu du torse), utile pour l'IA.
+func chest_position() -> Vector3:
+	return global_position + Vector3(0, (CROUCH_HEIGHT if crouching else STAND_HEIGHT) * 0.62, 0)
+
+
 # ---------------------------------------------------------------- Capacité
 
 func use_ability() -> bool:
@@ -244,7 +287,7 @@ func use_ability() -> bool:
 		ClassData.Ability.SHIELD:
 			shield_mesh.visible = true
 		ClassData.Ability.DASH:
-			var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+			var input := _cmd.move
 			if input == Vector2.ZERO:
 				input = Vector2(0, -1)  # sans direction : dash vers l'avant
 			_dash_direction = (transform.basis * Vector3(input.x, 0, input.y)).normalized()
@@ -302,6 +345,8 @@ func take_damage(amount: int, from: Node) -> bool:
 	rig.flash()
 	damaged.emit(amount)
 	health_changed.emit(health, class_data.max_health)
+	if brain and from:
+		brain.on_damaged(self, from)
 	if health == 0:
 		_die(from)
 		return true
@@ -311,6 +356,7 @@ func take_damage(amount: int, from: Node) -> bool:
 func _die(killer: Node) -> void:
 	alive = false
 	deaths += 1
+	streak = 0
 	_end_ability()
 	velocity = Vector3.ZERO
 	if crouching:
@@ -334,3 +380,10 @@ func respawn(spawn_position: Vector3, yaw: float) -> void:
 	collision.set_deferred("disabled", false)
 	weapon.refill()
 	health_changed.emit(health, class_data.max_health)
+
+
+## Compte une élimination (appelé par la partie).
+func add_kill() -> void:
+	kills += 1
+	streak += 1
+	best_streak = maxi(best_streak, streak)

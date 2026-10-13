@@ -17,6 +17,9 @@ extends Node3D
 ##   Sud-ouest     échafaudages : deux tours reliées par une passerelle à 5 m
 ##   Sud-est       place moderne (pergola, arbres, fontaine, kiosque)
 ##   Croix         deux avenues qui traversent la map, avec barrières et lampadaires
+##
+## Décor "CFA INSTA" et IoT : enseignes néon, LAB IoT dans l'entrepôt (bras robotiques,
+## tapis roulant, tableau de bord), caméras de surveillance, capteurs connectés, drones.
 
 const HALF := 60.0                 # demi-côté de l'arène (120 m de côté)
 const WALL_HEIGHT := 8.0
@@ -60,7 +63,7 @@ const BARRIERS := [
 
 # Caisses : [x, z, étage].
 const CRATES := [
-	[24, -29, 0], [25.6, -29, 0], [24.8, -29, 1], [34, -36, 0], [34, -37.6, 0],
+	[24, -29, 0], [25.6, -29, 0], [24.8, -29, 1],
 	[26, -47, 0], [27.6, -47, 0], [16, -20, 0], [16, -18.4, 0],
 	[-14, -14, 0], [14, 14, 0], [15.6, 14, 0], [-12, 30, 0], [12, -32, 0], [12, -33.6, 0],
 	[-20, 52, 0], [-21.6, 52, 0], [-20.8, 52, 1],
@@ -106,6 +109,9 @@ func build() -> void:
 	_build_scaffolds()
 	_build_plaza()
 	_build_roads()
+	_build_iot_lab()
+	_build_cfa_insta()
+	_build_connected_city()
 
 
 # =========================================================================== ambiance
@@ -513,6 +519,159 @@ func _street_light(base: Vector3, facing: Vector3) -> void:
 	_cylinder(base + Vector3(0, 3, 0), 0.12, 6, _mat("metal_dark"))
 	_mesh_box(base + Vector3(0, 6, 0) + facing * 0.8, Vector3(0.2, 0.15, 0.2) + facing.abs() * 1.4, _mat("metal_dark"))
 	_mesh_box(base + Vector3(0, 5.88, 0) + facing * 1.3, Vector3(0.35, 0.06, 0.35) + facing.abs() * 0.3, _mat("lamp_warm"))
+
+
+# =========================================================================== IoT et CFA INSTA
+
+const RobotArmScript := preload("res://scripts/maps/props/robot_arm.gd")
+const SecurityCameraScript := preload("res://scripts/maps/props/security_camera.gd")
+const DroneScript := preload("res://scripts/maps/props/patrol_drone.gd")
+const SensorScript := preload("res://scripts/maps/props/iot_sensor.gd")
+const DashboardScript := preload("res://scripts/maps/props/iot_dashboard.gd")
+const ConveyorScript := preload("res://scripts/maps/props/conveyor.gd")
+const TITLE_FONT := preload("res://assets/fonts/Orbitron.ttf")
+
+
+## LAB IoT dans l'entrepôt : tapis roulant, deux bras robotiques, écran de supervision.
+func _build_iot_lab() -> void:
+	# Tapis roulant (avec collision) + caisses qui défilent.
+	_box(Vector3(31, 0.4, -36), Vector3(14, 0.8, 0.9), _mat("metal_dark"))
+	_mesh_box(Vector3(31, 0.81, -36), Vector3(13.8, 0.02, 0.7), _mat("grating"), false)
+	var conveyor: Node3D = ConveyorScript.new()
+	conveyor.length = 13.0
+	_root.add_child(conveyor)
+	conveyor.position = Vector3(31, 0.82, -36)
+
+	# Deux bras robotiques de part et d'autre du tapis, avec zone de sécurité au sol.
+	for arm_data in [[Vector3(27.5, 0, -37.5), PI, 0.0], [Vector3(34.5, 0, -34.5), 0.0, 0.5]]:
+		var pos: Vector3 = arm_data[0]
+		_cylinder(pos + Vector3(0, 0.25, 0), 0.47, 0.5, _mat("metal_dark"))
+		var arm: Node3D = RobotArmScript.new()
+		arm.phase_offset = arm_data[2]
+		_root.add_child(arm)
+		arm.position = pos
+		arm.rotation.y = arm_data[1]
+		_mesh_box(pos + Vector3(0, 0.013, 0), Vector3(3.4, 0.02, 0.12), _mat("paint_yellow"), false)
+		for side in [-1.0, 1.0]:
+			_mesh_box(pos + Vector3(side * 1.7, 0.013, 0), Vector3(0.12, 0.02, 2.6), _mat("paint_yellow"), false)
+
+	# Écran de supervision sur la façade sud (face au centre de la map).
+	var dashboard: Node3D = DashboardScript.new()
+	_root.add_child(dashboard)
+	dashboard.position = Vector3(34, 3.0, -23.62)
+	dashboard.rotation.y = PI
+
+	# Passerelle LoRa / antenne sur le toit.
+	_box(Vector3(46, 8.5, -46), Vector3(0.25, 2.4, 0.25), _mat("metal_dark"))
+	var beacon := _mesh_box(Vector3(46, 9.8, -46), Vector3(0.3, 0.3, 0.3), _mat("neon_magenta"), false)
+	beacon.name = "LoraBeacon"
+
+
+## Références au CFA INSTA : enseignes néon, bannières, marquage au sol.
+func _build_cfa_insta() -> void:
+	# Grandes enseignes sur les murs nord et sud.
+	_sign("CFA INSTA", Vector3(0, 4.4, -59.35), 0.0, 200, 0.03, Color(3.0, 0.6, 2.4))
+	_sign("ARCHITECTURE SI · M2", Vector3(0, 4.4, 59.35), PI, 150, 0.024, Color(0.4, 2.8, 3.0))
+	# Enseigne sur l'entrepôt (LAB IoT), lisible depuis le centre.
+	_box(Vector3(34, 8.55, -24.1), Vector3(12.5, 2.3, 0.25), _mat("metal_dark"))
+	_sign("CFA INSTA", Vector3(34, 8.6, -23.95), 0.0, 150, 0.014, Color(0.3, 2.3, 2.6))
+	# Marquage au sol sur la tour centrale.
+	var floor_text := _sign("CFA INSTA ARENA", Vector3(0, 3.015, 0), 0.0, 120, 0.012, Color(0.25, 1.6, 1.8))
+	floor_text.rotation = Vector3(-PI / 2, 0, 0)
+	# Bannières verticales sur les murs est et ouest.
+	for z in [-40.0, -10.0, 20.0, 45.0]:
+		for side in [-1.0, 1.0]:
+			var x: float = side * 59.45
+			_mesh_box(Vector3(x, 4.2, z), Vector3(0.05, 5.0, 2.0), _mat("metal_dark"), false)
+			_mesh_box(Vector3(x - side * 0.03, 6.65, z), Vector3(0.02, 0.06, 2.0), _mat("neon_magenta"), false)
+			_mesh_box(Vector3(x - side * 0.03, 1.75, z), Vector3(0.02, 0.06, 2.0), _mat("neon_magenta"), false)
+			var banner := _sign("CFA INSTA", Vector3(x - side * 0.04, 4.2, z), -side * PI / 2, 64, 0.012, Color(2.6, 0.7, 2.2))
+			banner.rotation.z = PI / 2
+	# Panneau publicitaire du sud-ouest et kiosque de la place.
+	_sign("CFA INSTA", Vector3(-35, 7.4, 46.25), 0.0, 110, 0.016, Color(2.2, 2.2, 2.4))
+	_sign("Formation Architecte SI · M2", Vector3(-35, 5.6, 46.25), 0.0, 60, 0.012, Color(0.4, 1.8, 2.2))
+	_sign("CFA INSTA", Vector3(-35, 7.0, 45.75), PI, 110, 0.016, Color(2.4, 0.5, 1.9))
+	_sign("CAFÉT' INSTA", Vector3(46, 4.25, 12.45), PI, 64, 0.012, Color(2.4, 0.6, 1.9))
+
+
+## Ville connectée : caméras, capteurs, station météo, drones.
+func _build_connected_city() -> void:
+	# Caméras sur les piliers des murs d'enceinte et sur les bâtiments.
+	var cameras := [
+		[Vector3(-30, 6.4, -59.35), PI], [Vector3(30, 6.4, -59.35), PI],
+		[Vector3(-20, 6.4, 59.35), 0.0], [Vector3(20, 6.4, 59.35), 0.0],
+		[Vector3(59.35, 6.4, -20), PI / 2], [Vector3(59.35, 6.4, 30), PI / 2],
+		[Vector3(-59.35, 6.4, -30), -PI / 2], [Vector3(-59.35, 6.4, 10), -PI / 2],
+		[Vector3(17.6, 6.0, -23.6), PI * 0.75], [Vector3(-4.3, 7.6, 4.3), PI * 0.25],
+		[Vector3(-25.6, 4.3, 29.9), PI],
+	]
+	for c in cameras:
+		var cam: Node3D = SecurityCameraScript.new()
+		_root.add_child(cam)
+		cam.position = c[0]
+		cam.rotation.y = c[1]
+
+	# Capteurs (température, humidité, CO2, bruit, lumière, présence).
+	var sensors := [
+		[Vector3(31.0, 5.4, -23.62), PI, IotSensor.Kind.TEMPERATURE],
+		[Vector3(37.0, 5.4, -23.62), PI, IotSensor.Kind.HUMIDITY],
+		[Vector3(17.62, 2.0, -30.0), PI / 2, IotSensor.Kind.CO2],
+		[Vector3(11.1, 3.0, 20.0), PI / 2, IotSensor.Kind.NOISE],
+		[Vector3(-11.1, 3.0, -20.0), -PI / 2, IotSensor.Kind.TEMPERATURE],
+		[Vector3(-46.0, 6.27, 22.2), 0.0, IotSensor.Kind.LIGHT],
+		[Vector3(34.0, 0.75, 43.6), PI, IotSensor.Kind.PRESENCE],
+		[Vector3(-35.0, 1.8, -48.7), PI, IotSensor.Kind.HUMIDITY],
+		[Vector3(6.0, 4.27, 7.75), PI, IotSensor.Kind.PRESENCE],
+	]
+	for s in sensors:
+		var sensor: Node3D = SensorScript.new()
+		sensor.kind = s[2]
+		_root.add_child(sensor)
+		sensor.position = s[0]
+		sensor.rotation.y = s[1]
+
+	# Station météo connectée sur la place (anémomètre + panneau solaire).
+	_cylinder(Vector3(52, 1.6, 52), 0.07, 3.2, _mat("metal_dark"))
+	var solar := _mesh_box(Vector3(52, 2.4, 51.75), Vector3(0.9, 0.04, 0.6), _mat("screen"))
+	solar.rotation.x = -0.6
+	var station: Node3D = SensorScript.new()
+	station.kind = IotSensor.Kind.WIND
+	_root.add_child(station)
+	station.position = Vector3(52, 3.3, 52)
+
+	# Drones en patrouille.
+	var drones := [
+		[Vector3(0, 0, 0), Vector2(17, 17), 11.0, 0.22, false],
+		[Vector3(-35, 0, -36), Vector2(12, 9), 17.0, 0.3, true],
+		[Vector3(35, 0, 38), Vector2(10, 10), 9.5, -0.28, false],
+		[Vector3(-35, 0, 35), Vector2(13, 7), 10.5, 0.26, true],
+	]
+	for i in drones.size():
+		var d: Array = drones[i]
+		var drone: Node3D = DroneScript.new()
+		drone.center = d[0]
+		drone.radius = d[1]
+		drone.altitude = d[2]
+		drone.speed = d[3]
+		drone.figure_eight = d[4]
+		drone.phase = i * 1.7
+		_root.add_child(drone)
+
+
+## Texte lumineux (enseigne néon) en police Orbitron.
+func _sign(text: String, pos: Vector3, yaw: float, font_size: int, pixel: float, color: Color) -> Label3D:
+	var label := Label3D.new()
+	label.text = text
+	label.font = TITLE_FONT
+	label.font_size = font_size
+	label.pixel_size = pixel
+	label.modulate = color
+	label.outline_size = 0
+	label.shaded = false
+	_root.add_child(label)
+	label.position = pos
+	label.rotation.y = yaw
+	return label
 
 
 # =========================================================================== briques de base

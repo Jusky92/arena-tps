@@ -11,19 +11,24 @@ config_version=5
 [application]
 
 config/name="Arena TPS"
-run/main_scene="res://scenes/menu.tscn"
+run/main_scene="res://scenes/auth.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [autoload]
 
 Inputs="*res://scripts/inputs.gd"
 GameState="*res://scripts/game_state.gd"
+Backend="*res://scripts/backend/backend.gd"
 
 [display]
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
 window/stretch/mode="canvas_items"
+
+[gui]
+
+theme/custom_font="res://assets/fonts/Rajdhani-Medium.ttf"
 
 [rendering]
 
