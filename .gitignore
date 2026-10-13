@@ -24,8 +24,8 @@ dist/
 
 # ---------- Docker ----------
 # Données locales des bases de données
-data/
-volumes/
+services/**/data/
+services/**/volumes/
 
 # ---------- Éditeurs et systèmes ----------
 .vscode/

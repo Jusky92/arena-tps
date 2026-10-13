@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_w"]
+
+[resource]
+script = ExtResource("1_w")
+display_name = "Fusil à pompe"
+damage = 11
+pellets = 9
+max_range = 30.0
+fire_rate = 1.3
+automatic = false
+mag_size = 6
+reload_time = 2.0
+spread_deg = 7.0
+aim_spread_deg = 5.0
+aim_fov = 60.0
+recoil_deg = 4.0
+tracer_color = Color(1, 0.55, 0.25, 1)

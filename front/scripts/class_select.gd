@@ -1,0 +1,181 @@
+extends Control
+## Écran de choix de classe : une carte par classe (stats, arme, capacité).
+## Les cartes sont générées depuis GameState.CLASSES : ajouter une classe
+## l'ajoute automatiquement ici.
+## Souris ou touches 1, 2, 3 pour choisir. Échap pour revenir au menu.
+
+const CARD_SIZE := Vector2(340, 0)
+const BG_CARD := Color(0.11, 0.12, 0.16, 0.95)
+
+# Valeurs de référence pour remplir les barres de stats.
+const MAX_HEALTH_REF := 150.0
+const MAX_SPEED_REF := 9.5
+const MAX_DPS_REF := 120.0
+const MAX_RANGE_REF := 200.0
+
+@onready var cards_box: HBoxContainer = %Cards
+@onready var back_button: Button = %BackButton
+
+
+func _ready() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	back_button.pressed.connect(_go_back)
+	for i in GameState.CLASSES.size():
+		cards_box.add_child(_make_card(GameState.CLASSES[i], i))
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("back_to_menu"):
+		_go_back()
+	elif event is InputEventKey and event.pressed and not event.echo:
+		# Touche physique : marche aussi en AZERTY sans appuyer sur Maj.
+		var index: int = event.physical_keycode - KEY_1
+		if index >= 0 and index < GameState.CLASSES.size():
+			_choose(GameState.CLASSES[index])
+
+
+func _choose(class_data: ClassData) -> void:
+	GameState.selected_class = class_data
+	get_tree().change_scene_to_file("res://scenes/game.tscn")
+
+
+func _go_back() -> void:
+	get_tree().change_scene_to_file("res://scenes/menu.tscn")
+
+
+# ---------------------------------------------------------------- Construction des cartes
+
+func _make_card(data: ClassData, index: int) -> Control:
+	var card := PanelContainer.new()
+	card.custom_minimum_size = CARD_SIZE
+	var normal_style := _card_style(data.color, false)
+	var hover_style := _card_style(data.color, true)
+	card.add_theme_stylebox_override("panel", normal_style)
+	card.mouse_entered.connect(func() -> void:
+		card.add_theme_stylebox_override("panel", hover_style)
+		_animate_scale(card, 1.04))
+	card.mouse_exited.connect(func() -> void:
+		card.add_theme_stylebox_override("panel", normal_style)
+		_animate_scale(card, 1.0))
+	card.resized.connect(func() -> void: card.pivot_offset = card.size / 2.0)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	card.add_child(box)
+
+	# En-tête : pastille de couleur + nom + touche.
+	var header := HBoxContainer.new()
+	var swatch := ColorRect.new()
+	swatch.color = data.color
+	swatch.custom_minimum_size = Vector2(10, 38)
+	header.add_child(swatch)
+	var name_label := _label(data.display_name.to_upper(), 30, Color.WHITE)
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(name_label)
+	header.add_child(_label("[%d]" % (index + 1), 18, Color(1, 1, 1, 0.4)))
+	box.add_child(header)
+
+	var desc := _label(data.description, 15, Color(1, 1, 1, 0.75))
+	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(desc)
+
+	box.add_child(HSeparator.new())
+
+	# Statistiques.
+	var w := data.weapon
+	var dps := w.damage * w.pellets * w.fire_rate
+	box.add_child(_stat_bar("Points de vie", data.max_health / MAX_HEALTH_REF, str(data.max_health), data.color))
+	box.add_child(_stat_bar("Vitesse", data.sprint_speed / MAX_SPEED_REF, "%.1f m/s" % data.sprint_speed, data.color))
+	box.add_child(_stat_bar("Dégâts / s", dps / MAX_DPS_REF, str(int(dps)), data.color))
+	box.add_child(_stat_bar("Portée", w.max_range / MAX_RANGE_REF, "%d m" % int(w.max_range), data.color))
+
+	box.add_child(HSeparator.new())
+
+	# Arme.
+	box.add_child(_label("ARME", 13, Color(1, 1, 1, 0.45)))
+	box.add_child(_label(w.display_name, 19, Color.WHITE))
+	var pellets_text := " x%d" % w.pellets if w.pellets > 1 else ""
+	box.add_child(_label("%d dégâts%s · chargeur %d · %s" % [w.damage, pellets_text, w.mag_size,
+		"automatique" if w.automatic else "coup par coup"], 13, Color(1, 1, 1, 0.65)))
+
+	# Capacité.
+	box.add_child(_label("CAPACITÉ  [E]", 13, Color(1, 1, 1, 0.45)))
+	box.add_child(_label(data.ability_name, 19, data.color.lightened(0.3)))
+	var ability_desc := _label("%s (recharge %d s)" % [data.ability_description, int(data.ability_cooldown)], 13, Color(1, 1, 1, 0.65))
+	ability_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(ability_desc)
+
+	# Bouton.
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(spacer)
+	var button := Button.new()
+	button.text = "Jouer %s" % data.display_name
+	button.custom_minimum_size = Vector2(0, 46)
+	button.add_theme_font_size_override("font_size", 18)
+	button.add_theme_stylebox_override("normal", _button_style(data.color.darkened(0.35)))
+	button.add_theme_stylebox_override("hover", _button_style(data.color))
+	button.add_theme_stylebox_override("pressed", _button_style(data.color.lightened(0.2)))
+	button.add_theme_stylebox_override("focus", _button_style(data.color))
+	button.pressed.connect(_choose.bind(data))
+	box.add_child(button)
+	return card
+
+
+func _stat_bar(title: String, ratio: float, value_text: String, color: Color) -> Control:
+	var row := VBoxContainer.new()
+	row.add_theme_constant_override("separation", 3)
+	var top := HBoxContainer.new()
+	var t := _label(title, 14, Color(1, 1, 1, 0.8))
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(t)
+	top.add_child(_label(value_text, 14, Color.WHITE))
+	row.add_child(top)
+
+	var bar := ProgressBar.new()
+	bar.show_percentage = false
+	bar.custom_minimum_size = Vector2(0, 8)
+	bar.max_value = 1.0
+	bar.value = clampf(ratio, 0.05, 1.0)
+	bar.add_theme_stylebox_override("background", _flat(Color(1, 1, 1, 0.08), 4))
+	bar.add_theme_stylebox_override("fill", _flat(color, 4))
+	row.add_child(bar)
+	return row
+
+
+func _label(text: String, size: int, color: Color) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", size)
+	label.add_theme_color_override("font_color", color)
+	return label
+
+
+func _card_style(color: Color, hovered: bool) -> StyleBoxFlat:
+	var style := _flat(BG_CARD, 14)
+	style.set_border_width_all(3 if hovered else 1)
+	style.border_color = color if hovered else Color(1, 1, 1, 0.08)
+	style.content_margin_left = 22
+	style.content_margin_right = 22
+	style.content_margin_top = 16
+	style.content_margin_bottom = 16
+	if hovered:
+		style.shadow_color = Color(color, 0.35)
+		style.shadow_size = 18
+	return style
+
+
+func _button_style(color: Color) -> StyleBoxFlat:
+	return _flat(color, 8)
+
+
+func _flat(color: Color, radius: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = color
+	style.set_corner_radius_all(radius)
+	return style
+
+
+func _animate_scale(node: Control, target: float) -> void:
+	var tween := node.create_tween()
+	tween.tween_property(node, "scale", Vector2.ONE * target, 0.12).set_trans(Tween.TRANS_QUAD)

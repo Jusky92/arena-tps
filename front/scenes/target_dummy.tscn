@@ -28,8 +28,7 @@ mesh = SubResource("Mesh_dummy")
 [node name="HealthLabel" type="Label3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.15, 0)
 billboard = 1
-no_depth_test = true
-pixel_size = 0.01
+pixel_size = 0.006
 font_size = 48
 outline_size = 10
 text = "100 PV"

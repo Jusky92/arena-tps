@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="ClassData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/class_data.gd" id="1_c"]
+[ext_resource type="Resource" path="res://data/weapons/sniper.tres" id="2_w"]
+
+[resource]
+script = ExtResource("1_c")
+weapon = ExtResource("2_w")
+display_name = "Tireur"
+description = "Fragile au contact, redoutable à distance. Vise avec le clic droit."
+color = Color(0.25, 0.6, 1, 1)
+max_health = 100
+walk_speed = 5.0
+sprint_speed = 7.5
+jump_velocity = 5.0
+ability = 2
+ability_name = "Tir perforant"
+ability_description = "Pendant 6 s, les balles traversent les ennemis."
+ability_cooldown = 12.0
+ability_duration = 6.0
+ability_strength = 1.0

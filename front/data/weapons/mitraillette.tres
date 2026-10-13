@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_w"]
+
+[resource]
+script = ExtResource("1_w")
+display_name = "Mitraillette"
+damage = 9
+pellets = 1
+max_range = 50.0
+fire_rate = 13.0
+automatic = true
+mag_size = 30
+reload_time = 1.4
+spread_deg = 2.5
+aim_spread_deg = 1.2
+aim_fov = 58.0
+recoil_deg = 0.5
+tracer_color = Color(0.6, 1, 0.5, 1)

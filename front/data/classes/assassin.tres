@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="ClassData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/class_data.gd" id="1_c"]
+[ext_resource type="Resource" path="res://data/weapons/mitraillette.tres" id="2_w"]
+
+[resource]
+script = ExtResource("1_c")
+weapon = ExtResource("2_w")
+display_name = "Assassin"
+description = "Rapide et agile, mais fragile. Harcèle et se replie."
+color = Color(0.7, 0.35, 0.95, 1)
+max_health = 80
+walk_speed = 6.2
+sprint_speed = 9.5
+jump_velocity = 5.6
+ability = 1
+ability_name = "Dash"
+ability_description = "Bond fulgurant dans la direction du déplacement."
+ability_cooldown = 4.0
+ability_duration = 0.22
+ability_strength = 24.0

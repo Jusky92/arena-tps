@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_w"]
+
+[resource]
+script = ExtResource("1_w")
+display_name = "Fusil de précision"
+damage = 70
+pellets = 1
+max_range = 200.0
+fire_rate = 0.9
+automatic = false
+mag_size = 5
+reload_time = 2.3
+spread_deg = 4.0
+aim_spread_deg = 0.0
+aim_fov = 22.0
+recoil_deg = 5.0
+tracer_color = Color(0.55, 0.85, 1, 1)

@@ -35,11 +35,48 @@ arena-tps/
 
 | Touche | Action |
 |---|---|
-| Souris | Viser / orienter la caméra |
+| Souris | Orienter la caméra |
+| Clic gauche | Tirer |
+| Clic droit | Viser (zoom, meilleure précision) |
 | Z Q S D ou flèches | Se déplacer |
 | Maj | Courir |
 | Espace | Sauter |
+| R | Recharger |
+| E | Capacité de la classe |
 | Échap | Revenir au menu |
+| F9 | S'infliger 25 dégâts (test, à retirer) |
+
+## Classes et armes
+
+Les classes et les armes sont décrites par des fichiers de données modifiables dans l'inspecteur de Godot :
+
+- `front/data/classes/*.tres` : points de vie, vitesse, arme, capacité ;
+- `front/data/weapons/*.tres` : dégâts, cadence, chargeur, dispersion, zoom.
+
+| Classe | PV | Arme | Capacité |
+|---|---|---|---|
+| Tank | 150 | Fusil à pompe (9 plombs) | Bouclier : -70 % de dégâts pendant 3 s |
+| Assassin | 80 | Mitraillette | Dash : bond rapide dans la direction du déplacement |
+| Tireur | 100 | Fusil de précision | Tir perforant : les balles traversent les ennemis pendant 6 s |
+
+Pour ajouter une classe : dupliquer un fichier `.tres` de classe, ajuster ses valeurs, puis l'ajouter à la liste `CLASSES` de `front/scripts/game_state.gd`.
+
+## La map « Arena »
+
+Arène de 120 x 120 m prévue pour 8 joueurs, définie dans `front/scripts/maps/arena_map.gd` et chargée par `front/scenes/maps/arena.tscn` (scène séparée du jeu, réutilisable par le futur serveur).
+
+| Zone | Contenu |
+|---|---|
+| Centre | Tour à 3 m, 4 rampes, auvent |
+| Nord-ouest | Parc à conteneurs, portique de levage |
+| Nord-est | Entrepôt avec mezzanine à 3,5 m |
+| Sud-ouest | Deux tours à 5 m reliées par une passerelle |
+| Sud-est | Place : pergola, arbres, fontaine, kiosque |
+| Avenues | Deux axes qui se croisent, avec barrières et lampadaires |
+
+- Les éléments (conteneurs, barrières, caisses, arbres, points d'apparition) sont des listes en haut du script : les modifier puis cliquer sur **Reconstruire la map** dans l'inspecteur de la scène `arena.tscn`.
+- Les textures sont générées par `tools/generate_textures.py` (Python, numpy, pillow) : aucune ressource externe, aucun droit d'auteur.
+- Les matériaux sont dans `front/data/materials/` et se règlent dans l'inspecteur.
 
 ## Règles de travail
 
@@ -71,6 +108,12 @@ docs: complète le README
 - [x] Apparition aléatoire du joueur
 - [x] Déplacement, course, saut, caméra à la troisième personne
 - [x] Tir (cadence, chargeur, rechargement) et cibles d'entraînement
+- [x] Classes (Tank, Assassin, Tireur), armes et capacités
+- [x] Écran de choix de classe
+- [x] Points de vie, mort et réapparition, HUD complet
+- [x] Map « Arena » 120 x 120 m texturée (6 zones, 16 points d'apparition)
+- [ ] Partie chronométrée et tableau des scores
+- [ ] Bots d'entraînement
 - [ ] Connexion au serveur de jeu
 - [ ] Affichage des autres joueurs
 - [ ] Micro-services et bases de données

@@ -11,11 +11,14 @@ const KEY_ACTIONS := {
 	"jump":         [KEY_SPACE],
 	"sprint":       [KEY_SHIFT],
 	"reload":       [KEY_R],
+	"ability":      [KEY_E],
 	"back_to_menu": [KEY_ESCAPE],
+	"debug_hurt":   [KEY_F9],   # test : s'infliger 25 dégâts (à retirer plus tard)
 }
 
 const MOUSE_ACTIONS := {
 	"fire": [MOUSE_BUTTON_LEFT],
+	"aim":  [MOUSE_BUTTON_RIGHT],
 }
 
 # Réglage de la souris (sensibilité de la caméra).
