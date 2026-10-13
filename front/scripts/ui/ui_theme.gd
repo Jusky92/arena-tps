@@ -71,10 +71,34 @@ static func get_theme() -> Theme:
 		t.set_stylebox("grabber_highlight", type, box(Color(CYAN, 0.6), Color(0, 0, 0, 0), 0, 3, 0, 0))
 		t.set_stylebox("grabber_pressed", type, box(CYAN, Color(0, 0, 0, 0), 0, 3, 0, 0))
 
+	# Curseurs (réglages du son, sensibilité).
+	var track := box(Color(1, 1, 1, 0.1), Color(0, 0, 0, 0), 0, 3, 0, 3)
+	t.set_stylebox("slider", "HSlider", track)
+	t.set_stylebox("grabber_area", "HSlider", box(Color(CYAN, 0.85), Color(0, 0, 0, 0), 0, 3, 0, 3))
+	t.set_stylebox("grabber_area_highlight", "HSlider", box(CYAN, Color(0, 0, 0, 0), 0, 3, 0, 3))
+	t.set_icon("grabber", "HSlider", _round_icon(Color.WHITE, CYAN, 20))
+	t.set_icon("grabber_highlight", "HSlider", _round_icon(Color.WHITE, Color.WHITE, 22))
+	t.set_icon("grabber_disabled", "HSlider", _round_icon(MUTED, MUTED, 20))
+
 	# Info-bulles.
 	t.set_stylebox("panel", "TooltipPanel", box(Color(0.05, 0.06, 0.1, 0.97), Color(CYAN, 0.4), 1, 4, 10, 6))
 	_theme = t
 	return t
+
+
+## Petit disque (poignée des curseurs) : centre `inner`, bord `ring`.
+static func _round_icon(inner: Color, ring: Color, size: int) -> Texture2D:
+	var g := Gradient.new()
+	g.offsets = PackedFloat32Array([0.0, 0.55, 0.7, 0.86, 0.94])
+	g.colors = PackedColorArray([inner, inner, ring, ring, Color(ring, 0.0)])
+	var tex := GradientTexture2D.new()
+	tex.gradient = g
+	tex.width = size
+	tex.height = size
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(0.5, 0.0)
+	return tex
 
 
 ## Police des titres (Orbitron en gras).

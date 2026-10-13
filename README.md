@@ -47,8 +47,25 @@ Le **back-end est simulé** (`front/scripts/backend/backend.gd`) : la connexion 
 | R | Recharger |
 | E | Capacité de la classe |
 | Tab (maintenir) | Tableau des scores |
-| Échap | Revenir au menu |
+| Échap | Menu pause (la partie continue) |
 | F9 | S'infliger 25 dégâts (test) |
+
+### Menu pause
+
+**Échap** ouvre le menu pause du joueur local. La partie **ne s'arrête pas** : les bots (et plus tard les autres joueurs) continuent, et notre personnage reste dans l'arène, immobile et vulnérable. Le menu propose :
+
+- **Reprendre** ;
+- **Changer de classe** : la classe choisie est utilisée à la prochaine apparition, le score de la partie est conservé ;
+- **Paramètres** : volume général, effets, interface, sensibilité de la souris, inversion de l'axe vertical (enregistrés dans `user://parametres.cfg`, autoload `Settings`) ;
+- **Quitter la partie** (avec confirmation).
+
+### Protection d'apparition
+
+Pendant **3 secondes** après chaque apparition, le joueur ne prend aucun dégât (bulle lumineuse visible par tous, compte à rebours sous le réticule). Les balles sont déviées et les bots ne le visent pas. La protection s'arrête dès que le joueur tire. Durée réglable dans `player.gd` (`SPAWN_PROTECTION_TIME`).
+
+### Sons
+
+Effets sonores générés par `tools/generate_sounds.py` (tirs des 3 armes, impacts, élimination, rechargement, capacités, apparition, interface). Les sons des autres joueurs sont spatialisés. Lecture via l'autoload `Sfx`, sur les bus audio `Effets` et `Interface`.
 
 ## Modes de jeu
 
@@ -116,6 +133,7 @@ Les éléments de la map sont des listes et fonctions dans le script : après un
 | `generate_textures.py` | Textures tuilables de la map (béton, métal, conteneurs…) générées par bruit mathématique |
 | `generate_suit_masks.py` | Masques des combinaisons calculés à partir des poids de skinning des modèles |
 | `extract_animations.gd` | Extraction d'une bibliothèque d'animations compacte depuis le pack d'animations |
+| `generate_sounds.py` | Effets sonores du jeu, calculés par synthèse (aucun son externe) |
 
 Dépendances Python : `numpy`, `pillow`.
 
@@ -123,7 +141,7 @@ Dépendances Python : `numpy`, `pillow`.
 
 - Personnages et animations : **Quaternius** — Universal Base Characters, Universal Animation Library, Modular Character Outfits — licence **CC0** (domaine public). Textes de licence dans `front/assets/characters/quaternius/licenses/`.
 - Polices : **Orbitron** et **Rajdhani** (Google Fonts) — licence **SIL Open Font License** (fichiers OFL dans `front/assets/fonts/`).
-- Textures de la map, équipements, robots, armes et décors IoT : générés par le projet.
+- Textures de la map, effets sonores, équipements, robots, armes et décors IoT : générés par le projet.
 
 ## Règles de travail
 
@@ -157,6 +175,7 @@ docs: complète le README
 - [x] Tir, munitions, classes, armes et capacités
 - [x] Map « Arena » 120 x 120 m texturée, décor CFA INSTA et IoT animé
 - [x] Match à mort contre des bots, tableau des scores, écran de fin
+- [x] Menu pause local (changement de classe, son, sensibilité), protection d'apparition, effets sonores
 - [ ] Connexion au vrai back-end (BFF)
 - [ ] Serveur de jeu dédié (Godot headless) et joueurs distants
 - [ ] Micro-services et bases de données

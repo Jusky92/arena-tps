@@ -32,7 +32,7 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("back_to_menu"):
+	if event.is_action_pressed("ui_cancel"):
 		_go_back()
 	elif event is InputEventKey and event.pressed and not event.echo:
 		# Touche physique : marche aussi en AZERTY sans appuyer sur Maj.

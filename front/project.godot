@@ -19,6 +19,8 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 Inputs="*res://scripts/inputs.gd"
 GameState="*res://scripts/game_state.gd"
 Backend="*res://scripts/backend/backend.gd"
+Settings="*res://scripts/settings.gd"
+Sfx="*res://scripts/sfx.gd"
 
 [display]
 

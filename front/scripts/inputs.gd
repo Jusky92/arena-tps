@@ -13,7 +13,7 @@ const KEY_ACTIONS := {
 	"crouch":       [KEY_CTRL, KEY_C],
 	"reload":       [KEY_R],
 	"ability":      [KEY_E],
-	"back_to_menu": [KEY_ESCAPE],
+	"pause":        [KEY_ESCAPE],
 	"scoreboard":   [KEY_TAB],
 	"debug_hurt":   [KEY_F9],   # test : s'infliger 25 dégâts (à retirer plus tard)
 }
@@ -23,8 +23,7 @@ const MOUSE_ACTIONS := {
 	"aim":  [MOUSE_BUTTON_RIGHT],
 }
 
-# Réglage de la souris (sensibilité de la caméra).
-var mouse_sensitivity: float = 0.003
+## La sensibilité de la souris est dans les réglages (autoload Settings).
 
 
 func _ready() -> void:

@@ -6,6 +6,12 @@ extends Node3D
 ##                 Le résultat est envoyé au back (équivalent de match.finished).
 ##   "training"    Entraînement : le joueur seul avec les mannequins, sans limite de temps.
 ##
+## Échap ouvre le menu pause du joueur local : la partie continue pour les autres
+## (bots, futurs joueurs en ligne) ; seul le joueur local perd le contrôle de son
+## personnage. Depuis ce menu, il peut changer de classe pour sa prochaine apparition.
+##
+## Chaque apparition donne quelques secondes de protection (voir player.gd).
+##
 ## La map est une scène à part (scenes/maps/) : le futur serveur de jeu pourra
 ## charger exactement la même. Les bots utilisent un maillage de navigation calculé
 ## au chargement à partir des collisions de la map.
@@ -15,6 +21,7 @@ const MapScene := preload("res://scenes/maps/arena.tscn")
 const PlayerScene := preload("res://scenes/player.tscn")
 const TargetScene := preload("res://scenes/target_dummy.tscn")
 const MatchUIScript := preload("res://scripts/ui/match_ui.gd")
+const PauseMenuScript := preload("res://scripts/ui/pause_menu.gd")
 
 const BOT_NAMES := ["NeoByte", "Gl1tch", "V0LT", "Cipher", "Kairo", "Nova", "Raven", "Hexa", "ZeroDay", "Proxy"]
 const STREAK_BANNERS := {2: "DOUBLE ÉLIMINATION", 3: "TRIPLE ÉLIMINATION", 5: "SÉRIE x5 · INARRÊTABLE", 8: "SÉRIE x8 · LÉGENDAIRE"}
@@ -28,12 +35,14 @@ var roam_points: Array = []             # points de patrouille des bots
 var nav_map: RID
 
 var _ui: CanvasLayer
+var _pause: CanvasLayer
 var _mode := "deathmatch"
 var _time_left := 0.0
 var _running := false
 var _respawns := {}                     # joueur -> temps restant avant réapparition
 var _match_time := 0.0
 var _ping := randi_range(7, 14)          # ping simulé du joueur local
+var _pending_class: ClassData = null    # classe choisie pour la prochaine apparition
 
 
 func _ready() -> void:
@@ -44,6 +53,12 @@ func _ready() -> void:
 	add_child(_ui)
 	_ui.play_again.connect(func() -> void: get_tree().reload_current_scene())
 	_ui.back_to_menu.connect(_go_to_menu)
+
+	_pause = PauseMenuScript.new()
+	add_child(_pause)
+	_pause.resumed.connect(_close_pause)
+	_pause.quit_requested.connect(_go_to_menu)
+	_pause.class_selected.connect(_on_class_selected)
 
 	player = _spawn_player(GameState.selected_class, Backend.username(), true)
 	hud.bind(player)
@@ -80,20 +95,91 @@ func _process(delta: float) -> void:
 			_ui.set_time(_time_left, leader.name, leader.kills)
 			if _time_left <= 0.0:
 				_end_match()
-		_ui.show_scoreboard(_scoreboard_rows(), _running and Input.is_action_pressed("scoreboard"), _server_subtitle())
+		var show_board: bool = _running and not _pause.is_open() and Input.is_action_pressed("scoreboard")
+		_ui.show_scoreboard(_scoreboard_rows(), show_board, _server_subtitle())
+
+	if _pause.is_open():
+		_pause.set_info(_pause_info())
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("back_to_menu"):
-		_go_to_menu()
+	if event.is_action_pressed("pause"):
+		if _pause.is_open():
+			_pause.back()
+		elif _running or _mode == "training":
+			_open_pause()
+		get_viewport().set_input_as_handled()
 	# Si la souris a été libérée (Alt+Tab…), un clic la recapture.
-	elif event is InputEventMouseButton and event.pressed and (_running or _mode == "training") \
-			and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+	elif event is InputEventMouseButton and event.pressed and not _pause.is_open() \
+			and (_running or _mode == "training") and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 func _go_to_menu() -> void:
 	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+
+
+# ---------------------------------------------------------------- Menu pause
+
+## Pause locale : le joueur lâche les commandes, le reste de la partie continue.
+func _open_pause() -> void:
+	player.input_enabled = false
+	hud.visible = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	Sfx.ui("ui_open")
+	_pause.open(player.class_data, _pending_class)
+	_pause.set_info(_pause_info())
+
+
+func _close_pause() -> void:
+	_pause.close()
+	hud.visible = true
+	player.input_enabled = true
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	Sfx.ui("ui_close")
+
+
+func _pause_info() -> String:
+	var lines := []
+	if _mode == "deathmatch":
+		lines.append("%s · %d joueurs" % [_server_subtitle(), players.size()])
+		lines.append("Temps restant : %d:%02d" % [int(_time_left) / 60, int(_time_left) % 60])
+		lines.append("Ton score : %d élim. · %d morts" % [player.kills, player.deaths])
+	else:
+		lines.append("Entraînement · MAP ARENA")
+	if not player.alive:
+		lines.append("Réapparition en cours…")
+	return "\n".join(lines)
+
+
+## Classe choisie dans le menu pause : appliquée à la prochaine apparition.
+func _on_class_selected(cls: ClassData) -> void:
+	GameState.selected_class = cls        # gardée aussi pour les prochaines parties
+	_pending_class = null if cls == player.class_data else cls
+	if _pending_class:
+		hud.set_next_class(cls.display_name, cls.color)
+	else:
+		hud.set_next_class("")
+
+
+## Remplace le joueur local par un nouveau personnage de la classe choisie,
+## en conservant son score. Appelé au moment de la réapparition.
+func _replace_local_player(cls: ClassData) -> void:
+	var old := player
+	players.erase(old)
+	old.remove_from_group("players")
+	var fresh := _spawn_player(cls, old.player_name, true)
+	fresh.kills = old.kills
+	fresh.deaths = old.deaths
+	fresh.best_streak = old.best_streak
+	fresh.input_enabled = not _pause.is_open()
+	player = fresh
+	hud.bind(fresh)
+	hud.hide_death()
+	old.queue_free()
+	_pending_class = null
+	hud.set_next_class("")
+	Sfx.play("spawn", -8.0)
 
 
 # ---------------------------------------------------------------- Joueurs
@@ -103,7 +189,7 @@ func _spawn_player(cls: ClassData, display_name: String, local: bool) -> Charact
 	p.class_data = cls
 	p.player_name = display_name
 	p.is_local = local
-	p.name = display_name
+	p.name = display_name   # Godot ajoute un suffixe si le nom est déjà pris
 	if not local:
 		var brain := BotBrain.new()
 		brain.game = self
@@ -113,6 +199,7 @@ func _spawn_player(cls: ClassData, display_name: String, local: bool) -> Charact
 	p.global_transform = _best_spawn(p)
 	p.died.connect(_on_player_died.bind(p))
 	p.add_to_group("players")   # utilisé par les caméras et capteurs de la map
+	p.start_spawn_protection()
 	if not local:
 		_add_name_tag(p)
 	players.append(p)
@@ -149,6 +236,9 @@ func _best_spawn(for_player: Node) -> Transform3D:
 
 
 func _respawn(p: CharacterBody3D) -> void:
+	if p == player and _pending_class:
+		_replace_local_player(_pending_class)
+		return
 	var t := _best_spawn(p)
 	p.respawn(t.origin, t.basis.get_euler().y)
 	if p.brain:
@@ -202,6 +292,9 @@ func _server_subtitle() -> String:
 func _end_match() -> void:
 	_running = false
 	_time_left = 0.0
+	if _pause.is_open():
+		_pause.close()
+		hud.visible = true
 	_ui.set_time(0.0, "", 0)
 	for p in players:
 		p.set_physics_process(false)

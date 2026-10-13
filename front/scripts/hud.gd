@@ -1,9 +1,11 @@
 extends CanvasLayer
 ## Interface en jeu : vie, capacité, munitions, réticule, effets de dégâts,
-## écran de mort. Tout est construit ici en code ; on l'attache au joueur avec bind().
+## protection d'apparition, écran de mort. Tout est construit ici en code ;
+## on l'attache au joueur avec bind() (rappelé si le joueur change de classe).
 
 const FONT_BIG := 40
 const PANEL_BG := Color(0.05, 0.06, 0.09, 0.6)
+const PROTECT_COLOR := Color(0.35, 0.95, 1.0)
 
 var _player: Node
 
@@ -22,6 +24,10 @@ var _vignette: ColorRect
 var _death_panel: Control
 var _death_label: Label
 var _hint: Label
+var _next_class_label: Label
+var _protect_box: Control
+var _protect_label: Label
+var _protect_bar: ProgressBar
 var _crosshair_tween: Tween
 var _vignette_tween: Tween
 
@@ -32,6 +38,11 @@ func _ready() -> void:
 
 ## Relie le HUD à un joueur (appelé par la scène de jeu).
 func bind(player: Node) -> void:
+	if _player and is_instance_valid(_player):
+		for pair in [["health_changed", _on_health_changed], ["damaged", _on_damaged],
+				["ammo_changed", _on_ammo_changed], ["hit_confirmed", _on_hit_confirmed]]:
+			if _player.is_connected(pair[0], pair[1]):
+				_player.disconnect(pair[0], pair[1])
 	_player = player
 	var data: ClassData = player.class_data
 	_class_label.text = data.display_name.to_upper()
@@ -48,7 +59,7 @@ func bind(player: Node) -> void:
 
 
 func _process(_delta: float) -> void:
-	if _player == null:
+	if _player == null or not is_instance_valid(_player):
 		return
 	var data: ClassData = _player.class_data
 	# Capacité : barre de recharge.
@@ -67,8 +78,15 @@ func _process(_delta: float) -> void:
 	_reload_bar.visible = weapon.is_reloading()
 	_reload_bar.value = weapon.reload_progress()
 
-	# Réticule masqué en courant, plus discret en visant.
+	# Réticule masqué en courant.
 	_crosshair.visible = _player.alive and not _player.is_sprinting()
+
+	# Protection d'apparition.
+	var protect: float = _player.spawn_protection
+	_protect_box.visible = _player.alive and protect > 0.0
+	if _protect_box.visible:
+		_protect_label.text = "PROTÉGÉ  %.1f s" % protect
+		_protect_bar.value = protect / _player.SPAWN_PROTECTION_TIME
 
 
 # ---------------------------------------------------------------- Événements
@@ -96,8 +114,9 @@ func _on_ammo_changed(ammo: int, mag_size: int, reloading: bool) -> void:
 	_ammo_label.add_theme_color_override("font_color", Color(1, 0.4, 0.3) if low else Color.WHITE)
 
 
-## Réticule rouge quand on touche, X quand on élimine.
+## Réticule rouge quand on touche, X quand on élimine (avec un son de confirmation).
 func _on_hit_confirmed(killed: bool) -> void:
+	Sfx.play("kill" if killed else "hit", -2.0 if killed else -6.0)
 	if _crosshair_tween:
 		_crosshair_tween.kill()
 	_crosshair.text = "✕" if killed else "+"
@@ -123,6 +142,13 @@ func hide_death() -> void:
 	_hint.text = ""
 
 
+## Classe choisie dans le menu pause, appliquée à la prochaine apparition ("" = aucune).
+func set_next_class(display_name: String, color := Color.WHITE) -> void:
+	_next_class_label.visible = not display_name.is_empty()
+	_next_class_label.text = "Prochaine apparition : %s" % display_name.to_upper()
+	_next_class_label.add_theme_color_override("font_color", color.lightened(0.3))
+
+
 # ---------------------------------------------------------------- Construction
 
 func _build() -> void:
@@ -133,10 +159,10 @@ func _build() -> void:
 	_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_vignette)
 
-	# Aide des touches (haut gauche).
-	var help := _label("R : recharger · E : capacité · Ctrl/C : accroupi · Tab : scores · Échap : menu", 14, Color(1, 1, 1, 0.55))
+	# Aide des touches (bas, centre).
+	var help := _label("R : recharger · E : capacité · Ctrl/C : accroupi · Tab : scores · Échap : pause", 14, Color(1, 1, 1, 0.55))
 	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_place(help, Control.PRESET_CENTER_BOTTOM, Rect2(-240, -8, 480, 22))
+	_place(help, Control.PRESET_CENTER_BOTTOM, Rect2(-250, -8, 500, 22))
 	add_child(help)
 
 	# Réticule (centre).
@@ -149,10 +175,45 @@ func _build() -> void:
 	_crosshair.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
 	add_child(_crosshair)
 
-	# Bloc vie + capacité (bas gauche).
+	# Protection d'apparition (sous le réticule).
+	var protect := VBoxContainer.new()
+	protect.add_theme_constant_override("separation", 4)
+	protect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(protect, Control.PRESET_CENTER, Rect2(-110, 48, 220, 40))
+	add_child(protect)
+	_protect_label = _label("PROTÉGÉ", 18, PROTECT_COLOR)
+	_protect_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_protect_label.add_theme_font_override("font", UiTheme.FONT_BOLD)
+	_protect_label.add_theme_constant_override("outline_size", 6)
+	_protect_label.add_theme_color_override("font_outline_color", Color(0, 0.05, 0.1, 0.8))
+	protect.add_child(_protect_label)
+	_protect_bar = _bar(_flat(PROTECT_COLOR, 2), 4)
+	_protect_bar.max_value = 1.0
+	protect.add_child(_protect_bar)
+	var protect_hint := _label("Tirer annule la protection", 13, Color(1, 1, 1, 0.65))
+	protect_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	protect_hint.add_theme_constant_override("outline_size", 4)
+	protect_hint.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
+	protect.add_child(protect_hint)
+	_protect_box = protect
+	_protect_box.visible = false
+
+	# Bloc vie + capacité (bas gauche), avec au-dessus la classe de la prochaine apparition.
+	var left_column := VBoxContainer.new()
+	left_column.add_theme_constant_override("separation", 6)
+	left_column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(left_column, Control.PRESET_BOTTOM_LEFT, Rect2(24, -24, 360, 0))
+	add_child(left_column)
+
+	_next_class_label = _label("", 15, Color.WHITE)
+	_next_class_label.add_theme_font_override("font", UiTheme.FONT_BOLD)
+	_next_class_label.add_theme_constant_override("outline_size", 6)
+	_next_class_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+	_next_class_label.visible = false
+	left_column.add_child(_next_class_label)
+
 	var left := _panel()
-	_place(left, Control.PRESET_BOTTOM_LEFT, Rect2(24, -24, 360, 0))
-	add_child(left)
+	left_column.add_child(left)
 	var lbox := VBoxContainer.new()
 	lbox.add_theme_constant_override("separation", 6)
 	left.add_child(lbox)
@@ -204,6 +265,7 @@ func _build() -> void:
 	var center := VBoxContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	center.alignment = BoxContainer.ALIGNMENT_CENTER
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_death_panel.add_child(center)
 	_death_label = _label("ÉLIMINÉ", 56, Color(1, 0.35, 0.3))
 	_death_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -211,6 +273,9 @@ func _build() -> void:
 	_hint = _label("", 22, Color.WHITE)
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	center.add_child(_hint)
+	var tip := _label("Échap : changer de classe pour la prochaine apparition", 15, Color(1, 1, 1, 0.6))
+	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	center.add_child(tip)
 
 
 ## Ancre un élément à un coin de l'écran. `rect` = décalage depuis l'ancre + taille.
@@ -241,6 +306,7 @@ func _bar(fill: StyleBoxFlat, height: int) -> ProgressBar:
 	var bar := ProgressBar.new()
 	bar.show_percentage = false
 	bar.custom_minimum_size = Vector2(0, height)
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.add_theme_stylebox_override("background", _flat(Color(1, 1, 1, 0.1), 4))
 	bar.add_theme_stylebox_override("fill", fill)
 	return bar

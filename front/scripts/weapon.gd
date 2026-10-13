@@ -123,6 +123,11 @@ func _fire_pellet(spread_deg: float) -> Dictionary:
 			break
 		end_point = hit.position
 		var target: Object = hit.collider
+		if target.has_method("is_protected") and target.is_protected():
+			# Joueur sous protection d'apparition : la balle est déviée, aucun dégât.
+			Effects.impact(_world(), hit.position, Color(0.35, 0.95, 1.0), 0.14)
+			Sfx.play_at("deflect", hit.position, -6.0, randf_range(0.9, 1.1))
+			break
 		if target.has_method("take_damage"):
 			Effects.impact(_world(), hit.position, Color(1, 0.25, 0.2), 0.09)
 			var killed: bool = target.take_damage(data.damage, _shooter)

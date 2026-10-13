@@ -47,8 +47,11 @@ func fill(p: CharacterBody3D, cmd: PlayerCommands, delta: float) -> void:
 	if _perceive_in <= 0.0:
 		_perceive(p)
 		_perceive_in = 0.12 + randf() * 0.1
-	if target and not target.alive:
+	# Cible disparue (joueur remplacé après un changement de classe), morte ou protégée.
+	if not is_instance_valid(target) or not target.alive or target.spawn_protection > 0.0:
 		target = null
+	if not is_instance_valid(_attacker):
+		_attacker = null
 	if target:
 		_combat(p, cmd, delta)
 	else:
@@ -79,8 +82,8 @@ func _perceive(p: CharacterBody3D) -> void:
 	var best_distance := INF
 	var forward := -p.global_transform.basis.z
 	for other in game.players:
-		if other == p or not other.alive:
-			continue
+		if other == p or not other.alive or other.spawn_protection > 0.0:
+			continue   # inutile de viser un joueur protégé (il vient d'apparaître)
 		var to: Vector3 = other.global_position - p.global_position
 		var distance := to.length()
 		if distance > SIGHT_RANGE or distance >= best_distance:
