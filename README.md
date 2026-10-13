@@ -41,6 +41,7 @@ arena-tps/
 | Z Q S D ou flèches | Se déplacer |
 | Maj | Courir |
 | Espace | Sauter |
+| Ctrl ou C (maintenir) | S'accroupir : hitbox plus basse, tir plus précis, déplacement plus lent |
 | R | Recharger |
 | E | Capacité de la classe |
 | Échap | Revenir au menu |
@@ -60,6 +61,19 @@ Les classes et les armes sont décrites par des fichiers de données modifiables
 | Tireur | 100 | Fusil de précision | Tir perforant : les balles traversent les ennemis pendant 6 s |
 
 Pour ajouter une classe : dupliquer un fichier `.tres` de classe, ajuster ses valeurs, puis l'ajouter à la liste `CLASSES` de `front/scripts/game_state.gd`.
+
+## Personnages
+
+Chaque classe a son propre personnage en 3D, construit et animé par code (`front/scripts/character/`) :
+
+| Fichier | Rôle |
+|---|---|
+| `part_mesh.gd` | Génère les pièces 3D (formes arrondies paramétrables) |
+| `character_designs.gd` | Chara design de chaque classe : palette de couleurs, pièces d'armure, modèles d'armes |
+| `character_rig.gd` | Squelette et animation procédurale : marche/course dans toutes les directions, saut, atterrissage, accroupi, visée, recul, mort |
+| `character_preview.gd` | Aperçu 3D animé de l'écran de choix de classe |
+
+L'animation est calculée à partir de l'état du personnage (vitesse, au sol, accroupi, angle de visée) : en multijoueur, il suffira de transmettre cet état pour animer les autres joueurs.
 
 ## La map « Arena »
 
@@ -112,6 +126,8 @@ docs: complète le README
 - [x] Écran de choix de classe
 - [x] Points de vie, mort et réapparition, HUD complet
 - [x] Map « Arena » 120 x 120 m texturée (6 zones, 16 points d'apparition)
+- [x] Personnages 3D animés (3 classes + mannequin), armes modélisées
+- [x] Accroupissement
 - [ ] Partie chronométrée et tableau des scores
 - [ ] Bots d'entraînement
 - [ ] Connexion au serveur de jeu

@@ -4,6 +4,7 @@
 
 [resource]
 script = ExtResource("1_w")
+model = 0
 display_name = "Fusil à pompe"
 damage = 11
 pellets = 9

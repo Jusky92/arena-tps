@@ -49,10 +49,14 @@ func _unhandled_input(event: InputEvent) -> void:
 # ---------------------------------------------------------------- Apparitions
 
 func _spawn_targets() -> void:
+	var index := 0
 	for point in ArenaMap.TARGET_POINTS:
 		var target := TargetScene.instantiate()
+		target.crouched = index % 3 == 2   # un mannequin sur trois est accroupi
 		add_child(target)
 		target.global_position = point
+		target.rotation.y = randf() * TAU
+		index += 1
 
 
 func _spawn_player() -> void:

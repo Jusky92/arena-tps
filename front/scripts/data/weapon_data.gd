@@ -3,7 +3,10 @@ extends Resource
 ## Fiche technique d'une arme. Chaque arme du jeu est un fichier .tres
 ## (dans data/weapons/) qu'on peut modifier directement dans l'inspecteur Godot.
 
+enum Model { SHOTGUN, SMG, SNIPER }
+
 @export var display_name: String = "Arme"
+@export var model: Model = Model.SMG          ## apparence 3D de l'arme
 
 @export_group("Dégâts")
 @export var damage: int = 20                  ## dégâts par projectile

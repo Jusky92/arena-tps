@@ -6,6 +6,7 @@
 [resource]
 script = ExtResource("1_c")
 weapon = ExtResource("2_w")
+character_design = "assassin"
 display_name = "Assassin"
 description = "Rapide et agile, mais fragile. Harcèle et se replie."
 color = Color(0.7, 0.35, 0.95, 1)

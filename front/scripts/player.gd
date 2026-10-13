@@ -1,9 +1,10 @@
 extends CharacterBody3D
 ## Joueur local en vue à la troisième personne (caméra par-dessus l'épaule).
-## Ses statistiques, son arme et sa capacité viennent de sa classe (ClassData).
+## Ses statistiques, son arme, sa capacité et son apparence 3D viennent de sa classe.
 ##
 ## Souris : viser          Clic gauche : tirer     Clic droit : viser (zoom)
 ## ZQSD : se déplacer      Maj : courir            Espace : sauter
+## Ctrl ou C : s'accroupir (maintenir)
 ## R : recharger           E : capacité            F9 : s'infliger 25 dégâts (test)
 
 signal health_changed(health: int, max_health: int)
@@ -22,10 +23,17 @@ const AIR_CONTROL := 0.35          # contrôle réduit en l'air
 const MIN_PITCH := deg_to_rad(-60.0)
 const MAX_PITCH := deg_to_rad(50.0)
 
+# Accroupi : hitbox plus basse, plus lent, plus précis.
+const STAND_HEIGHT := 1.8
+const CROUCH_HEIGHT := 1.25
+const CROUCH_SPEED_FACTOR := 0.5
+const CROUCH_SPREAD_FACTOR := 0.6
+const STAND_CAMERA_HEIGHT := 1.6
+const CROUCH_CAMERA_HEIGHT := 1.12
+
 ## Classe du joueur. Si rien n'est donné, on prend celle choisie dans le menu.
 @export var class_data: ClassData
 
-@onready var body_mesh: MeshInstance3D = $Body
 @onready var shield_mesh: MeshInstance3D = $Shield
 @onready var collision: CollisionShape3D = $CollisionShape3D
 @onready var camera_pivot: Node3D = $CameraPivot
@@ -33,13 +41,19 @@ const MAX_PITCH := deg_to_rad(50.0)
 @onready var camera: Camera3D = $CameraPivot/SpringArm3D/Camera3D
 @onready var weapon: Node3D = $Gun
 
+## Corps 3D animé (construit au démarrage selon la classe).
+var rig: CharacterRig
+
 var health: int
 var alive: bool = true
 var kills: int = 0
 var deaths: int = 0
+var crouching: bool = false
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _aiming: bool = false
+var _crouch_amount: float = 0.0      # 0 = debout, 1 = accroupi (lissé, pour la caméra)
+var _capsule: CapsuleShape3D
 var _ability_cooldown: float = 0.0
 var _ability_time: float = 0.0       # temps restant de l'effet en cours
 var _dash_direction := Vector3.ZERO
@@ -53,12 +67,16 @@ func _ready() -> void:
 	# Rampes : on reste collé à la pente en descendant au lieu de "sauter" de petits bonds.
 	floor_snap_length = 0.4
 	floor_max_angle = deg_to_rad(46.0)
-
-	# Couleur de la classe (matériau copié pour ne pas colorer les autres joueurs).
-	var material: StandardMaterial3D = body_mesh.mesh.material.duplicate()
-	material.albedo_color = class_data.color
-	body_mesh.material_override = material
+	# Copie de la forme de collision : chaque joueur peut s'accroupir indépendamment.
+	_capsule = collision.shape.duplicate()
+	collision.shape = _capsule
 	shield_mesh.visible = false
+
+	# Corps 3D : squelette + armure de la classe + modèle d'arme dans les mains.
+	rig = CharacterRig.new()
+	rig.name = "Rig"
+	add_child(rig)
+	rig.build(class_data.character_design, class_data.weapon.model, weapon)
 
 	weapon.ammo_changed.connect(func(a, m, r): ammo_changed.emit(a, m, r))
 	weapon.hit_confirmed.connect(func(k): hit_confirmed.emit(k))
@@ -94,12 +112,48 @@ func _physics_process(delta: float) -> void:
 	var captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 	_aiming = captured and Input.is_action_pressed("aim")
 
+	_update_crouch(delta)
 	_update_movement(delta)
 	weapon.update(delta,
 		captured and Input.is_action_pressed("fire"),
 		captured and Input.is_action_just_pressed("fire"),
-		_aiming)
+		_aiming,
+		CROUCH_SPREAD_FACTOR if crouching else 1.0)
 	_update_camera(delta)
+
+	# Le corps 3D est animé à partir de l'état du joueur (vitesse dans son repère).
+	rig.set_state(basis.inverse() * velocity, is_on_floor(), 1.0 if crouching else 0.0,
+		camera_pivot.rotation.x, is_sprinting(), _aiming)
+
+
+# ---------------------------------------------------------------- Accroupi
+
+func _update_crouch(delta: float) -> void:
+	var wants := Input.is_action_pressed("crouch") and not is_dashing()
+	if wants and not crouching:
+		_set_crouching(true)
+	elif not wants and crouching and _can_stand():
+		_set_crouching(false)
+	_crouch_amount = move_toward(_crouch_amount, 1.0 if crouching else 0.0, delta * 7.0)
+
+
+func _set_crouching(value: bool) -> void:
+	crouching = value
+	var height := CROUCH_HEIGHT if value else STAND_HEIGHT
+	_capsule.height = height
+	collision.position.y = height / 2.0
+
+
+## Vérifie qu'il y a la place de se relever (pas de plafond juste au-dessus).
+func _can_stand() -> bool:
+	var standing := CapsuleShape3D.new()
+	standing.radius = _capsule.radius
+	standing.height = STAND_HEIGHT
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = standing
+	query.transform = Transform3D(Basis(), global_position + Vector3(0, STAND_HEIGHT / 2.0 + 0.02, 0))
+	query.exclude = [get_rid()]
+	return get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
 
 
 # ---------------------------------------------------------------- Déplacement
@@ -108,7 +162,11 @@ func _update_movement(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y -= _gravity * delta
 	elif Input.is_action_just_pressed("jump"):
-		velocity.y = class_data.jump_velocity
+		# Sauter depuis la position accroupie relève le joueur (s'il y a la place).
+		if crouching and _can_stand():
+			_set_crouching(false)
+		if not crouching:
+			velocity.y = class_data.jump_velocity
 
 	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var direction := (transform.basis * Vector3(input.x, 0.0, input.y)).normalized()
@@ -120,10 +178,12 @@ func _update_movement(delta: float) -> void:
 		move_and_slide()
 		return
 
-	var sprinting := Input.is_action_pressed("sprint") and not _aiming and input.y < 0.0
+	var sprinting := Input.is_action_pressed("sprint") and not _aiming and not crouching and input.y < 0.0
 	var speed := class_data.sprint_speed if sprinting else class_data.walk_speed
 	if _aiming:
 		speed *= AIM_SPEED_FACTOR
+	if crouching:
+		speed *= CROUCH_SPEED_FACTOR
 
 	var target := direction * speed
 	var accel := ACCELERATION if is_on_floor() else ACCELERATION * AIR_CONTROL
@@ -133,7 +193,7 @@ func _update_movement(delta: float) -> void:
 
 
 func is_sprinting() -> bool:
-	return Input.is_action_pressed("sprint") and not _aiming \
+	return Input.is_action_pressed("sprint") and not _aiming and not crouching \
 		and Vector2(velocity.x, velocity.z).length() > class_data.walk_speed + 0.5
 
 
@@ -149,6 +209,8 @@ func _update_camera(delta: float) -> void:
 
 	var target_distance := AIM_CAMERA_DISTANCE if _aiming else CAMERA_DISTANCE
 	spring_arm.spring_length = lerp(spring_arm.spring_length, target_distance, 10.0 * delta)
+	camera_pivot.position.y = lerpf(STAND_CAMERA_HEIGHT, CROUCH_CAMERA_HEIGHT, smoothstep(0.0, 1.0, _crouch_amount))
+	shield_mesh.position.y = lerpf(0.95, 0.68, _crouch_amount)
 
 	# Tremblement de caméra (tir, dégâts) qui s'atténue rapidement.
 	_shake = move_toward(_shake, 0.0, delta * 4.0)
@@ -157,11 +219,13 @@ func _update_camera(delta: float) -> void:
 
 
 func _on_weapon_fired(recoil_deg: float) -> void:
-	# Le recul fait remonter la visée : au joueur de compenser.
-	var recoil := deg_to_rad(recoil_deg) * (0.5 if _aiming else 1.0)
+	# Le recul fait remonter la visée : au joueur de compenser (moins en visant ou accroupi).
+	var steady := (0.5 if _aiming else 1.0) * (0.7 if crouching else 1.0)
+	var recoil := deg_to_rad(recoil_deg) * steady
 	camera_pivot.rotation.x = clamp(camera_pivot.rotation.x + recoil, MIN_PITCH, MAX_PITCH)
 	rotate_y(deg_to_rad(randf_range(-0.3, 0.3) * recoil_deg))
 	_shake = min(_shake + recoil_deg * 0.15, 1.0)
+	rig.kick(recoil_deg)
 
 
 func is_aiming() -> bool:
@@ -185,6 +249,8 @@ func use_ability() -> bool:
 				input = Vector2(0, -1)  # sans direction : dash vers l'avant
 			_dash_direction = (transform.basis * Vector3(input.x, 0, input.y)).normalized()
 			velocity.y = max(velocity.y, 1.5)  # petit décollage pour passer les bosses
+			if crouching and _can_stand():
+				_set_crouching(false)
 		ClassData.Ability.PIERCE:
 			weapon.piercing = true
 	return true
@@ -233,6 +299,7 @@ func take_damage(amount: int, from: Node) -> bool:
 		amount = max(int(round(amount * class_data.ability_strength)), 1)
 	health = max(health - amount, 0)
 	_shake = min(_shake + 0.5, 1.0)
+	rig.flash()
 	damaged.emit(amount)
 	health_changed.emit(health, class_data.max_health)
 	if health == 0:
@@ -246,8 +313,9 @@ func _die(killer: Node) -> void:
 	deaths += 1
 	_end_ability()
 	velocity = Vector3.ZERO
-	body_mesh.visible = false
-	weapon.visible = false
+	if crouching:
+		_set_crouching(false)
+	rig.play_death()
 	collision.set_deferred("disabled", true)
 	died.emit(killer)
 
@@ -261,8 +329,8 @@ func respawn(spawn_position: Vector3, yaw: float) -> void:
 	health = class_data.max_health
 	alive = true
 	_ability_cooldown = 0.0
-	body_mesh.visible = true
-	weapon.visible = true
+	_crouch_amount = 0.0
+	rig.reset()
 	collision.set_deferred("disabled", false)
 	weapon.refill()
 	health_changed.emit(health, class_data.max_health)

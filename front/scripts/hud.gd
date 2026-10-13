@@ -134,7 +134,7 @@ func _build() -> void:
 	add_child(_vignette)
 
 	# Aide des touches (haut gauche).
-	var help := _label("Clic : tirer   Clic droit : viser   R : recharger   E : capacité   Maj : courir   Espace : sauter   Échap : menu   F9 : test dégâts", 13, Color(1, 1, 1, 0.55))
+	var help := _label("Clic : tirer   Clic droit : viser   R : recharger   E : capacité   Maj : courir   Espace : sauter   Ctrl / C : s'accroupir   Échap : menu   F9 : test dégâts", 13, Color(1, 1, 1, 0.55))
 	_place(help, Control.PRESET_TOP_LEFT, Rect2(16, 10, 1200, 24))
 	add_child(help)
 

@@ -9,6 +9,8 @@ enum Ability { SHIELD, DASH, PIERCE }
 @export var display_name: String = "Classe"
 @export_multiline var description: String = ""
 @export var color: Color = Color(0.25, 0.6, 1.0)
+## Apparence 3D (voir scripts/character/character_designs.gd) : tank, assassin, tireur.
+@export var character_design: String = "tireur"
 
 @export_group("Statistiques")
 @export var max_health: int = 100

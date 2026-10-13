@@ -1,26 +1,39 @@
 extends StaticBody3D
-## Cible d'entraînement : encaisse des dégâts, disparaît à 0 PV, puis réapparaît.
-## Elle expose la même méthode `take_damage` que les futurs joueurs distants,
-## ce qui permet de tester le tir sans serveur.
+## Mannequin d'entraînement : un robot qui encaisse des dégâts, tombe à 0 PV,
+## puis se relève. Il expose la même méthode `take_damage` que les joueurs,
+## ce qui permet de tester le tir sans serveur. Peut être accroupi (hitbox basse).
 
 @export var max_health: int = 100
 @export var respawn_delay: float = 3.0
+@export var crouched: bool = false
 
-@onready var body_mesh: MeshInstance3D = $Body
+const STAND_HEIGHT := 1.8
+const CROUCH_HEIGHT := 1.25
+
 @onready var collision: CollisionShape3D = $CollisionShape3D
 @onready var health_label: Label3D = $HealthLabel
 
 var health: int
-var _material: StandardMaterial3D
-var _base_color: Color
+var rig: CharacterRig
 
 
 func _ready() -> void:
-	# Copie du matériau pour que chaque cible puisse clignoter indépendamment.
-	_material = body_mesh.mesh.material.duplicate()
-	body_mesh.material_override = _material
-	_base_color = _material.albedo_color
+	rig = CharacterRig.new()
+	add_child(rig)
+	rig.build("dummy", WeaponData.Model.SMG)
+
+	# Hitbox adaptée à la posture (forme copiée pour ne pas modifier les autres mannequins).
+	var capsule: CapsuleShape3D = collision.shape.duplicate()
+	capsule.height = CROUCH_HEIGHT if crouched else STAND_HEIGHT
+	collision.shape = capsule
+	collision.position.y = capsule.height / 2.0
+	health_label.position.y = capsule.height + 0.3
 	_reset()
+
+
+func _process(_delta: float) -> void:
+	# Immobile, mais vivant : respiration et posture gérées par le rig.
+	rig.set_state(Vector3.ZERO, true, 1.0 if crouched else 0.0, 0.0)
 
 
 ## Inflige des dégâts. Renvoie true si ce coup a éliminé la cible.
@@ -29,7 +42,7 @@ func take_damage(amount: int, _from: Node) -> bool:
 		return false
 	health = max(health - amount, 0)
 	_update_label()
-	_flash()
+	rig.flash()
 	if health == 0:
 		_die()
 		return true
@@ -37,24 +50,19 @@ func take_damage(amount: int, _from: Node) -> bool:
 
 
 func _die() -> void:
-	visible = false
+	rig.play_death()
+	health_label.visible = false
 	collision.set_deferred("disabled", true)
 	get_tree().create_timer(respawn_delay).timeout.connect(_reset)
 
 
 func _reset() -> void:
 	health = max_health
-	visible = true
+	rig.reset()
+	health_label.visible = true
 	collision.set_deferred("disabled", false)
-	_material.albedo_color = _base_color
 	_update_label()
 
 
 func _update_label() -> void:
 	health_label.text = "%d PV" % health
-
-
-func _flash() -> void:
-	_material.albedo_color = Color.WHITE
-	var tween := create_tween()
-	tween.tween_property(_material, "albedo_color", _base_color, 0.15)

@@ -10,6 +10,7 @@ const KEY_ACTIONS := {
 	"move_right":   [KEY_D, KEY_RIGHT],
 	"jump":         [KEY_SPACE],
 	"sprint":       [KEY_SHIFT],
+	"crouch":       [KEY_CTRL, KEY_C],
 	"reload":       [KEY_R],
 	"ability":      [KEY_E],
 	"back_to_menu": [KEY_ESCAPE],

@@ -6,6 +6,7 @@
 [resource]
 script = ExtResource("1_c")
 weapon = ExtResource("2_w")
+character_design = "tank"
 display_name = "Tank"
 description = "Lent mais très résistant. Dévastateur au corps à corps."
 color = Color(0.35, 0.75, 0.4, 1)

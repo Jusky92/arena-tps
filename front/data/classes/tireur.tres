@@ -6,6 +6,7 @@
 [resource]
 script = ExtResource("1_c")
 weapon = ExtResource("2_w")
+character_design = "tireur"
 display_name = "Tireur"
 description = "Fragile au contact, redoutable à distance. Vise avec le clic droit."
 color = Color(0.25, 0.6, 1, 1)

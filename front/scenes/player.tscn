@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
 [ext_resource type="Script" path="res://scripts/weapon.gd" id="2_weapon"]
@@ -6,33 +6,6 @@
 [sub_resource type="CapsuleShape3D" id="Shape_body"]
 radius = 0.4
 height = 1.8
-
-[sub_resource type="StandardMaterial3D" id="Mat_body"]
-albedo_color = Color(0.25, 0.6, 1, 1)
-roughness = 0.45
-
-[sub_resource type="CapsuleMesh" id="Mesh_body"]
-material = SubResource("Mat_body")
-radius = 0.4
-height = 1.8
-
-[sub_resource type="StandardMaterial3D" id="Mat_visor"]
-albedo_color = Color(0.08, 0.08, 0.1, 1)
-metallic = 0.6
-roughness = 0.2
-
-[sub_resource type="BoxMesh" id="Mesh_visor"]
-material = SubResource("Mat_visor")
-size = Vector3(0.5, 0.18, 0.2)
-
-[sub_resource type="StandardMaterial3D" id="Mat_gun"]
-albedo_color = Color(0.15, 0.15, 0.17, 1)
-metallic = 0.5
-roughness = 0.35
-
-[sub_resource type="BoxMesh" id="Mesh_gun"]
-material = SubResource("Mat_gun")
-size = Vector3(0.12, 0.14, 0.7)
 
 [sub_resource type="StandardMaterial3D" id="Mat_shield"]
 transparency = 1
@@ -52,26 +25,16 @@ script = ExtResource("1_player")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 shape = SubResource("Shape_body")
 
-[node name="Body" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
-mesh = SubResource("Mesh_body")
-
-[node name="Visor" type="MeshInstance3D" parent="Body"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, -0.33)
-mesh = SubResource("Mesh_visor")
-
 [node name="Shield" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.95, 0)
 cast_shadow = 0
 mesh = SubResource("Mesh_shield")
 
-[node name="Gun" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.48, 1.25, -0.35)
-mesh = SubResource("Mesh_gun")
+[node name="Gun" type="Node3D" parent="."]
 script = ExtResource("2_weapon")
 
 [node name="Muzzle" type="Marker3D" parent="Gun"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.38)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.5)
 
 [node name="CameraPivot" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)

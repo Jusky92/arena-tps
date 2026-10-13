@@ -45,7 +45,8 @@ func reload_progress() -> float:
 
 
 ## À appeler à chaque image physique par le joueur.
-func update(delta: float, trigger_held: bool, trigger_pressed: bool, aiming: bool) -> void:
+## spread_factor < 1 rend le tir plus précis (ex. accroupi).
+func update(delta: float, trigger_held: bool, trigger_pressed: bool, aiming: bool, spread_factor := 1.0) -> void:
 	_cooldown = max(_cooldown - delta, 0.0)
 
 	if is_reloading():
@@ -57,7 +58,7 @@ func update(delta: float, trigger_held: bool, trigger_pressed: bool, aiming: boo
 
 	var wants_fire := trigger_held if data.automatic else trigger_pressed
 	if wants_fire:
-		_try_fire(aiming)
+		_try_fire(aiming, spread_factor)
 
 
 func start_reload() -> void:
@@ -67,7 +68,7 @@ func start_reload() -> void:
 	ammo_changed.emit(ammo, data.mag_size, true)
 
 
-func _try_fire(aiming: bool) -> void:
+func _try_fire(aiming: bool, spread_factor := 1.0) -> void:
 	if _cooldown > 0.0:
 		return
 	if ammo <= 0:
@@ -78,7 +79,7 @@ func _try_fire(aiming: bool) -> void:
 	_cooldown = 1.0 / data.fire_rate
 	ammo_changed.emit(ammo, data.mag_size, false)
 
-	var spread := data.aim_spread_deg if aiming else data.spread_deg
+	var spread := (data.aim_spread_deg if aiming else data.spread_deg) * spread_factor
 	var any_hit := false
 	var any_kill := false
 	for i in data.pellets:

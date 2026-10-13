@@ -1,10 +1,12 @@
 extends Control
-## Écran de choix de classe : une carte par classe (stats, arme, capacité).
+## Écran de choix de classe : une carte par classe avec le personnage en 3D animé,
+## ses statistiques, son arme et sa capacité.
 ## Les cartes sont générées depuis GameState.CLASSES : ajouter une classe
 ## l'ajoute automatiquement ici.
 ## Souris ou touches 1, 2, 3 pour choisir. Échap pour revenir au menu.
 
-const CARD_SIZE := Vector2(340, 0)
+const CARD_WIDTH := 340.0
+const PREVIEW_SIZE := Vector2i(296, 230)
 const BG_CARD := Color(0.11, 0.12, 0.16, 0.95)
 
 # Valeurs de référence pour remplir les barres de stats.
@@ -47,39 +49,47 @@ func _go_back() -> void:
 
 func _make_card(data: ClassData, index: int) -> Control:
 	var card := PanelContainer.new()
-	card.custom_minimum_size = CARD_SIZE
+	card.custom_minimum_size = Vector2(CARD_WIDTH, 0)
 	var normal_style := _card_style(data.color, false)
 	var hover_style := _card_style(data.color, true)
 	card.add_theme_stylebox_override("panel", normal_style)
 	card.mouse_entered.connect(func() -> void:
 		card.add_theme_stylebox_override("panel", hover_style)
-		_animate_scale(card, 1.04))
+		_animate_scale(card, 1.03))
 	card.mouse_exited.connect(func() -> void:
 		card.add_theme_stylebox_override("panel", normal_style)
 		_animate_scale(card, 1.0))
 	card.resized.connect(func() -> void: card.pivot_offset = card.size / 2.0)
 
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 6)
+	box.add_theme_constant_override("separation", 5)
 	card.add_child(box)
 
-	# En-tête : pastille de couleur + nom + touche.
-	var header := HBoxContainer.new()
-	var swatch := ColorRect.new()
-	swatch.color = data.color
-	swatch.custom_minimum_size = Vector2(10, 38)
-	header.add_child(swatch)
-	var name_label := _label(data.display_name.to_upper(), 30, Color.WHITE)
-	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(name_label)
-	header.add_child(_label("[%d]" % (index + 1), 18, Color(1, 1, 1, 0.4)))
-	box.add_child(header)
+	# Personnage en 3D, avec le nom de la classe et la touche par-dessus.
+	var preview_holder := Control.new()
+	preview_holder.custom_minimum_size = Vector2(PREVIEW_SIZE)
+	preview_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var glow := ColorRect.new()
+	glow.color = Color(data.color, 0.08)
+	glow.set_anchors_preset(Control.PRESET_FULL_RECT)
+	glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	preview_holder.add_child(glow)
+	var preview := CharacterPreview.new()
+	preview_holder.add_child(preview)
+	preview.setup(data.character_design, data.weapon.model, PREVIEW_SIZE)
+	var name_label := _label(data.display_name.to_upper(), 28, Color.WHITE)
+	name_label.position = Vector2(10, 4)
+	name_label.add_theme_constant_override("outline_size", 6)
+	name_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.5))
+	preview_holder.add_child(name_label)
+	var key_label := _label("[%d]" % (index + 1), 16, Color(1, 1, 1, 0.45))
+	key_label.position = Vector2(PREVIEW_SIZE.x - 34, 10)
+	preview_holder.add_child(key_label)
+	box.add_child(preview_holder)
 
-	var desc := _label(data.description, 15, Color(1, 1, 1, 0.75))
+	var desc := _label(data.description, 13, Color(1, 1, 1, 0.75))
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(desc)
-
-	box.add_child(HSeparator.new())
 
 	# Statistiques.
 	var w := data.weapon
@@ -92,16 +102,14 @@ func _make_card(data: ClassData, index: int) -> Control:
 	box.add_child(HSeparator.new())
 
 	# Arme.
-	box.add_child(_label("ARME", 13, Color(1, 1, 1, 0.45)))
-	box.add_child(_label(w.display_name, 19, Color.WHITE))
 	var pellets_text := " x%d" % w.pellets if w.pellets > 1 else ""
+	box.add_child(_label("ARME  ·  %s" % w.display_name, 15, Color.WHITE))
 	box.add_child(_label("%d dégâts%s · chargeur %d · %s" % [w.damage, pellets_text, w.mag_size,
-		"automatique" if w.automatic else "coup par coup"], 13, Color(1, 1, 1, 0.65)))
+		"automatique" if w.automatic else "coup par coup"], 12, Color(1, 1, 1, 0.6)))
 
 	# Capacité.
-	box.add_child(_label("CAPACITÉ  [E]", 13, Color(1, 1, 1, 0.45)))
-	box.add_child(_label(data.ability_name, 19, data.color.lightened(0.3)))
-	var ability_desc := _label("%s (recharge %d s)" % [data.ability_description, int(data.ability_cooldown)], 13, Color(1, 1, 1, 0.65))
+	box.add_child(_label("CAPACITÉ [E]  ·  %s" % data.ability_name, 15, data.color.lightened(0.35)))
+	var ability_desc := _label("%s (recharge %d s)" % [data.ability_description, int(data.ability_cooldown)], 12, Color(1, 1, 1, 0.6))
 	ability_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(ability_desc)
 
@@ -111,7 +119,7 @@ func _make_card(data: ClassData, index: int) -> Control:
 	box.add_child(spacer)
 	var button := Button.new()
 	button.text = "Jouer %s" % data.display_name
-	button.custom_minimum_size = Vector2(0, 46)
+	button.custom_minimum_size = Vector2(0, 42)
 	button.add_theme_font_size_override("font_size", 18)
 	button.add_theme_stylebox_override("normal", _button_style(data.color.darkened(0.35)))
 	button.add_theme_stylebox_override("hover", _button_style(data.color))
@@ -124,17 +132,17 @@ func _make_card(data: ClassData, index: int) -> Control:
 
 func _stat_bar(title: String, ratio: float, value_text: String, color: Color) -> Control:
 	var row := VBoxContainer.new()
-	row.add_theme_constant_override("separation", 3)
+	row.add_theme_constant_override("separation", 2)
 	var top := HBoxContainer.new()
-	var t := _label(title, 14, Color(1, 1, 1, 0.8))
+	var t := _label(title, 13, Color(1, 1, 1, 0.8))
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(t)
-	top.add_child(_label(value_text, 14, Color.WHITE))
+	top.add_child(_label(value_text, 13, Color.WHITE))
 	row.add_child(top)
 
 	var bar := ProgressBar.new()
 	bar.show_percentage = false
-	bar.custom_minimum_size = Vector2(0, 8)
+	bar.custom_minimum_size = Vector2(0, 7)
 	bar.max_value = 1.0
 	bar.value = clampf(ratio, 0.05, 1.0)
 	bar.add_theme_stylebox_override("background", _flat(Color(1, 1, 1, 0.08), 4))
@@ -148,6 +156,7 @@ func _label(text: String, size: int, color: Color) -> Label:
 	label.text = text
 	label.add_theme_font_size_override("font_size", size)
 	label.add_theme_color_override("font_color", color)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return label
 
 
@@ -157,8 +166,8 @@ func _card_style(color: Color, hovered: bool) -> StyleBoxFlat:
 	style.border_color = color if hovered else Color(1, 1, 1, 0.08)
 	style.content_margin_left = 22
 	style.content_margin_right = 22
-	style.content_margin_top = 16
-	style.content_margin_bottom = 16
+	style.content_margin_top = 14
+	style.content_margin_bottom = 14
 	if hovered:
 		style.shadow_color = Color(color, 0.35)
 		style.shadow_size = 18
