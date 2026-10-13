@@ -1,8 +1,10 @@
 # Arena TPS
 
-Jeu de tir multijoueur en 3D, en vue à la troisième personne, en mode chacun pour soi (8 joueurs par partie). Le projet sert de support à la mise en œuvre d'une **architecture micro-services**.
+Jeu de tir multijoueur en 3D, en vue à la troisième personne, en mode chacun pour soi (8 joueurs par partie), dans un quartier japonais **« NEO-EDO »** mêlant temple traditionnel et néons de Tokyo. Le projet sert de support à la mise en œuvre d'une **architecture micro-services**.
 
 Projet réalisé en binôme par **Julien** (client de jeu) et **Elian** (micro-services et bases de données) — Architecture SI, M2, CFA INSTA.
+
+> Pour comprendre le code (dossiers, fichiers, flux d'une partie) : voir [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Organisation du dépôt
 
@@ -90,13 +92,13 @@ Les classes et les armes sont décrites par des fichiers de données modifiables
 
 | Classe | PV | Arme | Capacité |
 |---|---|---|---|
-| Tank | 150 | Fusil à pompe (9 plombs) | Bouclier : -70 % de dégâts pendant 3 s |
-| Assassin | 80 | Mitraillette | Dash : bond rapide dans la direction du déplacement |
-| Tireur | 100 | Fusil de précision (200 m) | Tir perforant : les balles traversent les ennemis pendant 6 s |
+| Samouraï 侍 | 150 | Fusil à pompe (9 plombs) | Garde de fer : -70 % de dégâts pendant 3 s |
+| Shinobi 忍 | 80 | Mitraillette | Shunpo : bond rapide dans la direction du déplacement |
+| Archer 弓 | 100 | Fusil de précision (200 m) | Flèche perforante : les balles traversent les ennemis pendant 6 s |
 
 ## Personnages
 
-Personnages humains au style cyberpunk (`front/scripts/character/`) :
+Personnages humains dans le thème « néo-Edo » (`front/scripts/character/`) : armure de samouraï laquée, tenue de shinobi, archer de kyūdō, le tout revisité en cyberpunk.
 
 | Fichier | Rôle |
 |---|---|
@@ -109,20 +111,22 @@ Personnages humains au style cyberpunk (`front/scripts/character/`) :
 
 L'animation est pilotée par l'état du personnage (vitesse, au sol, accroupi, angle de visée) : en multijoueur, il suffira de transmettre cet état pour animer les autres joueurs.
 
-## La map « Arena »
+## La map « NEO-EDO »
 
-Arène de 120 x 120 m définie dans `front/scripts/maps/arena_map.gd` et chargée par `front/scenes/maps/arena.tscn` (scène séparée du jeu, réutilisable par le futur serveur).
+Arène de 120 x 120 m définie dans `front/scripts/maps/arena_map.gd` et chargée par `front/scenes/maps/arena.tscn` (scène séparée du jeu, réutilisable par le futur serveur). Deux ambiances se répondent : un quartier traditionnel et un quartier néon.
 
 | Zone | Contenu |
 |---|---|
-| Centre | Tour à 3 m, 4 rampes, auvent, marquage « CFA INSTA ARENA » |
-| Nord-ouest | Parc à conteneurs, portique de levage |
-| Nord-est | Entrepôt « LAB IoT » : bras robotiques 6 axes, tapis roulant, mezzanine, écran de supervision |
-| Sud-ouest | Deux tours à 5 m reliées par une passerelle, panneau CFA INSTA |
-| Sud-est | Place : pergola, arbres, fontaine, kiosque, station météo |
-| Avenues | Deux axes qui se croisent, barrières, lampadaires |
+| Centre | Sanctuaire sur une estrade de 3 m, grand torii, 4 escaliers, lanternes de pierre, gardiens komainu |
+| Nord-ouest | Marché couvert : échoppes de bois à toits de tuiles, tonneaux de saké, noren, guirlandes de lanternes |
+| Nord-est | « IoT 研究所 » : laboratoire néon avec bras robotiques, tapis roulant, mezzanine, écran de supervision |
+| Sud-ouest | Pagode à cinq toits et tour de guet reliées par une passerelle à 5 m, bosquets de bambous |
+| Sud-est | Jardin sec : gravier ratissé, bassin à carpes koï, pont rouge, cerisiers en fleurs, pavillon de thé |
+| Ruelles | Deux axes commerçants : enseignes verticales en kanji, distributeurs de boissons, lampadaires de pierre |
 
-Décor connecté (`front/scripts/maps/props/`) : caméras de surveillance qui suivent le joueur le plus proche, capteurs (température, humidité, CO2, bruit, lumière, présence) avec valeurs en direct, drones en patrouille, tableau de bord IoT, station météo, enseignes et bannières CFA INSTA.
+Décor connecté (`front/scripts/maps/props/`) : caméras de surveillance qui suivent le joueur le plus proche, capteurs (température, humidité, CO2, bruit, lumière, présence) avec valeurs en direct, drones en patrouille, tableau de bord IoT, cerisiers animés, lanternes de papier, rideaux de tissu, distributeurs.
+
+Les références **CFA INSTA** sont intégrées au thème : enseigne néon sur le laboratoire, plaque du sanctuaire « ネオ江戸アリーナ », bannières nobori et banderole au-dessus de la ruelle.
 
 Les éléments de la map sont des listes et fonctions dans le script : après une modification, cliquer sur **Reconstruire la map** dans l'inspecteur de la scène `arena.tscn` (la map et ses animations sont visibles dans l'éditeur).
 
@@ -134,13 +138,14 @@ Les éléments de la map sont des listes et fonctions dans le script : après un
 | `generate_suit_masks.py` | Masques des combinaisons calculés à partir des poids de skinning des modèles |
 | `extract_animations.gd` | Extraction d'une bibliothèque d'animations compacte depuis le pack d'animations |
 | `generate_sounds.py` | Effets sonores du jeu, calculés par synthèse (aucun son externe) |
+| `subset_font.py` | Allège la police japonaise en ne gardant que les caractères affichés par le jeu |
 
 Dépendances Python : `numpy`, `pillow`.
 
 ## Crédits et licences des ressources
 
 - Personnages et animations : **Quaternius** — Universal Base Characters, Universal Animation Library, Modular Character Outfits — licence **CC0** (domaine public). Textes de licence dans `front/assets/characters/quaternius/licenses/`.
-- Polices : **Orbitron** et **Rajdhani** (Google Fonts) — licence **SIL Open Font License** (fichiers OFL dans `front/assets/fonts/`).
+- Polices : **Orbitron**, **Rajdhani** et **Noto Sans JP** (japonais) — licence **SIL Open Font License** (fichiers OFL dans `front/assets/fonts/`). La police japonaise est livrée sous-ensemblée (voir `tools/subset_font.py`).
 - Textures de la map, effets sonores, équipements, robots, armes et décors IoT : générés par le projet.
 
 ## Règles de travail
@@ -173,7 +178,7 @@ docs: complète le README
 - [x] Personnages humains cyberpunk animés (3 classes) et mannequins-robots
 - [x] Déplacement, course, saut, accroupissement, caméra à la troisième personne
 - [x] Tir, munitions, classes, armes et capacités
-- [x] Map « Arena » 120 x 120 m texturée, décor CFA INSTA et IoT animé
+- [x] Map « NEO-EDO » 120 x 120 m texturée (sanctuaire, marché, pagode, jardin, ruelles néon), décor CFA INSTA et IoT animé
 - [x] Match à mort contre des bots, tableau des scores, écran de fin
 - [x] Menu pause local (changement de classe, son, sensibilité), protection d'apparition, effets sonores
 - [ ] Connexion au vrai back-end (BFF)

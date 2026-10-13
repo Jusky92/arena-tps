@@ -8,17 +8,20 @@ extends RefCounted
 
 # Palettes : armure principale, armure secondaire, combinaison, métal, lumière.
 const PALETTES := {
+	# Samouraï : laque rouge sombre, laçage noir, ferrures dorées.
 	"tank": {
-		"armor": Color(0.33, 0.46, 0.28), "armor2": Color(0.2, 0.22, 0.24),
-		"suit": Color(0.11, 0.12, 0.12), "trim": Color(0.62, 0.52, 0.32), "glow": Color(0.35, 1.0, 0.45),
+		"armor": Color(0.46, 0.09, 0.08), "armor2": Color(0.14, 0.12, 0.13),
+		"suit": Color(0.1, 0.09, 0.1), "trim": Color(0.78, 0.6, 0.22), "glow": Color(1.0, 0.45, 0.2),
 	},
+	# Shinobi : indigo profond, acier froid, néon violet.
 	"assassin": {
-		"armor": Color(0.17, 0.15, 0.22), "armor2": Color(0.48, 0.22, 0.68),
-		"suit": Color(0.07, 0.07, 0.09), "trim": Color(0.72, 0.72, 0.78), "glow": Color(0.85, 0.35, 1.0),
+		"armor": Color(0.1, 0.13, 0.24), "armor2": Color(0.34, 0.18, 0.5),
+		"suit": Color(0.06, 0.07, 0.1), "trim": Color(0.66, 0.68, 0.76), "glow": Color(0.8, 0.35, 1.0),
 	},
+	# Archer : laque blanche et bleu nuit, ferrures dorées.
 	"tireur": {
-		"armor": Color(0.8, 0.82, 0.86), "armor2": Color(0.18, 0.4, 0.78),
-		"suit": Color(0.13, 0.14, 0.17), "trim": Color(0.28, 0.3, 0.34), "glow": Color(0.25, 0.85, 1.0),
+		"armor": Color(0.86, 0.86, 0.88), "armor2": Color(0.12, 0.2, 0.42),
+		"suit": Color(0.12, 0.13, 0.18), "trim": Color(0.78, 0.64, 0.3), "glow": Color(0.3, 0.8, 1.0),
 	},
 	"dummy": {
 		"armor": Color(0.9, 0.45, 0.1), "armor2": Color(0.24, 0.24, 0.26),

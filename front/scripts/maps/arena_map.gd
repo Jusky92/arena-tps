@@ -1,25 +1,31 @@
 @tool
 class_name ArenaMap
 extends Node3D
-## Map "Arena" : zone industrielle et urbaine de 120 x 120 m pour 8 joueurs.
+## Map « NEO-EDO » : quartier japonais de 120 x 120 m pour 8 joueurs.
+##
+## Deux ambiances se répondent dans la même arène :
+##   - un quartier TRADITIONNEL (sanctuaire, pagode, marché de bois, jardin sec) ;
+##   - un quartier NÉO-TOKYO (laboratoire IoT, enseignes néon verticales,
+##     distributeurs, rideaux métalliques).
 ##
 ## La map est construite par code à partir des listes ci-dessous (positions en mètres),
 ## ce qui la rend facile à modifier sans outil de modélisation. Grâce à @tool, elle
-## s'affiche aussi dans l'éditeur Godot : ouvrir scenes/maps/arena.tscn.
+## s'affiche aussi dans l'éditeur Godot : ouvrir scenes/maps/arena.tscn, puis cliquer
+## sur « Reconstruire la map » dans l'inspecteur après une modification.
 ##
 ## Repère : le centre de la map est (0, 0), le sol est à y = 0.
 ## x négatif = ouest, x positif = est, z négatif = nord, z positif = sud.
 ##
 ## Zones :
-##   Centre        tour à 3 m de haut, 4 rampes, auvent
-##   Nord-ouest    parc à conteneurs + portique de levage
-##   Nord-est      entrepôt (mezzanine, caisses)
-##   Sud-ouest     échafaudages : deux tours reliées par une passerelle à 5 m
-##   Sud-est       place moderne (pergola, arbres, fontaine, kiosque)
-##   Croix         deux avenues qui traversent la map, avec barrières et lampadaires
+##   Centre        sanctuaire sur une estrade de 3 m, grand torii, 4 rampes
+##   Nord-ouest    marché couvert : échoppes de bois, caisses et tonneaux de saké
+##   Nord-est      IoT研究所 : laboratoire néon (bras robotiques, tapis, mezzanine)
+##   Sud-ouest     pagode à cinq toits et tour de guet reliées par une passerelle à 5 m
+##   Sud-est       jardin sec : gravier ratissé, bassin à carpes, pont rouge, cerisiers
+##   Croix         deux ruelles commerçantes qui traversent la map
 ##
-## Décor "CFA INSTA" et IoT : enseignes néon, LAB IoT dans l'entrepôt (bras robotiques,
-## tapis roulant, tableau de bord), caméras de surveillance, capteurs connectés, drones.
+## Décor « CFA INSTA » et IoT : enseignes néon en kanji, bannières, caméras de
+## surveillance, capteurs connectés et drones de patrouille.
 
 const HALF := 60.0                 # demi-côté de l'arène (120 m de côté)
 const WALL_HEIGHT := 8.0
@@ -41,27 +47,29 @@ const TARGET_POINTS: Array[Vector3] = [
 	Vector3(-30, 0, -30), Vector3(30, 0, -14),
 ]
 
-# Conteneurs : [x, z, orienté selon x ?, étage (0 = au sol), couleur].
-const CONTAINERS := [
-	[-44, -50, true, 0, "red"], [-44, -50, true, 1, "blue"], [-36, -50, true, 0, "orange"],
-	[-26, -50, true, 0, "teal"], [-26, -50, true, 1, "white"],
-	[-50, -42, true, 0, "teal"], [-33, -42, true, 0, "red"], [-33, -42, true, 1, "orange"],
-	[-46, -34, true, 0, "white"], [-46, -34, true, 1, "red"], [-38, -34, true, 0, "blue"],
+# Étals du marché : [x, z, orienté selon x ?, étage (0 = au sol), style].
+# Les étals du bas sont des échoppes couvertes, ceux du dessus des piles de
+# caisses et de tonneaux : on peut grimper dessus, comme sur les anciens conteneurs.
+const STALLS := [
+	[-44, -50, true, 0, "indigo"], [-44, -50, true, 1, "barrels"], [-36, -50, true, 0, "red"],
+	[-26, -50, true, 0, "green"], [-26, -50, true, 1, "crates"],
+	[-50, -42, true, 0, "green"], [-33, -42, true, 0, "red"], [-33, -42, true, 1, "barrels"],
+	[-46, -34, true, 0, "cream"], [-46, -34, true, 1, "crates"], [-38, -34, true, 0, "indigo"],
 	[-22, -34, true, 0, "green"],
-	[-55, -30, false, 0, "orange"], [-28, -26, false, 0, "blue"], [-28, -26, false, 1, "teal"],
+	[-55, -30, false, 0, "red"], [-28, -26, false, 0, "indigo"], [-28, -26, false, 1, "barrels"],
 	[-16, -46, false, 0, "red"],
-	[-48, -20, true, 0, "blue"], [-38, -22, true, 0, "orange"],
+	[-48, -20, true, 0, "indigo"], [-38, -22, true, 0, "cream"],
 ]
-const CONTAINER_SIZE := Vector3(6.1, 2.6, 2.44)   # longueur, hauteur, largeur
+const STALL_SIZE := Vector3(6.1, 2.6, 2.44)   # longueur, hauteur, largeur
 
-# Barrières en béton : [x, z, angle en degrés].
-const BARRIERS := [
+# Bornes et bancs de pierre (couverture basse) : [x, z, angle en degrés].
+const STONE_BLOCKS := [
 	[0, 28, 0], [6, 40, 25], [-5, 50, -15], [28, 0, 90], [40, -5, 65], [50, 5, 100],
 	[-28, 0, 90], [-40, 4, 115], [-50, -4, 80], [0, -28, 0], [-6, -40, -25], [5, -50, 15],
 	[-52, 40, 30], [-36, 52, 0], [-18, 38, 70], [-40, 16, 0], [14, -18, 45], [-14, 18, 45],
 ]
 
-# Caisses : [x, z, étage].
+# Caisses de bois : [x, z, étage].
 const CRATES := [
 	[24, -29, 0], [25.6, -29, 0], [24.8, -29, 1],
 	[26, -47, 0], [27.6, -47, 0], [16, -20, 0], [16, -18.4, 0],
@@ -69,8 +77,10 @@ const CRATES := [
 	[-20, 52, 0], [-21.6, 52, 0], [-20.8, 52, 1],
 ]
 
-# Arbres de la place : [x, z].
-const TREES := [[22, 40], [46, 48], [52, 34], [26, 52], [40, 56]]
+# Cerisiers du jardin : [x, z, hauteur].
+const CHERRY_TREES := [[22, 40, 6.5], [46, 48, 7.5], [52, 34, 6.0], [26, 52, 7.0], [40, 56, 6.2]]
+
+const TITLE_FONT := preload("res://assets/fonts/Orbitron.ttf")
 
 var _root: Node3D
 var _materials := {}
@@ -103,27 +113,27 @@ func build() -> void:
 	_build_ground()
 	_build_perimeter()
 	_build_skyline()
-	_build_center_tower()
-	_build_container_yard()
-	_build_warehouse()
-	_build_scaffolds()
-	_build_plaza()
-	_build_roads()
-	_build_iot_lab()
+	_build_shrine()
+	_build_market()
+	_build_lab()
+	_build_pagoda()
+	_build_garden()
+	_build_streets()
 	_build_cfa_insta()
-	_build_connected_city()
+	_build_connected_decor()
 
 
 # =========================================================================== ambiance
 
 func _build_environment() -> void:
+	# Ciel de fin de journée : bleu profond en haut, horizon rose-orangé.
 	var sky_material := ProceduralSkyMaterial.new()
-	sky_material.sky_top_color = Color(0.18, 0.36, 0.68)
-	sky_material.sky_horizon_color = Color(0.78, 0.72, 0.66)
-	sky_material.sky_curve = 0.12
-	sky_material.ground_bottom_color = Color(0.16, 0.16, 0.18)
-	sky_material.ground_horizon_color = Color(0.78, 0.72, 0.66)
-	sky_material.sun_angle_max = 20.0
+	sky_material.sky_top_color = Color(0.22, 0.34, 0.66)
+	sky_material.sky_horizon_color = Color(0.92, 0.72, 0.68)
+	sky_material.sky_curve = 0.14
+	sky_material.ground_bottom_color = Color(0.17, 0.15, 0.18)
+	sky_material.ground_horizon_color = Color(0.9, 0.72, 0.66)
+	sky_material.sun_angle_max = 22.0
 
 	var sky := Sky.new()
 	sky.sky_material = sky_material
@@ -132,43 +142,41 @@ func _build_environment() -> void:
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	# Lumière ambiante : moitié ciel, moitié gris neutre (ombres moins bleues).
-	env.ambient_light_color = Color(0.62, 0.6, 0.58)
-	env.ambient_light_sky_contribution = 0.45
+	env.ambient_light_color = Color(0.64, 0.6, 0.6)
+	env.ambient_light_sky_contribution = 0.5
 	env.ambient_light_energy = 0.8
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.tonemap_exposure = 0.95
 	env.tonemap_white = 6.0
-	# Halo lumineux autour des néons uniquement (seuil élevé).
+	# Halo lumineux autour des néons et des lanternes uniquement (seuil élevé).
 	env.glow_enabled = true
-	env.glow_intensity = 0.5
-	env.glow_bloom = 0.0
-	env.glow_hdr_threshold = 1.3
+	env.glow_intensity = 0.6
+	env.glow_bloom = 0.05
+	env.glow_hdr_threshold = 1.2
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
-	# Légère brume : donne de la profondeur et estompe les immeubles lointains.
+	# Brume légère : profondeur, et les toits lointains se détachent moins.
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.72, 0.72, 0.74)
-	env.fog_density = 0.0025
-	env.fog_sky_affect = 0.15
-	# Petits réglages de couleur.
+	env.fog_light_color = Color(0.78, 0.72, 0.74)
+	env.fog_density = 0.0014
+	env.fog_sky_affect = 0.1
 	env.adjustment_enabled = true
 	env.adjustment_contrast = 1.06
-	env.adjustment_saturation = 1.1
+	env.adjustment_saturation = 1.12
 
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	_root.add_child(world_env)
 
-	# Soleil de fin d'après-midi : lumière chaude, ombres longues.
+	# Soleil bas de fin d'après-midi : lumière dorée, ombres longues.
 	var sun := DirectionalLight3D.new()
-	sun.light_color = Color(1.0, 0.9, 0.78)
-	sun.light_energy = 1.3
+	sun.light_color = Color(1.0, 0.86, 0.7)
+	sun.light_energy = 1.35
 	sun.shadow_enabled = true
 	sun.shadow_blur = 1.2
 	sun.directional_shadow_max_distance = 110.0
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
 	_root.add_child(sun)
-	sun.rotation_degrees = Vector3(-32, -48, 0)
+	sun.rotation_degrees = Vector3(-26, -54, 0)
 
 
 # =========================================================================== sol et murs
@@ -176,7 +184,7 @@ func _build_environment() -> void:
 func _build_ground() -> void:
 	# Une seule collision pour tout le sol (évite les accrocs entre dalles)...
 	_collider_box(Vector3(0, -0.5, 0), Vector3(HALF * 2, 1, HALF * 2))
-	# ...et des dalles visuelles de 10 m avec un revêtement par zone.
+	# ...et des dalles visuelles de 10 m avec un revêtement par quartier.
 	var tile := 10.0
 	for i in 12:
 		for j in 12:
@@ -192,16 +200,20 @@ func _ground_material(x0: float, z0: float) -> Material:
 	var on_road_x := x0 >= -ROAD_HALF_WIDTH and x0 < ROAD_HALF_WIDTH
 	var on_road_z := z0 >= -ROAD_HALF_WIDTH and z0 < ROAD_HALF_WIDTH
 	if on_road_x and on_road_z:
-		return _mat("floor_concrete")          # dalle sous la tour centrale
+		return _mat("floor_stone")             # parvis du sanctuaire
 	if on_road_x or on_road_z:
-		return _mat("floor_asphalt")           # avenues
+		return _mat("floor_asphalt")           # ruelles commerçantes
 	if x0 >= ROAD_HALF_WIDTH and z0 >= ROAD_HALF_WIDTH:
-		return _mat("floor_plaza")             # place sud-est
+		return _mat("floor_gravel")            # jardin sec au sud-est
 	if x0 < -ROAD_HALF_WIDTH and z0 < -ROAD_HALF_WIDTH:
-		return _mat("floor_asphalt")           # parc à conteneurs
-	return _mat("floor_concrete")
+		return _mat("floor_stone")             # marché au nord-ouest
+	if x0 >= ROAD_HALF_WIDTH and z0 < -ROAD_HALF_WIDTH:
+		return _mat("floor_concrete")          # quartier du laboratoire
+	return _mat("floor_stone")
 
 
+## Mur d'enceinte de temple : soubassement de pierre, enduit blanc, chapeau de tuiles.
+## Une porte couverte au milieu de chaque côté marque les grandes entrées.
 func _build_perimeter() -> void:
 	var h := WALL_HEIGHT
 	var t := 1.0
@@ -212,27 +224,52 @@ func _build_perimeter() -> void:
 		[Vector3(HALF + t / 2, h / 2, 0), Vector3(t, h, HALF * 2)],
 	]
 	for w in walls:
-		_box(w[0], w[1], _mat("wall_concrete"))
-		# Chaperon métallique en haut du mur.
-		_mesh_box(w[0] + Vector3(0, h / 2 + 0.15, 0), w[1] * Vector3(1, 0, 1) + Vector3(0.3, 0.3, 0.3), _mat("metal_dark"))
+		var center: Vector3 = w[0]
+		var size: Vector3 = w[1]
+		_box(center, size, _mat("plaster_white"))
+		# Soubassement de pierre sombre.
+		_mesh_box(center + Vector3(0, -h / 2 + 0.6, 0), size * Vector3(1, 0, 1) + Vector3(0.2, 1.2, 0.2), _mat("stone_grey"))
+		# Chapeau de tuiles débordant.
+		_mesh_box(center + Vector3(0, h / 2 + 0.2, 0), size * Vector3(1, 0, 1) + Vector3(1.0, 0.45, 1.0), _mat("roof_tile_dark"))
+		# Lisse de bois à mi-hauteur.
+		_mesh_box(center + Vector3(0, 0.6, 0), size * Vector3(1, 0, 1) + Vector3(0.1, 0.22, 0.1), _mat("wood_dark"))
 
-	# Piliers métalliques tous les 10 m + bande néon en haut, côté intérieur.
+	# Poteaux de bois tous les 10 m, côté intérieur.
 	var step := 10.0
 	var s := -HALF + step
 	while s < HALF - 1:
 		for side in [-1.0, 1.0]:
-			_box(Vector3(s, h / 2, side * (HALF - 0.25)), Vector3(0.8, h + 0.4, 0.5), _mat("metal_dark"))
-			_box(Vector3(side * (HALF - 0.25), h / 2, s), Vector3(0.5, h + 0.4, 0.8), _mat("metal_dark"))
+			_mesh_box(Vector3(s, h / 2, side * (HALF - 0.35)), Vector3(0.5, h, 0.4), _mat("wood_dark"))
+			_mesh_box(Vector3(side * (HALF - 0.35), h / 2, s), Vector3(0.4, h, 0.5), _mat("wood_dark"))
 		s += step
-	for side in [-1.0, 1.0]:
-		_neon(Vector3(0, h - 0.6, side * (HALF - 0.04)), Vector3(HALF * 2, 0.12, 0.06), "neon_cyan")
-		_neon(Vector3(side * (HALF - 0.04), h - 0.6, 0), Vector3(0.06, 0.12, HALF * 2), "neon_cyan")
-		# Bande de danger en bas des murs.
-		_mesh_box(Vector3(0, 0.4, side * (HALF - 0.02)), Vector3(HALF * 2, 0.8, 0.04), _mat("hazard"), false)
-		_mesh_box(Vector3(side * (HALF - 0.02), 0.4, 0), Vector3(0.04, 0.8, HALF * 2), _mat("hazard"), false)
+
+	# Lanternes accrochées au mur, tous les 20 m : la nuit tombe, l'enceinte s'allume.
+	var p := -HALF + 10.0
+	while p < HALF:
+		for side in [-1.0, 1.0]:
+			_lantern(Vector3(p, 5.6, side * (HALF - 0.9)), 0.9, "祭", Color(1.0, 0.5, 0.25))
+			_lantern(Vector3(side * (HALF - 0.9), 5.6, p), 0.9, "祭", Color(1.0, 0.5, 0.25))
+		p += 20.0
+
+	# Porte couverte au milieu de chaque côté (repère visuel pour les apparitions).
+	for dir in [Vector3.FORWARD, Vector3.BACK, Vector3.LEFT, Vector3.RIGHT]:
+		var gate: Vector3 = dir * (HALF - 1.2)
+		var yaw := atan2(dir.x, dir.z)
+		_gate(gate, yaw)
 
 
-## Immeubles autour de l'arène (décor sans collision) pour l'ambiance urbaine.
+## Petite porte de bois (mon) adossée au mur d'enceinte.
+func _gate(pos: Vector3, yaw: float) -> void:
+	var basis := Basis(Vector3.UP, yaw)
+	for side in [-2.2, 2.2]:
+		_mesh_cylinder_at(pos + basis * Vector3(side, 2.2, 0), 0.26, 4.4, _mat("lacquer_red"))
+	_mesh_box_rot(pos + Vector3(0, 4.5, 0), Vector3(6.4, 0.5, 1.6), _mat("wood_dark"), yaw)
+	_roof(pos + Vector3(0, 5.2, 0), 7.6, 3.0, 1.4, yaw, "roof_tile_dark")
+	_lantern(pos + basis * Vector3(0, 4.0, -0.9), 0.8, "門", Color(1.0, 0.55, 0.3))
+
+
+## Toits de la ville autour de l'arène (décor sans collision) : tours néon au nord-est,
+## toits traditionnels et pagodes au sud-ouest.
 func _build_skyline() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7  # toujours la même ville
@@ -240,441 +277,771 @@ func _build_skyline() -> void:
 	for i in count:
 		var angle := TAU * i / count + rng.randf_range(-0.05, 0.05)
 		var distance := rng.randf_range(85, 125)
-		var width := rng.randf_range(16, 30)
-		var depth := rng.randf_range(16, 30)
-		var height := rng.randf_range(22, 70)
-		var pos := Vector3(cos(angle) * distance, height / 2 - 0.5, sin(angle) * distance)
-		var facade: String = ["facade", "facade_warm", "facade_dark"][i % 3]
-		var building := _mesh_box(pos, Vector3(width, height, depth), _mat(facade), true)
-		building.rotation.y = -angle
-		# Liseré néon autour du toit de certains immeubles.
-		if i % 3 == 0:
-			var basis := Basis(Vector3.UP, -angle)
-			var roof := pos + Vector3(0, height / 2 + 0.15, 0)
-			var neon_name := "neon_magenta" if i % 2 == 0 else "neon_cyan"
-			for edge in [[Vector3(0, 0, depth / 2), Vector3(width, 0.3, 0.3)], [Vector3(0, 0, -depth / 2), Vector3(width, 0.3, 0.3)],
-					[Vector3(width / 2, 0, 0), Vector3(0.3, 0.3, depth)], [Vector3(-width / 2, 0, 0), Vector3(0.3, 0.3, depth)]]:
-				var strip := _neon(roof + basis * (edge[0] as Vector3), edge[1], neon_name)
-				strip.rotation.y = -angle
+		var pos_flat := Vector3(cos(angle) * distance, 0, sin(angle) * distance)
+		# Côté nord-est : tours modernes. Ailleurs : maisons basses à toits de tuiles.
+		var modern := pos_flat.x > -10.0 and pos_flat.z < 20.0
+		if modern:
+			var width := rng.randf_range(16, 30)
+			var depth := rng.randf_range(16, 30)
+			var height := rng.randf_range(26, 72)
+			var pos := pos_flat + Vector3(0, height / 2 - 0.5, 0)
+			var facade: String = ["facade", "facade_warm", "facade_dark"][i % 3]
+			var building := _mesh_box(pos, Vector3(width, height, depth), _mat(facade), true)
+			building.rotation.y = -angle
+			if i % 3 == 0:
+				var roof := pos + Vector3(0, height / 2 + 0.15, 0)
+				var neon_name := "neon_pink" if i % 2 == 0 else "neon_cyan"
+				_neon_ring(roof, width, depth, neon_name)
+			# Enseigne verticale géante sur certaines tours.
+			if i % 4 == 1:
+				var sign_text: String = ["電気", "未来", "夜", "東京"][i % 4]
+				var sign_pos := pos_flat + Vector3(0, height * 0.6, 0) - pos_flat.normalized() * (depth * 0.52)
+				_vertical_sign(sign_text, sign_pos, -angle + PI, 3.0, height * 0.3,
+					["neon_pink", "neon_cyan", "neon_gold"][i % 3])
+		else:
+			var width := rng.randf_range(14, 24)
+			var depth := rng.randf_range(12, 20)
+			var height := rng.randf_range(6, 14)
+			var pos := pos_flat + Vector3(0, height / 2 - 0.5, 0)
+			var house := _mesh_box(pos, Vector3(width, height, depth), _mat("plaster_white"), true)
+			house.rotation.y = -angle
+			_roof(pos + Vector3(0, height / 2 + 1.2, 0), width + 3.0, depth + 3.0, 2.6, -angle, "roof_tile_blue")
+		# Quelques pagodes lointaines, pour la silhouette.
+		if i % 9 == 4:
+			_pagoda(pos_flat + Vector3(0, 0, 0), 5, 7.0, rng.randf_range(0, TAU), false)
 
 
-# =========================================================================== centre
+# =========================================================================== centre : le sanctuaire
 
-func _build_center_tower() -> void:
+## Estrade de 3 m avec 4 rampes, surmontée d'un pavillon et d'un grand torii.
+## Même géométrie que l'ancienne tour centrale : le jeu n'y perd rien.
+func _build_shrine() -> void:
 	var top := 3.0
 	var half := 8.0
-	_box(Vector3(0, top / 2, 0), Vector3(half * 2, top, half * 2), _mat("wall_concrete"))
-	# Bandeau métallique et néon sur le pourtour.
-	_mesh_box(Vector3(0, top - 0.25, 0), Vector3(half * 2 + 0.1, 0.5, half * 2 + 0.1), _mat("metal_dark"))
-	_neon_ring(Vector3(0, top - 0.55, 0), half * 2 + 0.1, half * 2 + 0.1, "neon_cyan")
+	_box(Vector3(0, top / 2, 0), Vector3(half * 2, top, half * 2), _mat("stone_grey"))
+	# Plancher de bois sur l'estrade + bandeau de pierre.
+	_mesh_box(Vector3(0, top - 0.02, 0), Vector3(half * 2 - 0.6, 0.06, half * 2 - 0.6), _mat("wood_warm"))
+	_mesh_box(Vector3(0, top - 0.25, 0), Vector3(half * 2 + 0.2, 0.5, half * 2 + 0.2), _mat("stone_grey"))
 
-	# Quatre rampes (une par côté), largeur 4 m, pente d'environ 17°.
+	# Quatre escaliers de pierre (une par côté), largeur 4 m.
 	for dir in [Vector3.FORWARD, Vector3.BACK, Vector3.LEFT, Vector3.RIGHT]:
 		var bottom: Vector3 = dir * (half + 9.5)
 		var upper: Vector3 = dir * half + Vector3(0, top, 0)
-		_ramp(bottom, upper, 4.0, _mat("grating"))
-		# Rayures de danger au pied de la rampe.
-		_mesh_box(bottom + dir * 0.6 + Vector3(0, 0.01, 0), _oriented(dir, 4.0, 0.02, 1.2), _mat("hazard"), false)
+		_ramp(bottom, upper, 4.0, _mat("floor_stone"))
+		# Deux bornes de pierre au pied de l'escalier.
+		var across := Vector3(dir.z, 0, dir.x)
+		for side in [-1.0, 1.0]:
+			_mesh_box(bottom + across * side * 2.6 + Vector3(0, 0.45, 0), Vector3(0.6, 0.9, 0.6), _mat("stone_grey"))
 
-	# Murets en L dans les coins (couverture), entrées des rampes dégagées.
-	var wall_h := 1.1
+	# Balustrade de bois dans les coins (couverture), entrées des escaliers dégagées.
+	var rail_h := 1.1
 	for sx in [-1.0, 1.0]:
 		for sz in [-1.0, 1.0]:
-			var y := top + wall_h / 2
-			_box(Vector3(sx * 5.75, y, sz * (half - 0.25)), Vector3(4.5, wall_h, 0.5), _mat("metal_light"))
-			_box(Vector3(sx * (half - 0.25), y, sz * 5.75), Vector3(0.5, wall_h, 4.5), _mat("metal_light"))
+			var y := top + rail_h / 2
+			_box(Vector3(sx * 5.75, y, sz * (half - 0.25)), Vector3(4.5, rail_h, 0.4), _mat("lacquer_red"))
+			_box(Vector3(sx * (half - 0.25), y, sz * 5.75), Vector3(0.4, rail_h, 4.5), _mat("lacquer_red"))
 
-	# Auvent sur 4 colonnes.
+	# Pavillon : 4 piliers vermillon et un toit de tuiles à deux niveaux.
 	for sx in [-1.0, 1.0]:
 		for sz in [-1.0, 1.0]:
-			_cylinder(Vector3(sx * 4.0, top + 2.5, sz * 4.0), 0.35, 5.0, _mat("metal_dark"))
-	_box(Vector3(0, top + 5.2, 0), Vector3(12, 0.4, 12), _mat("metal_dark"))
-	_neon_ring(Vector3(0, top + 4.96, 0), 12.0, 12.0, "neon_magenta")
+			_cylinder(Vector3(sx * 4.0, top + 2.5, sz * 4.0), 0.35, 5.0, _mat("lacquer_red"))
+	_mesh_box(Vector3(0, top + 5.1, 0), Vector3(10.4, 0.35, 10.4), _mat("wood_dark"))
+	_roof(Vector3(0, top + 5.5, 0), 13.0, 13.0, 1.8, 0.0, "roof_tile_blue")
+	_roof(Vector3(0, top + 7.0, 0), 8.0, 8.0, 1.6, 0.0, "roof_tile_blue")
+	# Faîtage doré et lanternes aux quatre coins du pavillon.
+	_mesh_box(Vector3(0, top + 8.1, 0), Vector3(8.4, 0.25, 0.4), _mat("gold_trim"))
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			_lantern(Vector3(sx * 4.0, top + 4.6, sz * 4.0), 0.55, "福", Color(1.0, 0.5, 0.2))
 
+	# Corde sacrée (shimenawa) et boîte à offrandes sous le pavillon.
+	_mesh_cylinder_at(Vector3(0, top + 2.6, -3.9), 0.22, 7.6, _mat("cloth_indigo"), Vector3(0, 0, PI / 2))
+	_box(Vector3(0, top + 0.45, -2.6), Vector3(2.4, 0.9, 1.1), _mat("wood_dark"))
+	_mesh_box(Vector3(0, top + 0.92, -2.6), Vector3(2.5, 0.08, 1.2), _mat("gold_trim"))
 
-# =========================================================================== nord-ouest
-
-func _build_container_yard() -> void:
-	for c in CONTAINERS:
-		_container(c[0], c[1], c[2], c[3], c[4])
-
-	# Rampe en caillebotis pour monter sur un conteneur.
-	_ramp(Vector3(-38, 0, -24), Vector3(-38, CONTAINER_SIZE.y, -32.78), 2.4, _mat("grating"))
-
-	# Portique de levage (repère visuel du quartier).
-	var legs := [Vector2(-50, -55), Vector2(-20, -55), Vector2(-50, -17), Vector2(-20, -17)]
-	for leg in legs:
-		_box(Vector3(leg.x, 7, leg.y), Vector3(1.2, 14, 1.2), _mat("metal_accent"))
-		_mesh_box(Vector3(leg.x, 1, leg.y), Vector3(1.3, 2, 1.3), _mat("hazard"), false)
-	for z in [-55.0, -17.0]:
-		_box(Vector3(-35, 14.5, z), Vector3(32, 1.2, 1.4), _mat("metal_accent"))
-	_mesh_box(Vector3(-35, 14.0, -36), Vector3(1.6, 1.0, 39.4), _mat("metal_dark"))
-	_mesh_box(Vector3(-35, 13.0, -36), Vector3(3.0, 1.4, 2.4), _mat("metal_accent"))
-	_neon(Vector3(-35, 12.25, -36), Vector3(2.0, 0.08, 1.2), "neon_orange")
-
-
-func _container(x: float, z: float, along_x: bool, level: int, color: String) -> void:
-	var s := CONTAINER_SIZE
-	var size := Vector3(s.x, s.y, s.z) if along_x else Vector3(s.z, s.y, s.x)
-	var center := Vector3(x, s.y / 2 + level * s.y, z)
-	_box(center, size, _mat("container_" + color))
-	# Cadre sombre aux deux extrémités (portes) pour le détail.
-	var axis := Vector3(1, 0, 0) if along_x else Vector3(0, 0, 1)
+	# Grand torii au sud de l'estrade, sur le parvis : le repère visuel de la map.
+	_torii(Vector3(0, 0, 14.0), 0.0, 1.6, "神社")
+	# Deux gardiens de pierre (komainu stylisés) de part et d'autre.
 	for side in [-1.0, 1.0]:
-		var end: Vector3 = center + axis * side * (s.x / 2 + 0.02)
-		var frame := Vector3(0.06, s.y, s.z) if along_x else Vector3(s.z, s.y, 0.06)
-		_mesh_box(end, frame, _mat("metal_dark"), false)
+		_komainu(Vector3(side * 4.6, 0, 11.0), side)
+	# Allée de lanternes de pierre vers le torii.
+	for i in 4:
+		for side in [-1.0, 1.0]:
+			_stone_lantern(Vector3(side * 5.2, 0, 17.0 + i * 5.0))
 
 
-# =========================================================================== nord-est
+## Portique vermillon. `scale_factor` 1.0 = environ 5 m de haut.
+func _torii(pos: Vector3, yaw: float, scale_factor := 1.0, plaque := "") -> void:
+	var basis := Basis(Vector3.UP, yaw)
+	var h := 5.0 * scale_factor
+	var span := 3.2 * scale_factor
+	var post := 0.3 * scale_factor
+	for side in [-1.0, 1.0]:
+		# Les piliers d'un torii sont légèrement inclinés vers l'intérieur.
+		var pillar := _cylinder(pos + basis * Vector3(side * span, h / 2, 0), post, h, _mat("lacquer_red"))
+		pillar.rotation.y = yaw
+		pillar.rotation.z = -side * 0.025
+		# Socle de pierre.
+		_mesh_cylinder_at(pos + basis * Vector3(side * span, 0.25, 0), post * 1.5, 0.5, _mat("stone_grey"))
+	# Linteau courbe (deux barres) + entretoise.
+	_mesh_box_rot(pos + Vector3(0, h + 0.1 * scale_factor, 0),
+		Vector3(span * 2.9, 0.42 * scale_factor, 0.55 * scale_factor), _mat("lacquer_red"), yaw)
+	_mesh_box_rot(pos + Vector3(0, h + 0.45 * scale_factor, 0),
+		Vector3(span * 3.1, 0.3 * scale_factor, 0.75 * scale_factor), _mat("lacquer_black"), yaw)
+	_mesh_box_rot(pos + Vector3(0, h - 0.8 * scale_factor, 0),
+		Vector3(span * 2.3, 0.3 * scale_factor, 0.4 * scale_factor), _mat("lacquer_red"), yaw)
+	if not plaque.is_empty():
+		_mesh_box_rot(pos + Vector3(0, h - 0.3 * scale_factor, 0),
+			Vector3(1.5 * scale_factor, 1.1 * scale_factor, 0.16), _mat("lacquer_black"), yaw)
+		var label := _jp_sign(plaque, pos + basis * Vector3(0, h - 0.3 * scale_factor, 0.12 * scale_factor),
+			yaw, 70, 0.009 * scale_factor, Color(1.0, 0.86, 0.45))
+		label.outline_size = 0
 
-func _build_warehouse() -> void:
-	var x0 := 18.0
-	var x1 := 50.0
-	var z0 := -50.0
-	var z1 := -24.0
-	var h := 7.0
-	var t := 0.6
-	var wall := _mat("metal_light")
 
-	# Mur sud (face au centre) : deux grandes portes.
-	_wall_with_openings(Vector3(x0, 0, z1), Vector3(x1, 0, z1), h, t, [[23.0, 29.0], [39.0, 45.0]], 5.0, wall)
-	# Mur nord : plein.
-	_wall_with_openings(Vector3(x0, 0, z0), Vector3(x1, 0, z0), h, t, [], 5.0, wall)
-	# Mur ouest : une porte.
-	_wall_with_openings(Vector3(x0, 0, z0), Vector3(x0, 0, z1), h, t, [[-40.0, -34.0]], 5.0, wall)
-	# Mur est : une porte.
-	_wall_with_openings(Vector3(x1, 0, z0), Vector3(x1, 0, z1), h, t, [[-42.0, -36.0]], 5.0, wall)
+## Gardien de pierre à l'entrée du sanctuaire (forme stylisée, pas un modèle détaillé).
+func _komainu(pos: Vector3, facing: float) -> void:
+	var stone := _mat("stone_grey")
+	_box(pos + Vector3(0, 0.45, 0), Vector3(1.5, 0.9, 1.0), stone)              # socle
+	_mesh_box(pos + Vector3(0, 1.25, 0), Vector3(0.75, 0.8, 1.3), stone)        # corps
+	_mesh_box(pos + Vector3(0, 1.95, -0.35), Vector3(0.6, 0.6, 0.6), stone)     # tête
+	_mesh_box(pos + Vector3(0, 2.3, -0.45), Vector3(0.62, 0.12, 0.3), stone)    # crinière
+	_mesh_cylinder_at(pos + Vector3(0, 1.6, 0.6), 0.1, 0.9, stone, Vector3(0.6, 0, 0))  # queue
+	# Museau tourné vers l'allée centrale.
+	_mesh_box(pos + Vector3(-facing * 0.2, 1.9, -0.65), Vector3(0.3, 0.3, 0.3), stone)
 
-	# Soubassement en béton et bandeau orange (style industriel moderne).
-	_mesh_box(Vector3((x0 + x1) / 2, h + 0.2, z1), Vector3(x1 - x0 + 0.8, 0.4, t + 0.2), _mat("metal_accent"))
-	_mesh_box(Vector3((x0 + x1) / 2, h + 0.2, z0), Vector3(x1 - x0 + 0.8, 0.4, t + 0.2), _mat("metal_accent"))
-	_mesh_box(Vector3(x0, h + 0.2, (z0 + z1) / 2), Vector3(t + 0.2, 0.4, z1 - z0), _mat("metal_accent"))
-	_mesh_box(Vector3(x1, h + 0.2, (z0 + z1) / 2), Vector3(t + 0.2, 0.4, z1 - z0), _mat("metal_accent"))
 
-	# Toit partiel au nord (ombre sous la mezzanine) + poutres apparentes.
-	_box(Vector3((x0 + x1) / 2, h + 0.15, -44), Vector3(x1 - x0, 0.3, 12), _mat("metal_dark"))
-	for z in [-36.0, -30.0]:
-		_mesh_box(Vector3((x0 + x1) / 2, h - 0.25, z), Vector3(x1 - x0, 0.5, 0.3), _mat("metal_dark"))
-	for x in [26.0, 34.0, 42.0]:
-		_mesh_box(Vector3(x, h - 0.25, (z0 + z1) / 2), Vector3(0.3, 0.5, z1 - z0), _mat("metal_dark"))
+## Lanterne de pierre du jardin (tōrō).
+func _stone_lantern(pos: Vector3) -> void:
+	var stone := _mat("stone_grey")
+	_cylinder(pos + Vector3(0, 0.3, 0), 0.34, 0.6, stone)
+	_mesh_cylinder_at(pos + Vector3(0, 0.95, 0), 0.16, 0.8, stone)
+	_mesh_box(pos + Vector3(0, 1.45, 0), Vector3(0.75, 0.18, 0.75), stone)
+	# Chambre de la flamme, éclairée.
+	var fire := StandardMaterial3D.new()
+	fire.albedo_color = Color(1.0, 0.85, 0.6)
+	fire.emission_enabled = true
+	fire.emission = Color(1.0, 0.6, 0.25)
+	fire.emission_energy_multiplier = 2.4
+	_mesh_box(pos + Vector3(0, 1.75, 0), Vector3(0.44, 0.44, 0.44), fire)
+	for side in [-1.0, 1.0]:
+		_mesh_box(pos + Vector3(side * 0.26, 1.75, 0), Vector3(0.08, 0.5, 0.5), stone)
+	_roof(pos + Vector3(0, 2.05, 0), 1.1, 1.1, 0.4, 0.0, "stone_grey")
+	_mesh_sphere(pos + Vector3(0, 2.35, 0), 0.12, stone)
 
-	# Mezzanine à 3,5 m, en caillebotis, sur piliers.
-	var deck_top := 3.5
-	_box(Vector3(34, deck_top - 0.2, -46.2), Vector3(24, 0.4, 6.4), _mat("grating"))
-	for x in [22.5, 30.0, 38.0, 45.8]:
-		_box(Vector3(x, (deck_top - 0.4) / 2, -43.3), Vector3(0.4, deck_top - 0.4, 0.4), _mat("metal_dark"))
-	# Garde-corps (avec une ouverture pour la rampe).
-	_box(Vector3(32, deck_top + 0.5, -43.1), Vector3(20, 1.0, 0.15), _mat("metal_dark"))
-	_neon(Vector3(32, deck_top + 1.02, -43.1), Vector3(20, 0.05, 0.17), "neon_orange")
-	_ramp(Vector3(44, 0, -33), Vector3(44, deck_top, -43), 3.0, _mat("grating"))
 
-	# Lampes suspendues sous le toit.
-	for x in [26.0, 34.0, 42.0]:
-		_mesh_box(Vector3(x, h - 1.0, -40), Vector3(1.6, 0.12, 0.5), _mat("lamp_warm"), false)
-		var light := OmniLight3D.new()
-		light.light_color = Color(1.0, 0.85, 0.65)
-		light.light_energy = 1.4
-		light.omni_range = 11.0
-		_root.add_child(light)
-		light.position = Vector3(x, h - 1.4, -40)
+# =========================================================================== nord-ouest : le marché
 
-	# Marquage au sol à l'intérieur.
-	_mesh_box(Vector3(34, 0.012, -38.5), Vector3(28, 0.02, 0.2), _mat("paint_yellow"), false)
-
+func _build_market() -> void:
+	for s in STALLS:
+		_stall(s[0], s[1], s[2], s[3], s[4])
 	for c in CRATES:
 		_crate(c[0], c[1], c[2])
 
+	# Portique d'entrée du marché + bannière.
+	_torii(Vector3(-30, 0, -18), 0.0, 1.1, "市場")
+	_nobori("商店街", Vector3(-24, 0, -20), 0.3, Color(0.72, 0.13, 0.1))
+	_nobori("名物", Vector3(-36, 0, -20), -0.2, Color(0.09, 0.13, 0.26))
 
-# =========================================================================== sud-ouest
+	# Grande halle ouverte : charpente de bois et toit de tuiles sur poteaux.
+	var roof_y := 5.4
+	for x in [-52.0, -42.0, -32.0, -22.0]:
+		for z in [-56.0, -44.0, -32.0]:
+			_cylinder(Vector3(x, roof_y / 2, z), 0.26, roof_y, _mat("wood_beam"))
+	for z in [-56.0, -44.0, -32.0]:
+		_mesh_box(Vector3(-37, roof_y, z), Vector3(32, 0.4, 0.6), _mat("wood_beam"))
+	for x in [-52.0, -42.0, -32.0, -22.0]:
+		_mesh_box(Vector3(x, roof_y + 0.3, -44), Vector3(0.5, 0.35, 26), _mat("wood_beam"))
+	_roof(Vector3(-37, roof_y + 0.9, -44), 34.0, 28.0, 2.2, 0.0, "roof_tile_blue")
 
-func _build_scaffolds() -> void:
-	var deck_top := 5.0
-	# Deux tours : plateforme de 8 x 8 m sur 4 piliers.
-	for tower in [Vector2(-46, 26), Vector2(-26, 26)]:
-		_box(Vector3(tower.x, deck_top - 0.25, tower.y), Vector3(8, 0.5, 8), _mat("metal_dark"))
-		_neon_ring(Vector3(tower.x, deck_top - 0.25, tower.y), 8.0, 8.0, "neon_cyan")
-		for sx in [-1.0, 1.0]:
-			for sz in [-1.0, 1.0]:
-				_box(Vector3(tower.x + sx * 3.7, (deck_top - 0.5) / 2, tower.y + sz * 3.7),
-					Vector3(0.5, deck_top - 0.5, 0.5), _mat("hazard"))
-	# Couverture sur les tours.
-	var y := deck_top + 0.55
-	_box(Vector3(-49.8, y, 26), Vector3(0.4, 1.1, 8), _mat("metal_light"))
-	_box(Vector3(-46, y, 22.2), Vector3(8, 1.1, 0.4), _mat("metal_light"))
-	_box(Vector3(-26, y, 22.2), Vector3(8, 1.1, 0.4), _mat("metal_light"))
-	_box(Vector3(-26, y, 29.8), Vector3(4, 1.1, 0.4), _mat("metal_light"))
+	# Guirlande de lanternes sous la halle.
+	for i in 9:
+		_lantern(Vector3(-54.0 + i * 4.0, roof_y - 0.1, -44.0), 1.1,
+			["酒", "麺", "魚", "茶"][i % 4], Color(1.0, 0.45, 0.2))
 
-	# Passerelle entre les tours, avec garde-corps.
-	_box(Vector3(-36, deck_top - 0.15, 26), Vector3(12, 0.3, 2.4), _mat("grating"))
-	for side in [-1.0, 1.0]:
-		_box(Vector3(-36, deck_top + 0.5, 26 + side * 1.15), Vector3(12, 1.0, 0.1), _mat("metal_dark"))
-
-	# Rampes d'accès.
-	_ramp(Vector3(-46, 0, 44), Vector3(-46, deck_top, 30), 3.0, _mat("grating"))
-	_ramp(Vector3(-8, 0, 26), Vector3(-22, deck_top, 26), 3.0, _mat("grating"))
-
-	# Panneau publicitaire lumineux.
-	for x in [-40.0, -30.0]:
-		_box(Vector3(x, 2.5, 46), Vector3(0.6, 5, 0.6), _mat("metal_dark"))
-	_box(Vector3(-35, 6.5, 46), Vector3(12, 5, 0.4), _mat("metal_dark"))
-	for side in [-1.0, 1.0]:
-		_mesh_box(Vector3(-35, 6.5, 46 + side * 0.22), Vector3(11.4, 4.4, 0.02), _mat("screen"), false)
-
-	# Groupe électrogène.
-	_box(Vector3(-24, 1, 50), Vector3(4, 2, 2.2), _mat("metal_dark"))
-	_neon(Vector3(-24, 1.4, 48.88), Vector3(2.8, 0.1, 0.04), "neon_orange")
+	# Échoppe de ramen avec son noren et son comptoir.
+	_shop(Vector3(-18, 0, -38), PI / 2, "ラーメン", "neon_gold", Color(0.72, 0.13, 0.1))
+	_shop(Vector3(-18, 0, -52), PI / 2, "居酒屋", "neon_pink", Color(0.09, 0.13, 0.26))
 
 
-# =========================================================================== sud-est
+## Étal du marché : échoppe couverte au sol, pile de caisses ou de tonneaux à l'étage.
+## Mêmes dimensions que les anciens conteneurs : la couverture de jeu est identique.
+func _stall(x: float, z: float, along_x: bool, level: int, style: String) -> void:
+	var size := STALL_SIZE if along_x else Vector3(STALL_SIZE.z, STALL_SIZE.y, STALL_SIZE.x)
+	var center := Vector3(x, STALL_SIZE.y / 2 + level * STALL_SIZE.y, z)
+	if style == "barrels":
+		# Rangée de tonneaux de saké, ceinturés de corde.
+		_collider_box(center, size)
+		var count := 4
+		for i in count:
+			var offset := (i - (count - 1) / 2.0) * (size.x if along_x else size.z) / count
+			var p := center + (Vector3(offset, 0, 0) if along_x else Vector3(0, 0, offset))
+			_mesh_cylinder_at(p, 0.78, size.y * 0.95, _mat("wood_warm"))
+			for band in [-0.5, 0.0, 0.5]:
+				_mesh_cylinder_at(p + Vector3(0, band * size.y * 0.7, 0), 0.82, 0.12, _mat("cloth_indigo"))
+		return
+	if style == "crates":
+		# Pile de caisses de bois.
+		_collider_box(center, size)
+		var cols := 3 if along_x else 2
+		for i in cols:
+			for j in 2:
+				var span := (size.x if along_x else size.z)
+				var offset := (i - (cols - 1) / 2.0) * span / cols
+				var p := center + (Vector3(offset, 0, 0) if along_x else Vector3(0, 0, offset))
+				p.y = center.y - size.y / 2 + 0.65 + j * 1.3
+				_mesh_box(p, Vector3(1.2, 1.25, 1.2), _mat("wood_warm"))
+		return
 
-func _build_plaza() -> void:
-	# Pergola : deux rangées de colonnes et des lames au-dessus.
-	for z in [24.0, 30.0]:
-		for x in [20.0, 26.0, 32.0, 38.0, 44.0, 50.0]:
-			_cylinder(Vector3(x, 2.75, z), 0.4, 5.5, _mat("paint_white"))
-		_box(Vector3(35, 5.8, z), Vector3(34, 0.6, 0.6), _mat("paint_white"))
-	var slat := 18.5
-	while slat < 52:
-		_mesh_box(Vector3(slat, 6.2, 27), Vector3(0.25, 0.2, 7.2), _mat("metal_dark"))
-		slat += 1.5
-
-	# Fontaine ronde surélevée avec une sculpture au centre.
-	_cylinder(Vector3(34, 0.3, 40), 4.0, 0.6, _mat("wall_concrete"))
-	_mesh_cylinder(Vector3(34, 0.61, 40), 3.6, 0.02, _mat("glass"))
-	_box(Vector3(34, 1.6, 40), Vector3(1.4, 2.0, 1.4), _mat("metal_light"))
-	var cube := _box(Vector3(34, 3.3, 40), Vector3(1.4, 1.4, 1.4), _mat("metal_accent"))
-	cube.rotation_degrees = Vector3(35, 45, 0)
-	_neon(Vector3(34, 0.65, 40), Vector3(1.6, 0.05, 1.6), "neon_cyan")
-
-	# Arbres dans des jardinières.
-	for t in TREES:
-		_tree(t[0], t[1])
-
-	# Bancs.
-	for b in [[30, 46], [38, 46], [44, 40], [20, 34]]:
-		_box(Vector3(b[0], 0.22, b[1]), Vector3(2.2, 0.45, 0.6), _mat("metal_dark"))
-
-	# Kiosque moderne.
-	_box(Vector3(46, 1.75, 16.5), Vector3(8, 3.5, 5), _mat("metal_light"))
-	_mesh_box(Vector3(46, 1.9, 13.98), Vector3(7.2, 1.4, 0.04), _mat("glass"), false)
-	_box(Vector3(46, 3.65, 16.0), Vector3(9.5, 0.3, 7), _mat("metal_dark"))
-	_neon(Vector3(46, 3.3, 13.96), Vector3(6, 0.25, 0.05), "neon_magenta")
-
-
-func _tree(x: float, z: float) -> void:
-	_box(Vector3(x, 0.4, z), Vector3(3.2, 0.8, 3.2), _mat("wall_concrete"))
-	_mesh_box(Vector3(x, 0.81, z), Vector3(2.8, 0.02, 2.8), _mat("grass"), false)
-	_cylinder(Vector3(x, 0.8 + 1.8, z), 0.22, 3.6, _mat("bark"))
-	# Feuillage : plusieurs sphères pour une silhouette naturelle (sans collision).
-	var rng := RandomNumberGenerator.new()
-	rng.seed = int(x * 31 + z * 17)
-	for i in 4:
-		var offset := Vector3(rng.randf_range(-0.9, 0.9), rng.randf_range(0, 1.2), rng.randf_range(-0.9, 0.9))
-		_mesh_sphere(Vector3(x, 5.0, z) + offset, rng.randf_range(1.3, 1.9), _mat("foliage"))
-
-
-# =========================================================================== avenues
-
-func _build_roads() -> void:
-	# Lignes blanches discontinues au milieu des avenues.
-	var d := 12.0
-	while d < HALF - 2:
-		for side in [-1.0, 1.0]:
-			_mesh_box(Vector3(0, 0.012, side * d), Vector3(0.25, 0.02, 3), _mat("paint_white"), false)
-			_mesh_box(Vector3(side * d, 0.012, 0), Vector3(3, 0.02, 0.25), _mat("paint_white"), false)
-		d += 6.0
-	# Bordures jaunes le long des avenues.
-	for side in [-1.0, 1.0]:
-		for half_side in [-1.0, 1.0]:
-			var mid: float = half_side * (HALF + ROAD_HALF_WIDTH) / 2
-			var length := HALF - ROAD_HALF_WIDTH
-			_mesh_box(Vector3(side * ROAD_HALF_WIDTH, 0.012, mid), Vector3(0.2, 0.02, length), _mat("paint_yellow"), false)
-			_mesh_box(Vector3(mid, 0.012, side * ROAD_HALF_WIDTH), Vector3(length, 0.02, 0.2), _mat("paint_yellow"), false)
-
-	for b in BARRIERS:
-		_barrier(b[0], b[1], b[2])
-
-	# Lampadaires le long des avenues.
-	for d2 in [20.0, 40.0]:
-		for s1 in [-1.0, 1.0]:
-			for s2 in [-1.0, 1.0]:
-				_street_light(Vector3(s1 * 11, 0, s2 * d2), Vector3(-s1, 0, 0))
-				_street_light(Vector3(s2 * d2, 0, s1 * 11), Vector3(0, 0, -s1))
+	# Échoppe : comptoir de bois, toit de tuiles, rideau noren et lanterne.
+	var cloth: Color = {
+		"indigo": Color(0.09, 0.13, 0.26), "red": Color(0.6, 0.12, 0.12),
+		"green": Color(0.1, 0.26, 0.2), "cream": Color(0.85, 0.8, 0.68),
+	}.get(style, Color(0.09, 0.13, 0.26))
+	_box(center, size, _mat("wood_warm"))
+	_mesh_box(center + Vector3(0, size.y / 2 + 0.06, 0), size * Vector3(1, 0, 1) + Vector3(0.5, 0.12, 0.5), _mat("wood_dark"))
+	_roof(center + Vector3(0, size.y / 2 + 0.5, 0), size.x + 1.4, size.z + 1.4, 0.9, 0.0, "roof_tile_dark")
+	# Bandeau de tissu sur la face avant.
+	var front := Vector3(0, 0, size.z / 2 + 0.05) if along_x else Vector3(size.x / 2 + 0.05, 0, 0)
+	var cloth_material: StandardMaterial3D = _mat("cloth_indigo").duplicate()
+	cloth_material.albedo_color = cloth
+	_mesh_box(center + front + Vector3(0, size.y * 0.3, 0),
+		Vector3(size.x * 0.95, 0.5, 0.06) if along_x else Vector3(0.06, 0.5, size.z * 0.95), cloth_material, false)
+	if level == 0:
+		_lantern(center + front * 1.2 + Vector3(0, size.y * 0.55, 0), 0.0, "", Color(1.0, 0.5, 0.25))
 
 
-func _barrier(x: float, z: float, angle_deg: float) -> void:
-	var base := _box(Vector3(x, 0.55, z), Vector3(3.2, 1.1, 0.7), _mat("wall_concrete"))
-	base.rotation_degrees.y = angle_deg
-	var band := _mesh_box(Vector3(x, 0.85, z), Vector3(3.22, 0.25, 0.72), _mat("hazard"), false)
-	band.rotation_degrees.y = angle_deg
-
-
+## Caisse de bois cerclée (couverture basse).
 func _crate(x: float, z: float, level: int) -> void:
-	var size := 1.5
-	_box(Vector3(x, size / 2 + level * size, z), Vector3(size, size, size) * 0.98, _mat("metal_accent" if int(x + z) % 2 == 0 else "metal_dark"))
+	var s := 1.6
+	var center := Vector3(x, s / 2 + level * s, z)
+	_box(center, Vector3(s, s, s), _mat("wood_warm"))
+	for axis in [Vector3(1, 0, 0), Vector3(0, 0, 1)]:
+		_mesh_box(center + axis * (s / 2 + 0.01), Vector3(s * 1.02, 0.14, s * 1.02) * (Vector3.ONE - axis) + axis * 0.02,
+			_mat("wood_dark"), false)
 
 
-func _street_light(base: Vector3, facing: Vector3) -> void:
-	_cylinder(base + Vector3(0, 3, 0), 0.12, 6, _mat("metal_dark"))
-	_mesh_box(base + Vector3(0, 6, 0) + facing * 0.8, Vector3(0.2, 0.15, 0.2) + facing.abs() * 1.4, _mat("metal_dark"))
-	_mesh_box(base + Vector3(0, 5.88, 0) + facing * 1.3, Vector3(0.35, 0.06, 0.35) + facing.abs() * 0.3, _mat("lamp_warm"))
+## Petite boutique adossée : façade, rideau métallique, enseigne néon verticale.
+func _shop(pos: Vector3, yaw: float, text: String, neon: String, cloth: Color) -> void:
+	var basis := Basis(Vector3.UP, yaw)
+	var w := 7.0
+	var d := 5.0
+	var h := 4.2
+	var body := _box(pos + Vector3(0, h / 2, 0), Vector3(w, h, d), _mat("plaster_white"))
+	body.rotation.y = yaw
+	_roof(pos + Vector3(0, h + 0.5, 0), w + 2.0, d + 2.0, 1.3, yaw, "roof_tile_dark")
+	# Devanture : rideau métallique à moitié baissé + comptoir.
+	_mesh_box_rot(pos + basis * Vector3(0, h * 0.72, -d / 2 - 0.06), Vector3(w * 0.8, h * 0.4, 0.1), _mat("shutter_metal"), yaw)
+	_mesh_box_rot(pos + basis * Vector3(0, 0.55, -d / 2 - 0.5), Vector3(w * 0.8, 1.1, 0.9), _mat("wood_warm"), yaw)
+	# Noren fendu au-dessus du comptoir.
+	_noren(text, pos + basis * Vector3(0, h * 0.5, -d / 2 - 0.55), yaw, cloth)
+	_vertical_sign(text, pos + basis * Vector3(w / 2 - 0.2, h * 0.6, -d / 2 - 0.35), yaw, 0.9, 2.6, neon)
+	_lantern(pos + basis * Vector3(-w / 2 + 0.6, h * 0.62, -d / 2 - 0.5), 0.5, "", Color(1.0, 0.5, 0.25))
 
 
-# =========================================================================== IoT et CFA INSTA
+# =========================================================================== nord-est : le laboratoire IoT
 
-const RobotArmScript := preload("res://scripts/maps/props/robot_arm.gd")
-const SecurityCameraScript := preload("res://scripts/maps/props/security_camera.gd")
-const DroneScript := preload("res://scripts/maps/props/patrol_drone.gd")
-const SensorScript := preload("res://scripts/maps/props/iot_sensor.gd")
-const DashboardScript := preload("res://scripts/maps/props/iot_dashboard.gd")
-const ConveyorScript := preload("res://scripts/maps/props/conveyor.gd")
-const TITLE_FONT := preload("res://assets/fonts/Orbitron.ttf")
+## Bâtiment moderne du quartier néon : atelier au rez-de-chaussée (bras robotiques,
+## tapis roulant), mezzanine accessible par une rampe, grand écran de supervision.
+func _build_lab() -> void:
+	var x0 := 18.0
+	var x1 := 56.0
+	var z0 := -56.0
+	var z1 := -22.0
+	var h := 7.0
+	var cx := (x0 + x1) / 2
+	var cz := (z0 + z1) / 2
 
+	# Murs : béton côté extérieur, grandes ouvertures côté arène.
+	_wall_with_openings(Vector3(x0, 0, z0), Vector3(x1, 0, z0), h, 0.6, [[26.0, 32.0], [44.0, 50.0]], 4.0, _mat("wall_concrete"))
+	_wall_with_openings(Vector3(x0, 0, z1), Vector3(x1, 0, z1), h, 0.6, [[22.0, 30.0], [40.0, 48.0]], 4.5, _mat("wall_concrete"))
+	_wall_with_openings(Vector3(x0, 0, z0), Vector3(x0, 0, z1), h, 0.6, [[-46.0, -40.0]], 4.5, _mat("wall_concrete"))
+	_box(Vector3(x1, h / 2, cz), Vector3(0.6, h, z1 - z0), _mat("wall_concrete"))
+	# Toit plat débordant + liseré néon tout autour.
+	_mesh_box(Vector3(cx, h + 0.3, cz), Vector3(x1 - x0 + 2.4, 0.6, z1 - z0 + 2.4), _mat("metal_dark"))
+	_neon_ring(Vector3(cx, h - 0.1, cz), x1 - x0 + 1.0, z1 - z0 + 1.0, "neon_cyan")
 
-## LAB IoT dans l'entrepôt : tapis roulant, deux bras robotiques, écran de supervision.
-func _build_iot_lab() -> void:
-	# Tapis roulant (avec collision) + caisses qui défilent.
-	_box(Vector3(31, 0.4, -36), Vector3(14, 0.8, 0.9), _mat("metal_dark"))
-	_mesh_box(Vector3(31, 0.81, -36), Vector3(13.8, 0.02, 0.7), _mat("grating"), false)
-	var conveyor: Node3D = ConveyorScript.new()
-	conveyor.length = 13.0
+	# Équipements sur le toit (le bâtiment se voit de toute la map).
+	for i in 3:
+		_mesh_box(Vector3(x0 + 8 + i * 12, h + 1.4, cz - 6), Vector3(4.0, 1.6, 3.0), _mat("metal_light"))
+		_mesh_box(Vector3(x0 + 8 + i * 12, h + 2.3, cz - 6), Vector3(3.4, 0.2, 2.4), _mat("metal_dark"))
+		_neon(Vector3(x0 + 8 + i * 12, h + 0.75, cz + 6), Vector3(5.0, 0.1, 0.1), "neon_pink")
+	_mesh_box(Vector3(x1 - 5, h + 2.6, cz + 8), Vector3(1.2, 4.0, 1.2), _mat("metal_dark"))
+	_neon(Vector3(x1 - 5, h + 4.5, cz + 8), Vector3(1.4, 0.12, 1.4), "neon_pink")
+
+	# Mezzanine au fond, accessible par une rampe.
+	var mezz_y := 3.5
+	_box(Vector3(x1 - 7, mezz_y, cz), Vector3(13, 0.4, 22), _mat("grating"))
+	for side in [-1.0, 1.0]:
+		_box(Vector3(x1 - 7, mezz_y + 0.6, cz + side * 11), Vector3(13, 1.1, 0.2), _mat("metal_light"))
+	_box(Vector3(x1 - 13.4, mezz_y + 0.6, cz), Vector3(0.2, 1.1, 22), _mat("metal_light"))
+	_stairs(Vector3(x0 + 7, 0, cz + 8), Vector3(x1 - 13, mezz_y, cz + 8), 3.4, _mat("grating"))
+
+	# Atelier : deux bras robotiques de part et d'autre d'un tapis roulant.
+	var conveyor := Conveyor.new()
+	conveyor.length = 16.0
 	_root.add_child(conveyor)
-	conveyor.position = Vector3(31, 0.82, -36)
-
-	# Deux bras robotiques de part et d'autre du tapis, avec zone de sécurité au sol.
-	for arm_data in [[Vector3(27.5, 0, -37.5), PI, 0.0], [Vector3(34.5, 0, -34.5), 0.0, 0.5]]:
-		var pos: Vector3 = arm_data[0]
-		_cylinder(pos + Vector3(0, 0.25, 0), 0.47, 0.5, _mat("metal_dark"))
-		var arm: Node3D = RobotArmScript.new()
-		arm.phase_offset = arm_data[2]
+	conveyor.position = Vector3(cx - 4, 0.9, cz - 6)
+	_box(Vector3(cx - 4, 0.45, cz - 6), Vector3(16, 0.9, 1.6), _mat("metal_dark"))
+	for i in 2:
+		var arm := RobotArm.new()
+		arm.phase_offset = i * 0.5
 		_root.add_child(arm)
-		arm.position = pos
-		arm.rotation.y = arm_data[1]
-		_mesh_box(pos + Vector3(0, 0.013, 0), Vector3(3.4, 0.02, 0.12), _mat("paint_yellow"), false)
-		for side in [-1.0, 1.0]:
-			_mesh_box(pos + Vector3(side * 1.7, 0.013, 0), Vector3(0.12, 0.02, 2.6), _mat("paint_yellow"), false)
+		arm.position = Vector3(cx - 9 + i * 10, 0.0, cz - 8.4)
+		arm.rotation.y = PI
 
-	# Écran de supervision sur la façade sud (face au centre de la map).
-	var dashboard: Node3D = DashboardScript.new()
+	# Écran de supervision sur le mur du fond.
+	var dashboard := IotDashboard.new()
+	dashboard.size = Vector2(9.0, 3.4)
 	_root.add_child(dashboard)
-	dashboard.position = Vector3(34, 3.0, -23.62)
+	dashboard.position = Vector3(cx + 2, 4.6, z0 + 0.8)
 	dashboard.rotation.y = PI
 
-	# Passerelle LoRa / antenne sur le toit.
-	_box(Vector3(46, 8.5, -46), Vector3(0.25, 2.4, 0.25), _mat("metal_dark"))
-	var beacon := _mesh_box(Vector3(46, 9.8, -46), Vector3(0.3, 0.3, 0.3), _mat("neon_magenta"), false)
-	beacon.name = "LoraBeacon"
+	# Casiers et établis (couverture).
+	for i in 4:
+		_box(Vector3(x0 + 6 + i * 6, 1.0, z1 - 4), Vector3(3.6, 2.0, 1.2), _mat("metal_light"))
+	_box(Vector3(x0 + 7, 0.5, cz + 2), Vector3(5.0, 1.0, 2.4), _mat("metal_dark"))
+
+	# Enseignes : le nom du laboratoire, en japonais à l'extérieur.
+	_vertical_sign("研究所", Vector3(x0 - 0.6, h - 1.0, z1 + 1.2), PI, 1.6, 5.0, "neon_cyan")
+	_jp_sign("IoT 研究所", Vector3(cx, h + 1.6, z1 + 1.6), PI, 120, 0.028, Color(0.4, 2.2, 2.4))
+	_sign("LAB IoT", Vector3(cx, h + 0.9, z1 + 1.6), PI, 90, 0.02, Color(1.6, 1.7, 1.9))
 
 
-## Références au CFA INSTA : enseignes néon, bannières, marquage au sol.
-func _build_cfa_insta() -> void:
-	# Grandes enseignes sur les murs nord et sud.
-	_sign("CFA INSTA", Vector3(0, 4.4, -59.35), 0.0, 200, 0.03, Color(3.0, 0.6, 2.4))
-	_sign("ARCHITECTURE SI · M2", Vector3(0, 4.4, 59.35), PI, 150, 0.024, Color(0.4, 2.8, 3.0))
-	# Enseigne sur l'entrepôt (LAB IoT), lisible depuis le centre.
-	_box(Vector3(34, 8.55, -24.1), Vector3(12.5, 2.3, 0.25), _mat("metal_dark"))
-	_sign("CFA INSTA", Vector3(34, 8.6, -23.95), 0.0, 150, 0.014, Color(0.3, 2.3, 2.6))
-	# Marquage au sol sur la tour centrale.
-	var floor_text := _sign("CFA INSTA ARENA", Vector3(0, 3.015, 0), 0.0, 120, 0.012, Color(0.25, 1.6, 1.8))
-	floor_text.rotation = Vector3(-PI / 2, 0, 0)
-	# Bannières verticales sur les murs est et ouest.
-	for z in [-40.0, -10.0, 20.0, 45.0]:
+# =========================================================================== sud-ouest : la pagode
+
+## Pagode à cinq toits (point haut de la map) et tour de guet en bois,
+## reliées par une passerelle à 5 m. Remplace les anciens échafaudages.
+func _build_pagoda() -> void:
+	var pagoda_pos := Vector3(-46, 0, 25)
+	var yagura_pos := Vector3(-26, 0, 25)
+	var deck := 5.0
+
+	# Socle de la pagode : on peut monter sur sa première toiture-terrasse.
+	_pagoda(pagoda_pos, 5, 6.0, 0.0, true)
+	# Escalier d'accès à la terrasse.
+	_stairs(pagoda_pos + Vector3(0, 0, 16.0), pagoda_pos + Vector3(0, deck, 5.0), 3.2, _mat("wood_warm"))
+
+	# Tour de guet (yagura) : plateforme de bois sur quatre poteaux.
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			_cylinder(yagura_pos + Vector3(sx * 3.4, deck / 2, sz * 3.4), 0.3, deck, _mat("wood_beam"))
+			# Croix de contreventement.
+			_mesh_box(yagura_pos + Vector3(sx * 3.4, deck * 0.5, 0), Vector3(0.18, 0.18, 7.2), _mat("wood_beam"))
+	_box(yagura_pos + Vector3(0, deck, 0), Vector3(8.4, 0.4, 8.4), _mat("wood_warm"))
+	for side in [-1.0, 1.0]:
+		_box(yagura_pos + Vector3(side * 4.1, deck + 0.6, 0), Vector3(0.25, 1.1, 8.4), _mat("lacquer_red"))
+		_box(yagura_pos + Vector3(0, deck + 0.6, side * 4.1), Vector3(8.4, 1.1, 0.25), _mat("lacquer_red"))
+	_roof(yagura_pos + Vector3(0, deck + 3.4, 0), 9.6, 9.6, 1.6, 0.0, "roof_tile_dark")
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			_cylinder(yagura_pos + Vector3(sx * 3.4, deck + 1.6, sz * 3.4), 0.18, 2.4, _mat("wood_beam"))
+			_lantern(yagura_pos + Vector3(sx * 3.9, deck + 2.6, sz * 3.9), 0.5, "", Color(1.0, 0.45, 0.2))
+	# Grand tambour sous la tour (décor).
+	_mesh_cylinder_at(yagura_pos + Vector3(0, 1.1, 0), 1.1, 1.6, _mat("lacquer_red"), Vector3(0, 0, PI / 2))
+
+	# Passerelle de bois entre la pagode et la tour, portée par des poteaux.
+	_box(Vector3(-36, deck, 25), Vector3(20, 0.35, 3.2), _mat("wood_warm"))
+	for x in [-40.0, -36.0, -32.0]:
 		for side in [-1.0, 1.0]:
-			var x: float = side * 59.45
-			_mesh_box(Vector3(x, 4.2, z), Vector3(0.05, 5.0, 2.0), _mat("metal_dark"), false)
-			_mesh_box(Vector3(x - side * 0.03, 6.65, z), Vector3(0.02, 0.06, 2.0), _mat("neon_magenta"), false)
-			_mesh_box(Vector3(x - side * 0.03, 1.75, z), Vector3(0.02, 0.06, 2.0), _mat("neon_magenta"), false)
-			var banner := _sign("CFA INSTA", Vector3(x - side * 0.04, 4.2, z), -side * PI / 2, 64, 0.012, Color(2.6, 0.7, 2.2))
-			banner.rotation.z = PI / 2
-	# Panneau publicitaire du sud-ouest et kiosque de la place.
-	_sign("CFA INSTA", Vector3(-35, 7.4, 46.25), 0.0, 110, 0.016, Color(2.2, 2.2, 2.4))
-	_sign("Formation Architecte SI · M2", Vector3(-35, 5.6, 46.25), 0.0, 60, 0.012, Color(0.4, 1.8, 2.2))
-	_sign("CFA INSTA", Vector3(-35, 7.0, 45.75), PI, 110, 0.016, Color(2.4, 0.5, 1.9))
-	_sign("CAFÉT' INSTA", Vector3(46, 4.25, 12.45), PI, 64, 0.012, Color(2.4, 0.6, 1.9))
+			_mesh_box(Vector3(x, deck / 2, 25 + side * 1.4), Vector3(0.24, deck, 0.24), _mat("wood_beam"))
+	for side in [-1.0, 1.0]:
+		_box(Vector3(-36, deck + 0.55, 25 + side * 1.7), Vector3(20, 1.0, 0.18), _mat("lacquer_red"))
+	# Rampe d'accès depuis le sol, côté sud.
+	_stairs(Vector3(-26, 0, 40.0), Vector3(-26, deck, 29.0), 3.2, _mat("wood_warm"))
+
+	# Mur bas et bosquet de bambous autour du quartier.
+	for i in 7:
+		_bamboo(Vector3(-56 + i * 1.4, 0, 14.0), 5.2)
+		_bamboo(Vector3(-56 + i * 1.4, 0, 38.0), 4.4)
+	_nobori("弓", Vector3(-40, 0, 33), 0.1, Color(0.2, 0.35, 0.6))
+	_nobori("影", Vector3(-52, 0, 33), -0.1, Color(0.4, 0.15, 0.45))
 
 
-## Ville connectée : caméras, capteurs, station météo, drones.
-func _build_connected_city() -> void:
-	# Caméras sur les piliers des murs d'enceinte et sur les bâtiments.
+## Pagode à `levels` toits. `solid` ajoute la collision (celle de la map jouable).
+func _pagoda(pos: Vector3, levels: int, base_half: float, yaw: float, solid: bool) -> void:
+	var level_h := 3.0
+	for i in levels:
+		var half_size: float = base_half * (1.0 - i * 0.13)
+		var y := 1.0 + i * level_h
+		var body_size := Vector3(half_size * 1.5, level_h, half_size * 1.5)
+		if solid and i == 0:
+			var body := _box(pos + Vector3(0, y + level_h / 2 - 1.0, 0), body_size, _mat("plaster_white"))
+			body.rotation.y = yaw
+		else:
+			var visual := _mesh_box(pos + Vector3(0, y + level_h / 2 - 1.0, 0), body_size, _mat("plaster_white"))
+			visual.rotation.y = yaw
+		# Piliers d'angle vermillon.
+		for sx in [-1.0, 1.0]:
+			for sz in [-1.0, 1.0]:
+				var p := pos + Basis(Vector3.UP, yaw) * Vector3(sx * half_size * 0.72, y + level_h / 2 - 1.0, sz * half_size * 0.72)
+				_mesh_box(p, Vector3(0.3, level_h, 0.3), _mat("lacquer_red"))
+		# Toit débordant à chaque étage.
+		_roof(pos + Vector3(0, y + level_h - 0.9, 0), half_size * 2.3, half_size * 2.3, 1.1, yaw, "roof_tile_blue")
+		if i == 0 and solid:
+			# La première toiture sert de terrasse : collision plate par-dessus.
+			_collider_box(pos + Vector3(0, y + level_h - 0.35, 0), Vector3(half_size * 2.2, 0.4, half_size * 2.2))
+	# Flèche dorée au sommet.
+	var top := 1.0 + levels * level_h
+	_mesh_cylinder_at(pos + Vector3(0, top + 1.2, 0), 0.12, 2.6, _mat("gold_trim"))
+	for i in 3:
+		_mesh_cylinder_at(pos + Vector3(0, top + 0.6 + i * 0.45, 0), 0.4 - i * 0.1, 0.1, _mat("gold_trim"))
+
+
+# =========================================================================== sud-est : le jardin
+
+func _build_garden() -> void:
+	# Bassin à carpes au milieu du jardin, bordé de pierres.
+	var pond := Vector3(34, 0, 38)
+	var pond_size := Vector2(16.0, 11.0)
+	var koi := KoiPond.new()
+	koi.size = pond_size
+	_root.add_child(koi)
+	koi.position = pond + Vector3(0, 0.04, 0)
+	# Margelle : quatre murets bas (on contourne le bassin).
+	for side in [-1.0, 1.0]:
+		_box(pond + Vector3(0, 0.2, side * (pond_size.y / 2 + 0.4)), Vector3(pond_size.x + 1.6, 0.4, 0.8), _mat("stone_grey"))
+		_box(pond + Vector3(side * (pond_size.x / 2 + 0.4), 0.2, 0), Vector3(0.8, 0.4, pond_size.y + 1.6), _mat("stone_grey"))
+
+	# Pont rouge arqué au-dessus du bassin (passage surélevé).
+	_arched_bridge(pond + Vector3(0, 0, -pond_size.y / 2 - 2.0), pond + Vector3(0, 0, pond_size.y / 2 + 2.0), 3.0)
+
+	# Pavillon de thé ouvert, dans l'angle du jardin.
+	var tea := Vector3(50, 0, 52)
+	_box(tea + Vector3(0, 0.35, 0), Vector3(8.0, 0.7, 8.0), _mat("stone_grey"))
+	_mesh_box(tea + Vector3(0, 0.72, 0), Vector3(7.4, 0.08, 7.4), _mat("floor_tatami"))
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			_cylinder(tea + Vector3(sx * 3.2, 2.1, sz * 3.2), 0.18, 3.0, _mat("wood_beam"))
+	# Cloisons de papier sur deux côtés.
+	_mesh_box(tea + Vector3(0, 2.1, 3.3), Vector3(6.8, 2.6, 0.1), _mat("shoji_paper"))
+	_mesh_box(tea + Vector3(3.3, 2.1, 0), Vector3(0.1, 2.6, 6.8), _mat("shoji_paper"))
+	_roof(tea + Vector3(0, 3.9, 0), 9.6, 9.6, 1.8, 0.0, "roof_tile_blue")
+	_jp_sign("茶室", tea + Vector3(0, 3.2, -3.5), 0.0, 60, 0.012, Color(0.2, 0.18, 0.15))
+
+	# Cerisiers, lanternes de pierre et rochers.
+	for t in CHERRY_TREES:
+		_cherry(t[0], t[1], t[2])
+	for p in [[18, 30], [44, 26], [26, 56], [54, 42], [38, 20]]:
+		_stone_lantern(Vector3(p[0], 0, p[1]))
+	for r in [[22, 24, 1.3], [48, 34, 1.0], [30, 48, 1.5], [18, 44, 0.9], [56, 24, 1.2]]:
+		_rock(Vector3(r[0], 0, r[1]), r[2])
+
+	# Bornes et bancs de pierre du jardin et des allées (couverture basse).
+	for b in STONE_BLOCKS:
+		_stone_block(b[0], b[1], b[2])
+
+	# Haie de bambous le long du mur est.
+	for i in 16:
+		_bamboo(Vector3(57.0, 0, 20.0 + i * 2.2), 4.8)
+	_nobori("庭園", Vector3(14, 0, 24), 0.0, Color(0.1, 0.26, 0.2))
+
+
+## Pont de bois rouge en dos d'âne (trois segments, praticable).
+func _arched_bridge(from: Vector3, to: Vector3, width: float) -> void:
+	var direction := (to - from)
+	var length := direction.length()
+	var mid := (from + to) * 0.5
+	var rise := 1.4
+	var step := length / 3.0
+	var dir := direction.normalized()
+	_ramp(from, mid - dir * step * 0.5 + Vector3(0, rise, 0), width, _mat("lacquer_red"))
+	_box(mid + Vector3(0, rise, 0), Vector3(width, 0.3, step) if absf(dir.z) > 0.5 else Vector3(step, 0.3, width), _mat("lacquer_red"))
+	_ramp(to, mid + dir * step * 0.5 + Vector3(0, rise, 0), width, _mat("lacquer_red"))
+	# Garde-corps : poteaux le long du tablier.
+	for i in 5:
+		var t := i / 4.0
+		var p := from.lerp(to, t)
+		var y := rise * sin(t * PI) + 0.8
+		for side in [-1.0, 1.0]:
+			var across: Vector3 = Vector3(dir.z, 0, dir.x) * (side as float) * width * 0.5
+			_mesh_box(p + across + Vector3(0, y, 0), Vector3(0.16, 1.1, 0.16), _mat("lacquer_red"))
+
+
+## Tige de bambou avec sa touffe de feuilles.
+func _bamboo(pos: Vector3, height: float) -> void:
+	_mesh_cylinder_at(pos + Vector3(0, height / 2, 0), 0.09, height, _mat("bamboo"))
+	# Nœuds réguliers le long de la tige.
+	for i in int(height / 1.2):
+		_mesh_cylinder_at(pos + Vector3(0, 1.0 + i * 1.2, 0), 0.11, 0.06, _mat("wood_warm"))
+	# Feuillage : quelques palettes fines en haut.
+	for i in 4:
+		var angle := TAU * i / 4.0 + randf() * 0.4
+		var leaf := _mesh_box(pos + Vector3(cos(angle) * 0.35, height - 0.4 + i * 0.22, sin(angle) * 0.35),
+			Vector3(0.9, 0.05, 0.22), _mat("foliage"), false)
+		leaf.rotation = Vector3(0, -angle, 0.35)
+
+
+## Rocher du jardin (forme irrégulière faite de deux blocs).
+func _rock(pos: Vector3, scale_factor: float) -> void:
+	var rock := _box(pos + Vector3(0, scale_factor * 0.45, 0), Vector3(1.6, 0.9, 1.3) * scale_factor, _mat("stone_grey"))
+	rock.rotation.y = randf() * TAU
+	var cap := _mesh_box(pos + Vector3(0, scale_factor * 0.95, 0), Vector3(1.1, 0.7, 0.9) * scale_factor, _mat("stone_grey"))
+	cap.rotation = Vector3(0.1, randf() * TAU, 0.08)
+
+
+## Borne / banc de pierre, à la place des anciennes barrières de béton.
+func _stone_block(x: float, z: float, angle_deg: float) -> void:
+	var body := _box(Vector3(x, 0.55, z), Vector3(2.6, 1.1, 0.8), _mat("stone_grey"))
+	body.rotation.y = deg_to_rad(angle_deg)
+	var cap := _mesh_box(Vector3(x, 1.14, z), Vector3(2.8, 0.12, 1.0), _mat("stone_grey"))
+	cap.rotation.y = deg_to_rad(angle_deg)
+
+
+# =========================================================================== les ruelles
+
+## Les deux avenues deviennent des ruelles commerçantes : enseignes verticales,
+## distributeurs, lampadaires de pierre et guirlandes de lanternes.
+func _build_streets() -> void:
+	var half := ROAD_HALF_WIDTH
+	# Marquage central discret au sol.
+	for axis in [0, 1]:
+		var i := -HALF + 6.0
+		while i < HALF - 2:
+			var pos := Vector3(i, 0.02, 0) if axis == 0 else Vector3(0, 0.02, i)
+			var size := Vector3(2.4, 0.02, 0.18) if axis == 0 else Vector3(0.18, 0.02, 2.4)
+			if absf(i) > 18.0:
+				_mesh_box(pos, size, _mat("paint_white"), false)
+			i += 6.0
+
+	# Lampadaires et guirlandes le long des deux axes.
+	var s := -HALF + 12.0
+	while s < HALF - 6:
+		if absf(s) > 16.0:
+			for side in [-1.0, 1.0]:
+				_street_light(Vector3(s, 0, side * (half - 1.0)), Vector3(0, 0, -side))
+				_street_light(Vector3(side * (half - 1.0), 0, s), Vector3(-side, 0, 0))
+		s += 16.0
+
+	# Enseignes verticales néon de part et d'autre de la ruelle nord.
+	var shops := [
+		["寿司", "neon_pink", -34.0], ["喫茶", "neon_cyan", -46.0],
+		["電気", "neon_gold", -24.0], ["薬", "neon_green", -52.0],
+	]
+	for item in shops:
+		for side in [-1.0, 1.0]:
+			_vertical_sign(item[0], Vector3(side * (half - 1.4), 5.0, item[2]), -side * PI / 2, 1.4, 3.6, item[1])
+
+	# Distributeurs de boissons adossés le long des ruelles.
+	_vending(Vector3(-8.6, 0, -28.0), PI / 2, Color(0.85, 0.12, 0.18))
+	_vending(Vector3(-8.6, 0, -30.0), PI / 2, Color(0.1, 0.35, 0.75))
+	_vending(Vector3(8.6, 0, 32.0), -PI / 2, Color(0.95, 0.7, 0.1))
+	_vending(Vector3(-28.0, 0, 8.6), PI, Color(0.2, 0.6, 0.35))
+	_vending(Vector3(-30.0, 0, 8.6), PI, Color(0.85, 0.12, 0.18))
+
+	# Panneaux d'information japonais aux carrefours.
+	_info_panel("中央通り", Vector3(-7.0, 0, -24.0), 0.0, Color(0.95, 0.95, 1.0))
+	_info_panel("立入禁止", Vector3(7.0, 0, 24.0), PI, Color(1.6, 0.5, 0.5))
+
+
+## Panneau d'information sur poteau (texte japonais sur fond sombre).
+func _info_panel(text: String, pos: Vector3, yaw: float, color: Color) -> void:
+	var basis := Basis(Vector3.UP, yaw)
+	_cylinder(pos + Vector3(0, 1.3, 0), 0.08, 2.6, _mat("wood_dark"))
+	var panel := _mesh_box(pos + Vector3(0, 2.3, 0), Vector3(2.2, 0.9, 0.12), _mat("lacquer_black"))
+	panel.rotation.y = yaw
+	var label := _jp_sign(text, pos + Vector3(0, 2.3, 0) + basis * Vector3(0, 0, -0.08), yaw, 60, 0.009, color)
+	label.outline_size = 0
+
+
+## Lampadaire de pierre avec lanterne de papier.
+func _street_light(base: Vector3, facing: Vector3) -> void:
+	_cylinder(base + Vector3(0, 2.2, 0), 0.14, 4.4, _mat("stone_grey"))
+	var head := base + Vector3(0, 4.4, 0) + facing * 0.5
+	_mesh_box(base + Vector3(0, 4.4, 0) + facing * 0.25, Vector3(0.12, 0.12, 1.0) if absf(facing.z) > 0.5 else Vector3(1.0, 0.12, 0.12), _mat("wood_dark"))
+	_lantern(head, 0.45, "", Color(1.0, 0.55, 0.3))
+
+
+# =========================================================================== CFA INSTA
+
+## Références à l'école, intégrées au décor : enseigne néon sur le laboratoire,
+## plaque du sanctuaire, bannières et banderole d'arène.
+func _build_cfa_insta() -> void:
+	# Grande enseigne néon au-dessus du laboratoire (visible de toute la map).
+	var panel := Vector3(37, 10.5, -21.0)
+	_mesh_box(panel, Vector3(22, 4.2, 0.5), _mat("lacquer_black"))
+	_neon_ring(panel + Vector3(0, 0, -0.3), 22.0, 4.2, "neon_pink")
+	_sign("CFA INSTA", panel + Vector3(0, 0.7, 0.4), PI, 150, 0.021, Color(2.4, 1.0, 2.2))
+	_jp_sign("シーエフエー インスタ", panel + Vector3(0, -0.9, 0.4), PI, 70, 0.012, Color(0.5, 2.0, 2.2))
+
+	# Plaque gravée à l'entrée du sanctuaire.
+	_jp_sign("ネオ江戸アリーナ", Vector3(0, 7.9, 13.4), PI, 80, 0.0075, Color(1.0, 0.9, 0.6))
+
+	# Bannières de l'école de part et d'autre du parvis.
+	for side in [-1.0, 1.0]:
+		_nobori("インスタ", Vector3(side * 12.0, 0, 20.0), 0.0, Color(0.72, 0.13, 0.1))
+
+	# Banderole au-dessus de la ruelle nord.
+	var banner := Vector3(0, 6.2, -30.0)
+	for side in [-1.0, 1.0]:
+		_cylinder(banner + Vector3(side * 9.0, -3.1 + 0.0, 0), 0.16, 6.2, _mat("wood_beam"))
+	_mesh_box(banner, Vector3(18.0, 1.8, 0.2), _mat("cloth_indigo"))
+	_sign("CFA INSTA · ARENA", banner + Vector3(0, 0.25, 0.15), PI, 90, 0.013, Color(1.0, 0.92, 0.75))
+	_jp_sign("アーキテクチャ", banner + Vector3(0, -0.5, 0.15), PI, 60, 0.009, Color(0.9, 0.82, 0.7))
+
+
+# =========================================================================== décor connecté (IoT)
+
+## Caméras, capteurs, drones : le fil IoT du projet, intégré au décor japonais.
+func _build_connected_decor() -> void:
+	# Caméras de surveillance sur les poteaux et les toits.
 	var cameras := [
-		[Vector3(-30, 6.4, -59.35), PI], [Vector3(30, 6.4, -59.35), PI],
-		[Vector3(-20, 6.4, 59.35), 0.0], [Vector3(20, 6.4, 59.35), 0.0],
-		[Vector3(59.35, 6.4, -20), PI / 2], [Vector3(59.35, 6.4, 30), PI / 2],
-		[Vector3(-59.35, 6.4, -30), -PI / 2], [Vector3(-59.35, 6.4, 10), -PI / 2],
-		[Vector3(17.6, 6.0, -23.6), PI * 0.75], [Vector3(-4.3, 7.6, 4.3), PI * 0.25],
-		[Vector3(-25.6, 4.3, 29.9), PI],
+		[Vector3(-18, 6.4, -18), 0.6], [Vector3(18, 6.4, -18), -0.6],
+		[Vector3(18, 6.4, 18), -2.4], [Vector3(-18, 6.4, 18), 2.4],
+		[Vector3(-37, 6.6, -30), 0.4], [Vector3(22, 7.2, -24), 1.2],
+		[Vector3(52, 7.2, -24), 2.0], [Vector3(-46, 9.0, 21), -1.0],
+		[Vector3(-26, 8.2, 21), -1.6], [Vector3(34, 5.4, 30), 3.0],
+		[Vector3(0, 11.2, 8), PI],
 	]
 	for c in cameras:
-		var cam: Node3D = SecurityCameraScript.new()
+		var cam := SecurityCamera.new()
 		_root.add_child(cam)
 		cam.position = c[0]
 		cam.rotation.y = c[1]
 
-	# Capteurs (température, humidité, CO2, bruit, lumière, présence).
+	# Capteurs connectés : au marché, au labo, au jardin, au sanctuaire.
 	var sensors := [
-		[Vector3(31.0, 5.4, -23.62), PI, IotSensor.Kind.TEMPERATURE],
-		[Vector3(37.0, 5.4, -23.62), PI, IotSensor.Kind.HUMIDITY],
-		[Vector3(17.62, 2.0, -30.0), PI / 2, IotSensor.Kind.CO2],
-		[Vector3(11.1, 3.0, 20.0), PI / 2, IotSensor.Kind.NOISE],
-		[Vector3(-11.1, 3.0, -20.0), -PI / 2, IotSensor.Kind.TEMPERATURE],
-		[Vector3(-46.0, 6.27, 22.2), 0.0, IotSensor.Kind.LIGHT],
-		[Vector3(34.0, 0.75, 43.6), PI, IotSensor.Kind.PRESENCE],
-		[Vector3(-35.0, 1.8, -48.7), PI, IotSensor.Kind.HUMIDITY],
-		[Vector3(6.0, 4.27, 7.75), PI, IotSensor.Kind.PRESENCE],
+		[Vector3(-22.4, 1.6, -34), IotSensor.Kind.TEMPERATURE, 0.0],
+		[Vector3(-37, 1.6, -57.4), IotSensor.Kind.HUMIDITY, 0.0],
+		[Vector3(24, 1.6, -22.4), IotSensor.Kind.CO2, 0.0],
+		[Vector3(44, 1.6, -22.4), IotSensor.Kind.NOISE, 0.0],
+		[Vector3(-45.4, 1.6, 25), IotSensor.Kind.LIGHT, -PI / 2],
+		[Vector3(8.4, 1.6, 0), IotSensor.Kind.PRESENCE, PI / 2],
+		[Vector3(-8.4, 1.6, 0), IotSensor.Kind.PRESENCE, -PI / 2],
+		[Vector3(34, 1.6, 31.4), IotSensor.Kind.WIND, PI],
+		[Vector3(50, 1.6, 48.4), IotSensor.Kind.TEMPERATURE, PI],
+		[Vector3(-30, 1.6, 17.4), IotSensor.Kind.HUMIDITY, PI],
 	]
 	for s in sensors:
-		var sensor: Node3D = SensorScript.new()
-		sensor.kind = s[2]
+		var sensor := IotSensor.new()
+		sensor.kind = s[1]
 		_root.add_child(sensor)
 		sensor.position = s[0]
-		sensor.rotation.y = s[1]
+		sensor.rotation.y = s[2]
 
-	# Station météo connectée sur la place (anémomètre + panneau solaire).
-	_cylinder(Vector3(52, 1.6, 52), 0.07, 3.2, _mat("metal_dark"))
-	var solar := _mesh_box(Vector3(52, 2.4, 51.75), Vector3(0.9, 0.04, 0.6), _mat("screen"))
-	solar.rotation.x = -0.6
-	var station: Node3D = SensorScript.new()
-	station.kind = IotSensor.Kind.WIND
-	_root.add_child(station)
-	station.position = Vector3(52, 3.3, 52)
-
-	# Drones en patrouille.
+	# Drones de patrouille au-dessus des quartiers.
 	var drones := [
-		[Vector3(0, 0, 0), Vector2(17, 17), 11.0, 0.22, false],
-		[Vector3(-35, 0, -36), Vector2(12, 9), 17.0, 0.3, true],
-		[Vector3(35, 0, 38), Vector2(10, 10), 9.5, -0.28, false],
-		[Vector3(-35, 0, 35), Vector2(13, 7), 10.5, 0.26, true],
+		[Vector3(-36, 0, -44), Vector2(13, 10), 11.0, 0.22, false, 0.0],
+		[Vector3(37, 0, -39), Vector2(15, 12), 12.5, -0.18, true, 1.4],
+		[Vector3(-36, 0, 25), Vector2(12, 9), 13.0, 0.25, false, 3.0],
+		[Vector3(34, 0, 38), Vector2(14, 11), 10.5, -0.2, true, 4.6],
 	]
-	for i in drones.size():
-		var d: Array = drones[i]
-		var drone: Node3D = DroneScript.new()
+	for d in drones:
+		var drone := PatrolDrone.new()
 		drone.center = d[0]
 		drone.radius = d[1]
 		drone.altitude = d[2]
 		drone.speed = d[3]
 		drone.figure_eight = d[4]
-		drone.phase = i * 1.7
+		drone.phase = d[5]
 		_root.add_child(drone)
 
 
-## Texte lumineux (enseigne néon) en police Orbitron.
-func _sign(text: String, pos: Vector3, yaw: float, font_size: int, pixel: float, color: Color) -> Label3D:
-	var label := Label3D.new()
-	label.text = text
-	label.font = TITLE_FONT
-	label.font_size = font_size
-	label.pixel_size = pixel
-	label.modulate = color
+# =========================================================================== éléments japonais réutilisables
+
+## Toit japonais : plusieurs couches décroissantes (pente), débord, faîtage et
+## relevés d'angle. `size_x` / `size_z` = emprise au sol du toit.
+func _roof(center: Vector3, size_x: float, size_z: float, height: float, yaw: float, material_name: String) -> void:
+	var material := _mat(material_name)
+	var layers := 5
+	for i in layers:
+		var t := float(i) / layers
+		var shrink := 1.0 - t * 0.72
+		var y := center.y + t * height
+		var layer := _mesh_box(Vector3(center.x, y, center.z),
+			Vector3(size_x * shrink, height / layers * 1.6, size_z * shrink), material)
+		layer.rotation.y = yaw
+	# Faîtage sombre au sommet.
+	var ridge := _mesh_box(center + Vector3(0, height + 0.05, 0),
+		Vector3(size_x * 0.32, 0.22, size_z * 0.32), _mat("lacquer_black"))
+	ridge.rotation.y = yaw
+	# Relevés d'angle : petits blocs inclinés qui donnent la courbe typique.
+	var basis := Basis(Vector3.UP, yaw)
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			var corner := center + basis * Vector3(sx * size_x * 0.47, 0.12, sz * size_z * 0.47)
+			var tip := _mesh_box(corner, Vector3(size_x * 0.16, 0.18, size_z * 0.16), material)
+			tip.rotation = Vector3(sz * 0.3, yaw, -sx * 0.3)
+
+
+## Enseigne verticale lumineuse (caractères empilés sur un panneau).
+func _vertical_sign(text: String, pos: Vector3, yaw: float, width: float, height: float, neon_material: String) -> void:
+	var panel := _mesh_box(pos, Vector3(width, height, 0.18), _mat("lacquer_black"))
+	panel.rotation.y = yaw
+	var glow := _mesh_box(pos + Basis(Vector3.UP, yaw) * Vector3(0, 0, -0.1), Vector3(width * 0.94, height * 0.96, 0.05), _mat(neon_material), false)
+	glow.rotation.y = yaw
+	# Texte vertical : un caractère par ligne.
+	var vertical := ""
+	for i in text.length():
+		vertical += text[i]
+		if i < text.length() - 1:
+			vertical += "\n"
+	# Un caractère occupe environ 1,3 fois sa hauteur de police : on en déduit la taille.
+	var font_size := 96
+	var pixel: float = height / (maxi(text.length(), 1) * font_size * 1.32)
+	var label := _jp_sign(vertical, pos + Basis(Vector3.UP, yaw) * Vector3(0, 0, -0.16), yaw, font_size, pixel, Color(0.05, 0.03, 0.05))
 	label.outline_size = 0
-	label.shaded = false
-	_root.add_child(label)
-	label.position = pos
-	label.rotation.y = yaw
-	return label
 
 
-# =========================================================================== briques de base
+## Lanterne de papier (prop animé) suspendue à `pos`.
+func _lantern(pos: Vector3, cord: float, text: String, color: Color) -> void:
+	var lantern := PaperLantern.new()
+	lantern.cord = cord
+	lantern.text = text
+	lantern.color = color
+	lantern.phase = randf() * TAU
+	# Une lanterne sur deux éclaire vraiment : on limite le nombre de lumières.
+	lantern.with_light = _root.get_child_count() % 2 == 0
+	_root.add_child(lantern)
+	lantern.position = pos
+
+
+## Rideau fendu d'échoppe.
+func _noren(text: String, pos: Vector3, yaw: float, color: Color) -> void:
+	var noren := FabricBanner.new()
+	noren.kind = FabricBanner.Kind.NOREN
+	noren.size = Vector2(5.0, 1.1)
+	noren.color = color
+	noren.text = text
+	noren.phase = randf() * TAU
+	_root.add_child(noren)
+	noren.position = pos
+	noren.rotation.y = yaw + PI
+
+
+## Bannière verticale sur hampe.
+func _nobori(text: String, pos: Vector3, yaw: float, color: Color) -> void:
+	var banner := FabricBanner.new()
+	banner.kind = FabricBanner.Kind.NOBORI
+	banner.size = Vector2(0.9, 3.4)
+	banner.color = color
+	banner.text = text
+	banner.phase = randf() * TAU
+	_root.add_child(banner)
+	banner.position = pos + Vector3(0, 2.6, 0)
+	banner.rotation.y = yaw
+
+
+## Cerisier en fleurs (prop animé avec ses pétales).
+func _cherry(x: float, z: float, height: float) -> void:
+	var tree := CherryTree.new()
+	tree.height = height
+	tree.seed_value = int(absf(x * 13 + z * 7))
+	_root.add_child(tree)
+	tree.position = Vector3(x, 0, z)
+	# Tronc solide : on ne traverse pas l'arbre.
+	_collider_box(Vector3(x, height * 0.3, z), Vector3(0.7, height * 0.6, 0.7))
+
+
+## Distributeur de boissons (prop animé, avec sa collision).
+func _vending(pos: Vector3, yaw: float, color: Color) -> void:
+	var machine := VendingMachine.new()
+	machine.body_color = color
+	_root.add_child(machine)
+	machine.position = pos
+	machine.rotation.y = yaw
+
+
+# =========================================================================== outils de construction
 
 func _mat(name: String) -> Material:
 	if not _materials.has(name):
@@ -715,6 +1082,13 @@ func _mesh_box(center: Vector3, size: Vector3, material: Material, cast_shadow :
 	return visual
 
 
+## Bloc décoratif tourné autour de l'axe vertical.
+func _mesh_box_rot(center: Vector3, size: Vector3, material: Material, yaw: float) -> MeshInstance3D:
+	var visual := _mesh_box(center, size, material)
+	visual.rotation.y = yaw
+	return visual
+
+
 ## Collision seule (invisible).
 func _collider_box(center: Vector3, size: Vector3) -> void:
 	var body := StaticBody3D.new()
@@ -735,7 +1109,7 @@ func _cylinder(center: Vector3, radius: float, height: float, material: Material
 	mesh.top_radius = radius
 	mesh.bottom_radius = radius
 	mesh.height = height
-	mesh.radial_segments = 24
+	mesh.radial_segments = 16
 	var visual := MeshInstance3D.new()
 	visual.mesh = mesh
 	visual.material_override = material
@@ -749,26 +1123,28 @@ func _cylinder(center: Vector3, radius: float, height: float, material: Material
 	return body
 
 
-func _mesh_cylinder(center: Vector3, radius: float, height: float, material: Material) -> void:
+## Cylindre décoratif, éventuellement incliné (rotation en radians).
+func _mesh_cylinder_at(center: Vector3, radius: float, height: float, material: Material, rotation_rad := Vector3.ZERO) -> MeshInstance3D:
 	var mesh := CylinderMesh.new()
 	mesh.top_radius = radius
 	mesh.bottom_radius = radius
 	mesh.height = height
-	mesh.radial_segments = 32
+	mesh.radial_segments = 14
 	var visual := MeshInstance3D.new()
 	visual.mesh = mesh
 	visual.material_override = material
-	visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_root.add_child(visual)
 	visual.position = center
+	visual.rotation = rotation_rad
+	return visual
 
 
 func _mesh_sphere(center: Vector3, radius: float, material: Material) -> void:
 	var mesh := SphereMesh.new()
 	mesh.radius = radius
 	mesh.height = radius * 2
-	mesh.radial_segments = 16
-	mesh.rings = 8
+	mesh.radial_segments = 14
+	mesh.rings = 7
 	var visual := MeshInstance3D.new()
 	visual.mesh = mesh
 	visual.material_override = material
@@ -790,6 +1166,33 @@ func _neon_ring(center: Vector3, size_x: float, size_z: float, material_name: St
 	_neon(center + Vector3(-size_x / 2, 0, 0), Vector3(t, t, size_z), material_name)
 
 
+## Escalier de bois posé sur des piliers : même surface qu'une rampe, mais il ne
+## flotte pas en l'air. Utilisé pour tous les accès en hauteur.
+func _stairs(bottom: Vector3, top: Vector3, width: float, material: Material) -> void:
+	_ramp(bottom, top, width, material)
+	var posts := maxi(2, int(bottom.distance_to(top) / 3.0))
+	var across := (top - bottom)
+	across = Vector3(across.z, 0, across.x).normalized()
+	for i in range(1, posts + 1):
+		var t := float(i) / (posts + 1)
+		var p := bottom.lerp(top, t)
+		if p.y < 0.6:
+			continue
+		for side in [-1.0, 1.0]:
+			var foot: Vector3 = p + across * (side as float) * (width * 0.5 - 0.25)
+			_mesh_box(Vector3(foot.x, p.y * 0.5, foot.z), Vector3(0.22, p.y, 0.22), _mat("wood_beam"))
+	# Garde-corps le long des deux bords.
+	for side in [-1.0, 1.0]:
+		var a: Vector3 = bottom + across * (side as float) * width * 0.5
+		var b: Vector3 = top + across * (side as float) * width * 0.5
+		for i in 4:
+			var t := i / 3.0
+			var p: Vector3 = a.lerp(b, t)
+			if p.y < 0.4:
+				continue
+			_mesh_box(p + Vector3(0, 0.55, 0), Vector3(0.14, 1.1, 0.14), _mat("lacquer_red"))
+
+
 ## Rampe dont la surface va de `bottom` à `top` (deux points au milieu de la rampe).
 func _ramp(bottom: Vector3, top: Vector3, width: float, material: Material) -> void:
 	var thickness := 0.4
@@ -802,7 +1205,6 @@ func _ramp(bottom: Vector3, top: Vector3, width: float, material: Material) -> v
 
 
 ## Mur droit de `from` à `to` (au sol) avec des ouvertures [début, fin] le long du mur.
-## Les ouvertures font `door_height` de haut, avec un linteau au-dessus.
 func _wall_with_openings(from: Vector3, to: Vector3, height: float, thickness: float,
 		openings: Array, door_height: float, material: Material) -> void:
 	var along_x := absf(to.x - from.x) > absf(to.z - from.z)
@@ -812,7 +1214,7 @@ func _wall_with_openings(from: Vector3, to: Vector3, height: float, thickness: f
 	var cursor := a
 	var segments := []
 	for o in openings:
-		segments.append([cursor, o[0], 0.0, height])          # mur plein avant la porte
+		segments.append([cursor, o[0], 0.0, height])          # mur plein avant l'ouverture
 		segments.append([o[0], o[1], door_height, height])    # linteau au-dessus
 		_door_frame(along_x, fixed, o[0], o[1], door_height)
 		cursor = o[1]
@@ -829,16 +1231,47 @@ func _wall_with_openings(from: Vector3, to: Vector3, height: float, thickness: f
 		_box(center, size, material)
 
 
+## Encadrement d'une ouverture : montants de bois et néon au linteau.
 func _door_frame(along_x: bool, fixed: float, start: float, end: float, height: float) -> void:
 	var neon_size := Vector3(end - start, 0.1, 0.7) if along_x else Vector3(0.7, 0.1, end - start)
 	var mid := (start + end) / 2
 	var top := Vector3(mid, height - 0.05, fixed) if along_x else Vector3(fixed, height - 0.05, mid)
-	_neon(top, neon_size, "neon_orange")
+	_neon(top, neon_size, "neon_cyan")
 	for p in [start, end]:
 		var pos := Vector3(p, height / 2, fixed) if along_x else Vector3(fixed, height / 2, p)
-		_mesh_box(pos, Vector3(0.12, height, 0.72) if along_x else Vector3(0.72, height, 0.12), _mat("hazard"), false)
+		_mesh_box(pos, Vector3(0.18, height, 0.72) if along_x else Vector3(0.72, height, 0.18), _mat("wood_dark"), false)
 
 
-## Taille d'un bloc plat orienté selon une direction horizontale (largeur en travers, profondeur le long).
-func _oriented(dir: Vector3, across: float, height: float, along: float) -> Vector3:
-	return Vector3(along, height, across) if absf(dir.x) > 0.5 else Vector3(across, height, along)
+## Texte 3D en alphabet latin (Orbitron), posé sur un mur ou une enseigne.
+func _sign(text: String, pos: Vector3, yaw: float, font_size: int, pixel: float, color: Color) -> Label3D:
+	var label := Label3D.new()
+	label.text = text
+	label.font = TITLE_FONT
+	label.font_size = font_size
+	label.pixel_size = pixel
+	label.modulate = color
+	label.outline_size = 0
+	label.shaded = false
+	label.double_sided = false
+	_root.add_child(label)
+	label.position = pos
+	label.rotation.y = yaw + PI
+	return label
+
+
+## Texte 3D en japonais (Noto Sans JP).
+func _jp_sign(text: String, pos: Vector3, yaw: float, font_size: int, pixel: float, color: Color) -> Label3D:
+	var label := Label3D.new()
+	label.text = text
+	label.font = JapaneseFont.font()
+	label.font_size = font_size
+	label.pixel_size = pixel
+	label.modulate = color
+	label.outline_size = 0
+	label.shaded = false
+	label.double_sided = false
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_root.add_child(label)
+	label.position = pos
+	label.rotation.y = yaw + PI
+	return label

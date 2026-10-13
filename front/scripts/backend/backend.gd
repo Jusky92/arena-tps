@@ -215,9 +215,9 @@ func get_friends() -> Array:
 func _friends_data() -> Array:
 	return [
 		{"name": "Elian", "status": "online", "activity": "Dans le menu", "level": 14},
-		{"name": "Gl1tch", "status": "in_match", "activity": "En partie · Arena 5/8", "level": 22},
+		{"name": "Gl1tch", "status": "in_match", "activity": "En partie · Neo-Edo 5/8", "level": 22},
 		{"name": "Nova", "status": "online", "activity": "Dans le menu", "level": 9},
-		{"name": "Kairo", "status": "in_match", "activity": "En partie · Arena 7/8", "level": 31},
+		{"name": "Kairo", "status": "in_match", "activity": "En partie · Neo-Edo 7/8", "level": 31},
 		{"name": "PixelGhost", "status": "offline", "activity": "Vu il y a 2 h", "level": 6},
 		{"name": "Cipher", "status": "offline", "activity": "Vu hier", "level": 18},
 		{"name": "Raven", "status": "offline", "activity": "Vu il y a 3 jours", "level": 11},
@@ -252,7 +252,7 @@ func get_servers() -> Array:
 	for i in names.size():
 		var players := _rng.randi_range(1, 7)
 		servers.append({
-			"id": "srv-%d" % (i + 1), "name": names[i], "map": "Arena", "mode": "Match à mort",
+			"id": "srv-%d" % (i + 1), "name": names[i], "map": "Neo-Edo", "mode": "Match à mort",
 			"players": players, "max_players": 8, "ping": _rng.randi_range(8, 70),
 			"region": "EU-Ouest", "build_version": BUILD_VERSION,
 		})
@@ -267,7 +267,7 @@ func create_server(progress: Callable) -> Dictionary:
 	for step in steps:
 		progress.call(step)
 		await get_tree().create_timer(_rng.randf_range(0.25, 0.5)).timeout
-	current_server = {"id": "srv-local", "name": "Serveur de %s" % username(), "map": "Arena",
+	current_server = {"id": "srv-local", "name": "Serveur de %s" % username(), "map": "Neo-Edo",
 		"mode": "Match à mort", "players": party.size(), "max_players": 8, "ping": 4}
 	return {"ok": true, "server": current_server, "ticket": _fake_uuid()}
 

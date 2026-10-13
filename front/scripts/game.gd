@@ -146,7 +146,7 @@ func _pause_info() -> String:
 		lines.append("Temps restant : %d:%02d" % [int(_time_left) / 60, int(_time_left) % 60])
 		lines.append("Ton score : %d élim. · %d morts" % [player.kills, player.deaths])
 	else:
-		lines.append("Entraînement · MAP ARENA")
+		lines.append("Entraînement · NEO-EDO")
 	if not player.alive:
 		lines.append("Réapparition en cours…")
 	return "\n".join(lines)
@@ -286,7 +286,7 @@ func _scoreboard_rows() -> Array:
 
 func _server_subtitle() -> String:
 	var server: Dictionary = Backend.current_server
-	return "%s · MAP ARENA" % server.get("name", "Serveur local")
+	return "%s · NEO-EDO" % server.get("name", "Serveur local")
 
 
 func _end_match() -> void:
