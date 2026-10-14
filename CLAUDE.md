@@ -23,7 +23,8 @@ There is no build system, package manager, or test runner in this repo — it's 
 ```bash
 tools/build_client.sh            # Windows build (default)
 tools/build_client.sh linux
-tools/build_client.sh all
+tools/build_client.sh macos      # build/macos/ArenaTPS.zip, universal, ad-hoc signed (not notarized)
+tools/build_client.sh all        # all three
 ```
 Requires `godot` on PATH (or `GODOT=/path/to/godot`) and export templates installed once in the editor. Output goes to `build/` (gitignored).
 

@@ -4,7 +4,8 @@
 # Usage, depuis la racine du dépôt :
 #     tools/build_client.sh            # Windows (le cas courant : le .exe pour Elian)
 #     tools/build_client.sh linux      # Linux
-#     tools/build_client.sh all        # les deux
+#     tools/build_client.sh macos      # macOS (Mac Intel et Apple Silicon, non signé par Apple)
+#     tools/build_client.sh all        # les trois
 #
 # Prérequis : Godot 4.7.2 accessible en ligne de commande (variable GODOT ou
 # commande `godot`), et les modèles d'exportation installés une fois dans l'éditeur
@@ -32,12 +33,14 @@ export_one() {
 case "$TARGET" in
 	windows) export_one "Windows" "$ROOT/build/windows/ArenaTPS.exe" ;;
 	linux)   export_one "Linux"   "$ROOT/build/linux/ArenaTPS.x86_64" ;;
+	macos)   export_one "macOS"   "$ROOT/build/macos/ArenaTPS.zip" ;;
 	all)
 		export_one "Windows" "$ROOT/build/windows/ArenaTPS.exe"
 		export_one "Linux"   "$ROOT/build/linux/ArenaTPS.x86_64"
+		export_one "macOS"   "$ROOT/build/macos/ArenaTPS.zip"
 		;;
 	*)
-		echo "Cible inconnue : $TARGET (attendu : windows, linux ou all)" >&2
+		echo "Cible inconnue : $TARGET (attendu : windows, linux, macos ou all)" >&2
 		exit 1
 		;;
 esac

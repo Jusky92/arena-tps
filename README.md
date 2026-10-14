@@ -160,7 +160,7 @@ Les éléments de la map sont des listes et fonctions dans le script : après un
 | `extract_animations.gd` | Extraction d'une bibliothèque d'animations compacte depuis le pack d'animations |
 | `generate_sounds.py` | Effets sonores du jeu, calculés par synthèse (aucun son externe) |
 | `subset_font.py` | Allège la police japonaise en ne gardant que les caractères affichés par le jeu |
-| `build_client.sh` | Exporte le client lourd (`.exe` Windows ou binaire Linux) |
+| `build_client.sh` | Exporte le client lourd (`.exe` Windows, binaire Linux ou `.app` macOS) |
 | `build_server.sh` | Exporte le serveur dédié dans `../server/` (Windows ou Linux, sans fenêtre) |
 
 Dépendances Python : `numpy`, `pillow`.
@@ -205,7 +205,7 @@ docs: complète le README
 - [x] Match à mort contre des bots, tableau des scores, écran de fin
 - [x] Menu pause local (changement de classe, son, sensibilité), protection d'apparition, effets sonores
 - [x] Multijoueur en ligne sur serveur dédié (Godot headless), rejoint par adresse, mode LAN
-- [x] Export du client lourd et du serveur dédié Windows / Linux
+- [x] Export du client lourd Windows / Linux / macOS (macOS non testé) et du serveur dédié Windows / Linux
 - [ ] Connexion au vrai back-end (BFF côté jeu, Server List côté serveur)
 - [ ] Serveur entièrement autoritaire (les joueurs n'envoient que leurs commandes)
 - [ ] Micro-services et bases de données

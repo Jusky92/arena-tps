@@ -43,12 +43,12 @@ Sinon, sur un PC qui a le code et **Godot 4.7.2** :
 
    ```bash
    tools/build_server.sh all    # le serveur, Windows + Linux
-   tools/build_client.sh all    # le jeu, Windows + Linux
+   tools/build_client.sh all    # le jeu, Windows + Linux + macOS
    ```
 
    Sous Windows, ces scripts se lancent depuis **Git Bash** ou **WSL**. Sans terminal,
    passer par Godot : **Projet → Exporter…**, choisir le préréglage
-   (« Serveur Windows », « Serveur Linux », « Windows » ou « Linux »),
+   (« Serveur Windows », « Serveur Linux », « Windows », « Linux » ou « macOS »),
    **Exporter le projet…** en décochant « Exporter avec le débogage ».
 
 3. On obtient :
@@ -59,6 +59,7 @@ Sinon, sur un PC qui a le code et **Godot 4.7.2** :
    | `TPSArena_Jeu/server/windows/ArenaTPS_Server.exe` **et** `ArenaTPS_Server.console.exe` | serveur Windows (garder les deux fichiers ensemble) | le PC serveur |
    | `client/build/linux/ArenaTPS.x86_64` | jeu Linux | chaque joueur |
    | `client/build/windows/ArenaTPS.exe` | jeu Windows | chaque joueur |
+   | `client/build/macos/ArenaTPS.zip` | jeu macOS (contient `ArenaTPS.app`) | chaque joueur sur Mac |
 
    Chaque fichier contient tout (ressources incluses) : rien d'autre à installer.
 
@@ -186,6 +187,28 @@ Sinon, sur un PC qui a le code et **Godot 4.7.2** :
 
    (Ou clic droit → Propriétés → Permissions → « Autoriser l'exécution », puis
    double-clic.)
+
+### macOS
+
+Le jeu tourne sur les Mac Intel et Apple Silicon (macOS 11 ou plus récent sur
+Apple Silicon, 10.15 sur Intel). Il n'est **pas signé par Apple**, donc macOS le
+bloque au premier lancement.
+
+1. Décompresser `ArenaTPS.zip` (double-clic) et glisser `ArenaTPS.app` dans
+   **Applications** (ou ailleurs).
+2. Premier lancement : **clic droit sur `ArenaTPS.app` → Ouvrir → Ouvrir**.
+   Si macOS ne propose pas « Ouvrir » : Réglages Système → Confidentialité et
+   sécurité → en bas, **Ouvrir quand même**.
+   En terminal, ceci fait sauter le blocage d'un coup :
+
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/ArenaTPS.app
+   ```
+
+3. Les lancements suivants se font d'un double-clic normal.
+
+Le Mac n'a aucun port à ouvrir. Il ne fait jamais tourner le serveur, il joue
+seulement.
 
 ### Ensuite, pour tout le monde
 
