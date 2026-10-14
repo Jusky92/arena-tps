@@ -138,6 +138,7 @@ func _make_card(data: ClassData, index: int) -> Control:
 	button.add_theme_stylebox_override("pressed", _button_style(data.color.lightened(0.2)))
 	button.add_theme_stylebox_override("focus", _button_style(data.color))
 	button.pressed.connect(_choose.bind(data))
+	UiTheme.add_hover_feedback(button)
 	box.add_child(button)
 	return card
 
@@ -157,44 +158,32 @@ func _stat_bar(title: String, ratio: float, value_text: String, color: Color) ->
 	bar.custom_minimum_size = Vector2(0, 7)
 	bar.max_value = 1.0
 	bar.value = clampf(ratio, 0.05, 1.0)
-	bar.add_theme_stylebox_override("background", _flat(Color(1, 1, 1, 0.08), 4))
-	bar.add_theme_stylebox_override("fill", _flat(color, 4))
+	bar.add_theme_stylebox_override("background", _flat(Color(1, 1, 1, 0.08), 2))
+	bar.add_theme_stylebox_override("fill", _flat(color, 2))
 	row.add_child(bar)
 	return row
 
 
 func _label(text: String, size: int, color: Color) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.add_theme_font_size_override("font_size", size)
-	label.add_theme_color_override("font_color", color)
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return label
+	return UiTheme.label(text, size, color)
 
 
+## Carte biseautée comme le reste de l'interface ; bordure et halo à la couleur de la classe au survol.
 func _card_style(color: Color, hovered: bool) -> StyleBoxFlat:
-	var style := _flat(BG_CARD, 14)
-	style.set_border_width_all(3 if hovered else 1)
-	style.border_color = color if hovered else Color(1, 1, 1, 0.08)
-	style.content_margin_left = 22
-	style.content_margin_right = 22
-	style.content_margin_top = 14
-	style.content_margin_bottom = 14
+	var style := UiTheme.box(BG_CARD, color if hovered else Color(1, 1, 1, 0.08), 2 if hovered else 1, 8, 22, 14)
 	if hovered:
+		style.border_width_left = 4
 		style.shadow_color = Color(color, 0.35)
 		style.shadow_size = 18
 	return style
 
 
 func _button_style(color: Color) -> StyleBoxFlat:
-	return _flat(color, 8)
+	return UiTheme.box(color, Color(1, 1, 1, 0.12), 1, 5, 16, 8)
 
 
 func _flat(color: Color, radius: int) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = color
-	style.set_corner_radius_all(radius)
-	return style
+	return UiTheme.box(color, Color(0, 0, 0, 0), 0, radius, 0, 0)
 
 
 func _animate_scale(node: Control, target: float) -> void:

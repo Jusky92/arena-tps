@@ -1,39 +1,67 @@
 extends CanvasLayer
 ## Interface en jeu : vie, capacité, munitions, réticule, effets de dégâts,
-## protection d'apparition, écran de mort. Tout est construit ici en code ;
-## on l'attache au joueur avec bind() (rappelé si le joueur change de classe).
+## protection d'apparition, écran de mort. La mise en page est dans scenes/ui/hud.tscn
+## (modifiable dans l'éditeur, styles dans ui/theme/neon_theme.tres) ; ce script
+## ne fait que la mettre à jour. On l'attache au joueur avec bind() (rappelé si le
+## joueur change de classe).
 
-const FONT_BIG := 40
-const PANEL_BG := Color(0.05, 0.06, 0.09, 0.6)
-const PROTECT_COLOR := Color(0.35, 0.95, 1.0)
+const HEALTH_HIGH := Color(0.32, 0.95, 0.55)
+const HEALTH_MID := Color(1.0, 0.84, 0.25)
+const HEALTH_LOW := Color(1.0, 0.33, 0.36)
+const LOW_HEALTH_RATIO := 0.35
+const HP_PER_TICK := 25            # un repère sur la barre de vie tous les 25 PV
+const KEY_HELP_TIME := 10.0        # l'aide des touches s'efface après ce délai
+
+@onready var _vignette: ColorRect = %Vignette
+@onready var _crosshair: Crosshair = %Crosshair
+@onready var _protect_box: Control = %Protect
+@onready var _protect_label: Label = %ProtectLabel
+@onready var _protect_bar: ProgressBar = %ProtectBar
+@onready var _next_class_label: Label = %NextClass
+@onready var _vital_panel: PanelContainer = %VitalPanel
+@onready var _class_label: Label = %ClassName
+@onready var _health_value: Label = %HealthValue
+@onready var _health_max: Label = %HealthMax
+@onready var _health_bar: ProgressBar = %HealthBar
+@onready var _ghost_bar: ProgressBar = %GhostBar
+@onready var _health_ticks: Control = %HealthTicks
+@onready var _ability_icon: TextureRect = %AbilityIcon
+@onready var _ability_label: Label = %AbilityLabel
+@onready var _ability_bar: ProgressBar = %AbilityBar
+@onready var _weapon_icon: TextureRect = %WeaponIcon
+@onready var _weapon_label: Label = %WeaponName
+@onready var _ammo_label: Label = %Ammo
+@onready var _ammo_max: Label = %AmmoMax
+@onready var _reload_bar: ProgressBar = %ReloadBar
+@onready var _key_help: Label = %KeyHelp
+@onready var _death_overlay: Control = %DeathOverlay
+@onready var _death_title: Label = %DeathTitle
+@onready var _killer_label: Label = %Killer
+@onready var _countdown: Label = %Countdown
 
 var _player: Node
-
-var _health_bar: ProgressBar
 var _health_fill: StyleBoxFlat
-var _health_label: Label
-var _class_label: Label
-var _ability_bar: ProgressBar
 var _ability_fill: StyleBoxFlat
-var _ability_label: Label
-var _weapon_label: Label
-var _ammo_label: Label
-var _reload_bar: ProgressBar
-var _crosshair: Label
-var _vignette: ColorRect
-var _death_panel: Control
-var _death_label: Label
-var _hint: Label
-var _next_class_label: Label
-var _protect_box: Control
-var _protect_label: Label
-var _protect_bar: ProgressBar
-var _crosshair_tween: Tween
+var _vital_style: StyleBoxFlat
+var _max_health := 100
+var _health_tween: Tween
 var _vignette_tween: Tween
+var _ammo_tween: Tween
+var _was_low_ammo := false
+var _key_help_started := false
 
 
 func _ready() -> void:
-	_build()
+	# Copies des styles du thème qu'on recolore selon la classe / la vie.
+	_health_fill = _health_bar.get_theme_stylebox("fill").duplicate()
+	_health_bar.add_theme_stylebox_override("fill", _health_fill)
+	_ability_fill = _ability_bar.get_theme_stylebox("fill").duplicate()
+	_ability_bar.add_theme_stylebox_override("fill", _ability_fill)
+	_vital_style = _vital_panel.get_theme_stylebox("panel").duplicate()
+	_vital_panel.add_theme_stylebox_override("panel", _vital_style)
+	_health_ticks.draw.connect(_draw_health_ticks)
+	_ammo_label.resized.connect(func() -> void: _ammo_label.pivot_offset = _ammo_label.size / 2.0)
+	_death_title.resized.connect(func() -> void: _death_title.pivot_offset = _death_title.size / 2.0)
 
 
 ## Relie le HUD à un joueur (appelé par la scène de jeu).
@@ -43,19 +71,26 @@ func bind(player: Node) -> void:
 				["ammo_changed", _on_ammo_changed], ["hit_confirmed", _on_hit_confirmed]]:
 			if _player.is_connected(pair[0], pair[1]):
 				_player.disconnect(pair[0], pair[1])
+		if is_instance_valid(_player.weapon) and _player.weapon.fired.is_connected(_on_fired):
+			_player.weapon.fired.disconnect(_on_fired)
 	_player = player
 	var data: ClassData = player.class_data
 	_class_label.text = data.display_name.to_upper()
-	_class_label.add_theme_color_override("font_color", data.color.lightened(0.25))
+	_class_label.add_theme_color_override("font_color", data.color.lightened(0.3))
+	_vital_style.border_color = Color(data.color, 0.6)
 	_ability_fill.bg_color = data.color
+	_ability_icon.texture = UiIcons.ability(data)
+	_weapon_icon.texture = UiIcons.weapon(data.weapon)
 	_weapon_label.text = data.weapon.display_name
 	player.health_changed.connect(_on_health_changed)
 	player.damaged.connect(_on_damaged)
 	player.ammo_changed.connect(_on_ammo_changed)
 	player.hit_confirmed.connect(_on_hit_confirmed)
+	player.weapon.fired.connect(_on_fired)
 	# Affiche tout de suite l'état actuel (les signaux du joueur ont pu partir avant le branchement).
-	_on_health_changed(player.health, data.max_health)
+	_on_health_changed(player.health, data.max_health, false)
 	_on_ammo_changed(player.weapon.ammo, data.weapon.mag_size, player.weapon.is_reloading())
+	_start_key_help_fade()
 
 
 func _process(_delta: float) -> void:
@@ -66,20 +101,25 @@ func _process(_delta: float) -> void:
 	var ratio: float = _player.ability_ready_ratio()
 	_ability_bar.value = ratio
 	if _player.ability_active():
-		_ability_label.text = "%s  ACTIVE" % data.ability_name
+		_ability_label.text = "%s  ·  ACTIVE" % data.ability_name.to_upper()
+		_ability_icon.modulate = Color.WHITE
 	elif ratio >= 1.0:
-		_ability_label.text = "[E]  %s  PRÊT" % data.ability_name
+		_ability_label.text = "[E]  %s  ·  PRÊT" % data.ability_name.to_upper()
+		_ability_icon.modulate = data.color.lightened(0.3)
 	else:
-		_ability_label.text = "[E]  %s  %.1f s" % [data.ability_name, (1.0 - ratio) * data.ability_cooldown]
-	_ability_fill.bg_color = data.color if ratio >= 1.0 else data.color.darkened(0.5)
+		_ability_label.text = "[E]  %s  ·  %.1f s" % [data.ability_name.to_upper(), (1.0 - ratio) * data.ability_cooldown]
+		_ability_icon.modulate = Color(1, 1, 1, 0.35)
+	_ability_fill.bg_color = data.color if ratio >= 1.0 else data.color.darkened(0.45)
 
 	# Rechargement.
 	var weapon: Node = _player.weapon
 	_reload_bar.visible = weapon.is_reloading()
 	_reload_bar.value = weapon.reload_progress()
 
-	# Réticule masqué en courant.
+	# Réticule : masqué en courant, écart = dispersion réelle de l'arme à l'écran.
 	_crosshair.visible = _player.alive and not _player.is_sprinting()
+	if _crosshair.visible:
+		_crosshair.set_spread(_spread_pixels(data))
 
 	# Protection d'apparition.
 	var protect: float = _player.spawn_protection
@@ -89,57 +129,110 @@ func _process(_delta: float) -> void:
 		_protect_bar.value = protect / _player.SPAWN_PROTECTION_TIME
 
 
+## Dispersion de l'arme (degrés) convertie en pixels à l'écran, plus un écart
+## quand on se déplace ou qu'on est en l'air.
+func _spread_pixels(data: ClassData) -> float:
+	var w := data.weapon
+	var deg: float = w.aim_spread_deg if _player.is_aiming() else w.spread_deg
+	if _player.crouching:
+		deg *= _player.CROUCH_SPREAD_FACTOR
+	var camera: Camera3D = _player.camera
+	var half_height := get_viewport().get_visible_rect().size.y / 2.0
+	var px := tan(deg_to_rad(deg)) / tan(deg_to_rad(camera.fov / 2.0)) * half_height
+	var speed := Vector2(_player.velocity.x, _player.velocity.z).length() / maxf(data.sprint_speed, 0.1)
+	var airborne := 0.0 if _player.is_on_floor() else 8.0
+	return 4.0 + px + speed * 10.0 + airborne
+
+
 # ---------------------------------------------------------------- Événements
 
-func _on_health_changed(health: int, max_health: int) -> void:
+func _on_health_changed(health: int, max_health: int, animate := true) -> void:
+	var lost := health < _health_bar.value and animate
+	if max_health != _max_health:
+		_max_health = max_health
+		_health_ticks.queue_redraw()
 	_health_bar.max_value = max_health
-	var tween := create_tween()
-	tween.tween_property(_health_bar, "value", float(health), 0.15)
-	_health_label.text = "%d / %d" % [health, max_health]
+	_ghost_bar.max_value = max_health
+	_health_value.text = str(health)
+	_health_max.text = "/ %d" % max_health
+	if _health_tween:
+		_health_tween.kill()
+	if animate:
+		# La vraie barre descend tout de suite ; la barre blanche "fantôme" rattrape ensuite.
+		_health_tween = create_tween()
+		_health_tween.tween_property(_health_bar, "value", float(health), 0.12)
+		if lost:
+			_health_tween.tween_interval(0.35)
+		_health_tween.tween_property(_ghost_bar, "value", float(health), 0.35 if lost else 0.12)
+	else:
+		_health_bar.value = health
+		_ghost_bar.value = health
+
 	var ratio := float(health) / max_health
-	_health_fill.bg_color = Color(0.9, 0.25, 0.25) if ratio < 0.35 else Color(0.35, 0.85, 0.45)
+	var color := HEALTH_HIGH if ratio > 0.6 else (HEALTH_MID if ratio > LOW_HEALTH_RATIO else HEALTH_LOW)
+	_health_fill.bg_color = color
+	_health_fill.shadow_color = Color(color, 0.3)
+	_health_value.add_theme_color_override("font_color", Color.WHITE if ratio > LOW_HEALTH_RATIO else HEALTH_LOW)
+	var low := clampf((LOW_HEALTH_RATIO - ratio) / LOW_HEALTH_RATIO, 0.0, 1.0) if health > 0 else 0.0
+	(_vignette.material as ShaderMaterial).set_shader_parameter("low_health", low)
 
 
 func _on_damaged(_amount: int) -> void:
+	var mat := _vignette.material as ShaderMaterial
 	if _vignette_tween:
 		_vignette_tween.kill()
-	_vignette.color.a = 0.35
+	mat.set_shader_parameter("intensity", 0.7)
 	_vignette_tween = create_tween()
-	_vignette_tween.tween_property(_vignette, "color:a", 0.0, 0.4)
+	_vignette_tween.tween_method(func(v: float) -> void: mat.set_shader_parameter("intensity", v), 0.7, 0.0, 0.45)
 
 
 func _on_ammo_changed(ammo: int, mag_size: int, reloading: bool) -> void:
-	_ammo_label.text = "RECHARGE…" if reloading else "%d / %d" % [ammo, mag_size]
+	_ammo_label.text = str(ammo)
+	_ammo_max.text = "/ %d" % mag_size
+	_ammo_label.modulate.a = 0.4 if reloading else 1.0
 	var low: bool = not reloading and ammo <= maxi(1, mag_size / 4)
-	_ammo_label.add_theme_color_override("font_color", Color(1, 0.4, 0.3) if low else Color.WHITE)
+	_ammo_label.add_theme_color_override("font_color", HEALTH_LOW if low else Color.WHITE)
+	if low and not _was_low_ammo:
+		if _ammo_tween:
+			_ammo_tween.kill()
+		_ammo_label.scale = Vector2.ONE * 1.25
+		_ammo_tween = create_tween()
+		_ammo_tween.tween_property(_ammo_label, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK)
+	_was_low_ammo = low
 
 
-## Réticule rouge quand on touche, X quand on élimine (avec un son de confirmation).
+func _on_fired(_recoil_deg: float) -> void:
+	_crosshair.kick()
+
+
+## Marque de touche sur le réticule (rouge quand on élimine), avec un son de confirmation.
 func _on_hit_confirmed(killed: bool) -> void:
 	Sfx.play("kill" if killed else "hit", -2.0 if killed else -6.0)
-	if _crosshair_tween:
-		_crosshair_tween.kill()
-	_crosshair.text = "✕" if killed else "+"
-	_crosshair.modulate = Color(1, 0.25, 0.25)
-	_crosshair.scale = Vector2.ONE * (1.6 if killed else 1.25)
-	_crosshair_tween = create_tween().set_parallel()
-	_crosshair_tween.tween_property(_crosshair, "scale", Vector2.ONE, 0.2)
-	_crosshair_tween.tween_property(_crosshair, "modulate", Color.WHITE, 0.3 if killed else 0.12)
-	_crosshair_tween.chain().tween_callback(func() -> void: _crosshair.text = "+")
+	_crosshair.hit(killed)
 
 
 func show_death(killer_name: String) -> void:
-	_death_panel.visible = true
-	_death_label.text = "ÉLIMINÉ" if killer_name.is_empty() else "ÉLIMINÉ PAR %s" % killer_name.to_upper()
+	_death_overlay.visible = true
+	_death_title.text = "ÉLIMINÉ"
+	_killer_label.visible = not killer_name.is_empty()
+	_killer_label.text = "PAR %s" % killer_name.to_upper()
+	# Entrée en "glitch" : le titre clignote et se resserre.
+	_death_overlay.modulate.a = 0.0
+	_death_title.scale = Vector2.ONE * 1.35
+	var tween := create_tween()
+	tween.tween_property(_death_overlay, "modulate:a", 1.0, 0.15)
+	tween.parallel().tween_property(_death_title, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	for a in [0.3, 1.0, 0.5, 1.0]:
+		tween.tween_property(_death_title, "modulate:a", a, 0.04)
 
 
 func set_respawn_countdown(seconds: float) -> void:
-	_hint.text = "Réapparition dans %d…" % ceili(seconds)
+	_countdown.text = "Réapparition dans %d…" % ceili(seconds)
 
 
 func hide_death() -> void:
-	_death_panel.visible = false
-	_hint.text = ""
+	_death_overlay.visible = false
+	_countdown.text = ""
 
 
 ## Classe choisie dans le menu pause, appliquée à la prochaine apparition ("" = aucune).
@@ -149,180 +242,22 @@ func set_next_class(display_name: String, color := Color.WHITE) -> void:
 	_next_class_label.add_theme_color_override("font_color", color.lightened(0.3))
 
 
-# ---------------------------------------------------------------- Construction
+# ---------------------------------------------------------------- Dessin
 
-func _build() -> void:
-	# Flash rouge sur tout l'écran quand on prend des dégâts.
-	_vignette = ColorRect.new()
-	_vignette.color = Color(0.8, 0.0, 0.0, 0.0)
-	_vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_vignette)
-
-	# Aide des touches (bas, centre).
-	var help := _label("R : recharger · E : capacité · Ctrl/C : accroupi · Tab : scores · Échap : pause", 14, Color(1, 1, 1, 0.55))
-	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_place(help, Control.PRESET_CENTER_BOTTOM, Rect2(-250, -8, 500, 22))
-	add_child(help)
-
-	# Réticule (centre).
-	_crosshair = _label("+", 30, Color.WHITE)
-	_crosshair.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_crosshair.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_place(_crosshair, Control.PRESET_CENTER, Rect2(-20, -20, 40, 40))
-	_crosshair.pivot_offset = Vector2(20, 20)
-	_crosshair.add_theme_constant_override("outline_size", 6)
-	_crosshair.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
-	add_child(_crosshair)
-
-	# Protection d'apparition (sous le réticule).
-	var protect := VBoxContainer.new()
-	protect.add_theme_constant_override("separation", 4)
-	protect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_place(protect, Control.PRESET_CENTER, Rect2(-110, 48, 220, 40))
-	add_child(protect)
-	_protect_label = _label("PROTÉGÉ", 18, PROTECT_COLOR)
-	_protect_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_protect_label.add_theme_font_override("font", UiTheme.FONT_BOLD)
-	_protect_label.add_theme_constant_override("outline_size", 6)
-	_protect_label.add_theme_color_override("font_outline_color", Color(0, 0.05, 0.1, 0.8))
-	protect.add_child(_protect_label)
-	_protect_bar = _bar(_flat(PROTECT_COLOR, 2), 4)
-	_protect_bar.max_value = 1.0
-	protect.add_child(_protect_bar)
-	var protect_hint := _label("Tirer annule la protection", 13, Color(1, 1, 1, 0.65))
-	protect_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	protect_hint.add_theme_constant_override("outline_size", 4)
-	protect_hint.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
-	protect.add_child(protect_hint)
-	_protect_box = protect
-	_protect_box.visible = false
-
-	# Bloc vie + capacité (bas gauche), avec au-dessus la classe de la prochaine apparition.
-	var left_column := VBoxContainer.new()
-	left_column.add_theme_constant_override("separation", 6)
-	left_column.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_place(left_column, Control.PRESET_BOTTOM_LEFT, Rect2(24, -24, 360, 0))
-	add_child(left_column)
-
-	_next_class_label = _label("", 15, Color.WHITE)
-	_next_class_label.add_theme_font_override("font", UiTheme.FONT_BOLD)
-	_next_class_label.add_theme_constant_override("outline_size", 6)
-	_next_class_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
-	_next_class_label.visible = false
-	left_column.add_child(_next_class_label)
-
-	var left := _panel()
-	left_column.add_child(left)
-	var lbox := VBoxContainer.new()
-	lbox.add_theme_constant_override("separation", 6)
-	left.add_child(lbox)
-
-	var top := HBoxContainer.new()
-	_class_label = _label("CLASSE", 18, Color.WHITE)
-	_class_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(_class_label)
-	_health_label = _label("100 / 100", 18, Color.WHITE)
-	top.add_child(_health_label)
-	lbox.add_child(top)
-
-	_health_fill = _flat(Color(0.35, 0.85, 0.45), 4)
-	_health_bar = _bar(_health_fill, 18)
-	lbox.add_child(_health_bar)
-
-	_ability_label = _label("[E] Capacité", 14, Color(1, 1, 1, 0.85))
-	lbox.add_child(_ability_label)
-	_ability_fill = _flat(Color.WHITE, 3)
-	_ability_bar = _bar(_ability_fill, 8)
-	_ability_bar.max_value = 1.0
-	lbox.add_child(_ability_bar)
-
-	# Bloc arme (bas droite).
-	var right := _panel()
-	_place(right, Control.PRESET_BOTTOM_RIGHT, Rect2(-284, -24, 260, 0))
-	add_child(right)
-	var rbox := VBoxContainer.new()
-	rbox.add_theme_constant_override("separation", 2)
-	right.add_child(rbox)
-	_weapon_label = _label("Arme", 16, Color(1, 1, 1, 0.7))
-	_weapon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	rbox.add_child(_weapon_label)
-	_ammo_label = _label("0 / 0", FONT_BIG, Color.WHITE)
-	_ammo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	rbox.add_child(_ammo_label)
-	_reload_bar = _bar(_flat(Color(1, 0.85, 0.4), 3), 6)
-	_reload_bar.max_value = 1.0
-	_reload_bar.visible = false
-	rbox.add_child(_reload_bar)
-
-	# Écran de mort.
-	_death_panel = ColorRect.new()
-	(_death_panel as ColorRect).color = Color(0.25, 0.0, 0.0, 0.45)
-	_death_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_death_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_death_panel.visible = false
-	add_child(_death_panel)
-	var center := VBoxContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	center.alignment = BoxContainer.ALIGNMENT_CENTER
-	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_death_panel.add_child(center)
-	_death_label = _label("ÉLIMINÉ", 56, Color(1, 0.35, 0.3))
-	_death_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	center.add_child(_death_label)
-	_hint = _label("", 22, Color.WHITE)
-	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	center.add_child(_hint)
-	var tip := _label("Échap : changer de classe pour la prochaine apparition", 15, Color(1, 1, 1, 0.6))
-	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	center.add_child(tip)
+## Repères verticaux sur la barre de vie (un tous les HP_PER_TICK points de vie).
+func _draw_health_ticks() -> void:
+	var count := ceili(float(_max_health) / HP_PER_TICK)
+	var w := _health_ticks.size.x
+	var h := _health_ticks.size.y
+	for i in range(1, count):
+		var x := roundf(w * i * HP_PER_TICK / float(_max_health))
+		_health_ticks.draw_rect(Rect2(x - 1.0, 0.0, 2.0, h), Color(0.02, 0.03, 0.06, 0.85))
 
 
-## Ancre un élément à un coin de l'écran. `rect` = décalage depuis l'ancre + taille.
-## Les éléments ancrés en bas grandissent vers le haut.
-func _place(control: Control, preset: Control.LayoutPreset, rect: Rect2) -> void:
-	control.set_anchors_preset(preset)
-	control.offset_left = rect.position.x
-	control.offset_right = rect.position.x + rect.size.x
-	control.offset_top = rect.position.y - rect.size.y if control.anchor_top == 1.0 else rect.position.y
-	control.offset_bottom = rect.position.y if control.anchor_top == 1.0 else rect.position.y + rect.size.y
-	if control.anchor_top == 1.0:
-		control.grow_vertical = Control.GROW_DIRECTION_BEGIN
-
-
-func _panel() -> PanelContainer:
-	var panel := PanelContainer.new()
-	var style := _flat(PANEL_BG, 10)
-	style.content_margin_left = 16
-	style.content_margin_right = 16
-	style.content_margin_top = 12
-	style.content_margin_bottom = 12
-	panel.add_theme_stylebox_override("panel", style)
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return panel
-
-
-func _bar(fill: StyleBoxFlat, height: int) -> ProgressBar:
-	var bar := ProgressBar.new()
-	bar.show_percentage = false
-	bar.custom_minimum_size = Vector2(0, height)
-	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bar.add_theme_stylebox_override("background", _flat(Color(1, 1, 1, 0.1), 4))
-	bar.add_theme_stylebox_override("fill", fill)
-	return bar
-
-
-func _label(text: String, size: int, color: Color) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.add_theme_font_size_override("font_size", size)
-	label.add_theme_color_override("font_color", color)
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return label
-
-
-func _flat(color: Color, radius: int) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = color
-	style.set_corner_radius_all(radius)
-	return style
+func _start_key_help_fade() -> void:
+	if _key_help_started:
+		return
+	_key_help_started = true
+	var tween := create_tween()
+	tween.tween_interval(KEY_HELP_TIME)
+	tween.tween_property(_key_help, "modulate:a", 0.0, 1.0)

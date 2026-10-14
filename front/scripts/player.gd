@@ -17,7 +17,7 @@ extends CharacterBody3D
 ##   Souris : viser          Clic gauche : tirer     Clic droit : viser (zoom)
 ##   ZQSD : se déplacer      Maj : courir            Espace : sauter
 ##   Ctrl ou C : s'accroupir R : recharger           E : capacité
-##   F9 : s'infliger 25 dégâts (test)
+##   F9 : s'infliger 25 dégâts (test, seulement depuis l'éditeur ou un export debug)
 
 signal health_changed(health: int, max_health: int)
 signal damaged(amount: int)
@@ -151,7 +151,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		var sensitivity: float = Settings.mouse_sensitivity() * zoom_factor
 		var invert := -1.0 if Settings.invert_y else 1.0
 		_look_accum += Vector2(-event.relative.x, -event.relative.y * invert) * sensitivity
-	elif event.is_action_pressed("debug_hurt"):
+	elif OS.is_debug_build() and event.is_action_pressed("debug_hurt"):
 		take_damage(25, null)
 
 

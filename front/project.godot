@@ -31,6 +31,7 @@ window/stretch/mode="canvas_items"
 
 [gui]
 
+theme/custom="res://ui/theme/neon_theme.tres"
 theme/custom_font="res://assets/fonts/Rajdhani-Medium.ttf"
 
 [rendering]

@@ -171,7 +171,6 @@ func _menu_button(text: String, icon: String, primary := false, accent := UiThem
 		b.add_theme_color_override("font_hover_color", accent.lightened(0.2))
 		if accent != UiTheme.CYAN:
 			b.add_theme_color_override("font_color", accent.lightened(0.15))
-	b.mouse_entered.connect(func() -> void: Sfx.ui("ui_click", -14.0))
 	return b
 
 

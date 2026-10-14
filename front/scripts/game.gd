@@ -26,7 +26,7 @@ const LOBBY := "res://scenes/lobby.tscn"
 const MapScene := preload("res://scenes/maps/arena.tscn")
 const PlayerScene := preload("res://scenes/player.tscn")
 const TargetScene := preload("res://scenes/target_dummy.tscn")
-const MatchUIScript := preload("res://scripts/ui/match_ui.gd")
+const MatchUIScene := preload("res://scenes/ui/match_ui.tscn")
 const PauseMenuScript := preload("res://scripts/ui/pause_menu.gd")
 
 const BOT_NAMES := ["NeoByte", "Gl1tch", "V0LT", "Cipher", "Kairo", "Nova", "Raven", "Hexa", "ZeroDay", "Proxy"]
@@ -57,7 +57,7 @@ func _ready() -> void:
 	_mode = GameState.mode
 	map = MapScene.instantiate()
 	add_child(map)
-	_ui = MatchUIScript.new()
+	_ui = MatchUIScene.instantiate()
 	add_child(_ui)
 	_ui.play_again.connect(_play_again)
 	_ui.back_to_menu.connect(_go_to_menu)
