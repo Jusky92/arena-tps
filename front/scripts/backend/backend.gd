@@ -136,9 +136,10 @@ func resend_code(email: String) -> Dictionary:
 	return await _impl.resend_code(email.strip_edges())
 
 
-## `error` vaut "email_not_verified" si le compte attend encore son code.
-func login(email: String, password: String) -> Dictionary:
-	return await _impl.login(email.strip_edges(), password)
+## Connexion avec l'e-mail OU le pseudo du compte. `error` vaut "email_not_verified"
+## si le compte attend encore son code.
+func login(identifier: String, password: String) -> Dictionary:
+	return await _impl.login(identifier.strip_edges(), password)
 
 
 func request_password_reset(email: String) -> Dictionary:

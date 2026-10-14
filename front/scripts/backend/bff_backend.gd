@@ -85,6 +85,8 @@ func register(pseudo: String, email: String, password: String) -> Dictionary:
 
 
 func verify_email(email: String, code: String) -> Dictionary:
+	if not email.contains("@"):
+		return _err("Saisis l'e-mail de ton compte.")
 	if code.length() != 6 or not code.is_valid_int():
 		return _err("Le code doit contenir 6 chiffres.")
 	var r := await _public(POST, "/auth/verify-email", {"email": email, "code": code})
@@ -94,16 +96,19 @@ func verify_email(email: String, code: String) -> Dictionary:
 
 
 func resend_code(email: String) -> Dictionary:
+	if not email.contains("@"):
+		return _err("Saisis l'e-mail de ton compte.")
 	var r := await _public(POST, "/auth/verify-email/resend", {"email": email})
 	if r.ok:
 		r.message = "Si ce compte attend sa vérification, un nouveau code a été envoyé."
 	return r
 
 
-func login(email: String, password: String) -> Dictionary:
-	if not email.contains("@"):
-		return _err("Connecte-toi avec ton adresse e-mail.")
-	var r := await _public(POST, "/auth/login", {"email": email, "password": password})
+## `identifier` : l'e-mail ou le pseudo du compte.
+func login(identifier: String, password: String) -> Dictionary:
+	if identifier.is_empty():
+		return _err("Saisis ton e-mail ou ton pseudo.")
+	var r := await _public(POST, "/auth/login", {"identifier": identifier, "password": password})
 	if not r.ok:
 		return r
 	return await _open_session(r)

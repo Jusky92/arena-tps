@@ -190,8 +190,8 @@ func _show_login() -> void:
 	_card_content.add_child(UiTheme.spacer(Vector2(0, 4)))
 	_card_content.add_child(UiTheme.title("CONTENT DE TE REVOIR", 20))
 	_card_content.add_child(UiTheme.label("Connecte-toi pour rejoindre l'arène.", 17, UiTheme.MUTED))
-	_card_content.add_child(_field_label("E-mail"))
-	var ident := _field("julien@exemple.fr")
+	_card_content.add_child(_field_label("E-mail ou pseudo"))
+	var ident := _field("julien@exemple.fr ou Julien")
 	_card_content.add_child(ident)
 	_card_content.add_child(_field_label("Mot de passe"))
 	var password := _field("••••••••", true)
@@ -208,9 +208,11 @@ func _show_login() -> void:
 		_run(go, "CONNEXION…", func() -> Dictionary: return await Backend.login(ident.text, password.text),
 			func(_r: Dictionary) -> void: _enter_game(),
 			func(r: Dictionary) -> bool:
-				# Compte pas encore vérifié : on passe à la saisie du code.
+				# Compte pas encore vérifié : on passe à la saisie du code. Connecté avec
+				# son pseudo, le joueur devra aussi donner son e-mail (le code y est envoyé).
 				if r.get("error") == "email_not_verified":
-					_show_verify(ident.text.strip_edges())
+					var typed := ident.text.strip_edges()
+					_show_verify(typed if typed.contains("@") else "")
 					_show_error(r.message, UiTheme.YELLOW)
 					return true
 				return false)
@@ -247,13 +249,22 @@ func _show_register() -> void:
 	pseudo.grab_focus.call_deferred()
 
 
+## `email` vide : le joueur s'est connecté avec son pseudo, on lui demande l'e-mail du compte.
 func _show_verify(email: String) -> void:
 	_email_for_code = email
 	_clear_card()
 	_card_content.add_child(UiTheme.title("VÉRIFIE TON E-MAIL", 20))
-	var info := UiTheme.label("Saisis le code à 6 chiffres envoyé à\n%s (valable 15 minutes)." % email, 17, UiTheme.MUTED)
+	var text := "Saisis le code à 6 chiffres envoyé à\n%s (valable 15 minutes)." % email if not email.is_empty() \
+		else "Saisis l'e-mail de ton compte et le code à 6 chiffres qui y a été envoyé (valable 15 minutes)."
+	var info := UiTheme.label(text, 17, UiTheme.MUTED)
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_card_content.add_child(info)
+	var email_field: LineEdit = null
+	if email.is_empty():
+		_card_content.add_child(_field_label("E-mail du compte"))
+		email_field = _field("toi@exemple.fr")
+		email_field.text_changed.connect(func(t: String) -> void: _email_for_code = t.strip_edges())
+		_card_content.add_child(email_field)
 	var digits := HBoxContainer.new()
 	digits.add_theme_constant_override("separation", 8)
 	digits.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -291,7 +302,7 @@ func _show_verify(email: String) -> void:
 		_run(go, "VÉRIFICATION…", func() -> Dictionary: return await Backend.verify_email(_email_for_code, code),
 			func(_r: Dictionary) -> void: _enter_game())
 	go.pressed.connect(func() -> void: _submit.call())
-	_code_fields[0].grab_focus.call_deferred()
+	(email_field if email_field else _code_fields[0]).grab_focus.call_deferred()
 
 
 func _on_digit_changed(text: String, index: int) -> void:

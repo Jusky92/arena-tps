@@ -28,7 +28,7 @@ const ERROR_MESSAGES := {
 	"rate_limited": "Trop de tentatives. Patiente un peu avant de réessayer.",
 	"validation": "Certaines informations sont invalides.",
 	# Comptes
-	"invalid_credentials": "E-mail ou mot de passe incorrect.",
+	"invalid_credentials": "Identifiant ou mot de passe incorrect.",
 	"email_not_verified": "Vérifie d'abord ton adresse e-mail avec le code reçu.",
 	"email_taken": "Cette adresse e-mail est déjà utilisée.",
 	"username_taken": "Ce pseudo est déjà pris.",

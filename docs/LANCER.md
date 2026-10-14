@@ -314,7 +314,7 @@ $env:GAME_SERVER_SECRET = "<la valeur du .env>"
 2. **INSCRIPTION** : pseudo (3 à 20 caractères : lettres, chiffres, `_`), e-mail, mot de
    passe (8 caractères au moins). Un code à 6 chiffres est envoyé par e-mail. En local,
    les e-mails arrivent dans **Mailpit** : <http://localhost:8025> sur le PC serveur.
-3. Ensuite, **CONNEXION** avec l'e-mail et le mot de passe.
+3. Ensuite, **CONNEXION** avec l'e-mail **ou** le pseudo, et le mot de passe.
 4. **Amis** (colonne de droite) : chercher un pseudo, **Ajouter** ; l'autre accepte avec ✓
    dans ses demandes reçues. La pastille montre qui est en ligne (vert) ou en partie (jaune).
 5. **Groupe** : le bouton **+** à côté d'un ami en ligne l'invite ; il clique **REJOINDRE**
