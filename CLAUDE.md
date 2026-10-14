@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Built by two people on separate, independent tracks:
 - **`front/`** — the Godot 4.7.2 project. It holds **both the game client and the dedicated game server** (one project, two exports). Julien's responsibility for the client; the server side (`scripts/server/`) is where it meets Elian's backend.
 - **`services/`** — only a placeholder README. The real micro-services are Elian's separate repo `TPSArena_backend`, checked out next to this one at `../../backend/` (spec: `../../project-context.md`).
-- **`tools/`** — Python/shell/GDScript utility scripts that *generate* assets (textures, sounds, fonts) or export the client. They are not part of the runtime game.
+- **`tools/`** — Python/shell/GDScript utility scripts that *generate* assets (textures, sounds, fonts), export the client and the server (`build_client.sh`, `build_server.sh`) or launch the exported server (`lancer_serveur.sh`). They are not part of the runtime game.
 
 There is no build system, package manager, or test runner in this repo — it's a Godot project plus some offline asset-generation scripts.
 
@@ -19,7 +19,7 @@ There is no build system, package manager, or test runner in this repo — it's 
 
 **Run the dedicated server** locally (from `front/`): `godot --headless -- --server --bots 2 --duration 60`, then start clients with `godot` and REJOINDRE `127.0.0.1`. In the editor: Debug → Customize Run Instances, first instance with `--headless -- --server`. With the real backend (stack from `backend/`: `docker compose up -d`), add `--serverlist-url http://localhost:8002 --public-address <IP>` and set `GAME_SERVER_SECRET` (same value as `backend/.env`). Test accounts: register in the game, and read the code in Mailpit (http://localhost:8025).
 
-**Export the client** (Windows/Linux standalone build, for giving to the other player):
+**Export the client** (Windows/Linux/macOS standalone builds, to hand out to players):
 ```bash
 tools/build_client.sh            # Windows build (default)
 tools/build_client.sh linux
@@ -60,7 +60,7 @@ This split exists so the dedicated server can later drive the simulation from co
 - `bff_backend.gd` is the real backend: HTTP to the BFF (`http://<host>:8000`) through `scripts/shared/api_client.gd`, and a WebSocket to Real-time (`ws://<host>:8005/ws`) through `realtime_client.gd` for presence and notifications (`party.invite_sent`, `party.updated`, `party.match_ready`, `friend.*`, `progress.*`). Tokens are kept in memory only. The access token is refreshed 60 s before expiry, or once on a 401, then re-sent to Real-time.
 - `simulated_backend.gd` is "Jouer hors ligne" on the login screen: no network, fake data. Online launch and public servers return an error there; you play LAN by IP.
 
-The mode and the backend host (typed on the login screen) are saved in `user://reseau.cfg`. Functions are `await`ed and return `{ok, error, message, …}`. `error` is the backend's error code (API contract), and `ApiClient.ERROR_MESSAGES` maps it to French. When adding a backend feature, add it to both implementations and the facade.
+The mode and the backend host (typed on the login screen) are saved in `user://reseau.cfg`. Players log in with their email **or** their username (`identifier`); an unverified account that logged in by username is asked for its email on the code screen. Functions are `await`ed and return `{ok, error, message, …}`. `error` is the backend's error code (API contract), and `ApiClient.ERROR_MESSAGES` maps it to French. When adding a backend feature, add it to both implementations and the facade.
 
 Online flow: the party leader calls `Backend.launch_party()`, which returns its ticket. The other members get theirs through `match_ready` (Real-time `party.match_ready`). Everyone calls `Net.join(address, name, port, ticket)`. Public servers: `get_servers()`, then `get_join_ticket()`. Offline matches (bots, training) are never reported: stats only come from the dedicated server's `match.finished`.
 

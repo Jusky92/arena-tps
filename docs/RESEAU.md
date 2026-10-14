@@ -54,7 +54,7 @@ Qui décide de quoi :
 | Points de vie, éliminations, score | **le serveur** | une seule version de la vérité |
 | Chronomètre, réapparitions, fin de match | **le serveur** | tout le monde reste synchronisé |
 | Bots | **le serveur** | il les fait jouer et diffuse leur position |
-| Réglages et lancement de la partie | **le chef** (premier joueur connecté) | en attendant les groupes du back |
+| Réglages et lancement de la partie | **le chef** (premier joueur connecté) en LAN ; le groupe avec le vrai back | voir [LANCER.md](LANCER.md) section 7 |
 
 Chaque jeu envoie la position de son joueur au serveur **20 fois par seconde** en UDP
 non fiable, et le serveur rediffuse celle de tout le monde : si un paquet se perd, le
@@ -126,6 +126,11 @@ Options (toutes facultatives) :
 | `--bots 2` | 2 | bots pour compléter (le chef peut changer) |
 | `--duration 180` | 180 | durée du match en secondes (le chef peut changer) |
 | `--name "Arena TPS"` | Arena TPS | nom du serveur |
+| `--serverlist-url http://…:8002` | (aucun : mode LAN) | branche le serveur sur le vrai back, avec la variable `GAME_SERVER_SECRET` |
+| `--public-address 1.2.3.4` | première adresse locale | adresse que la Server List donne aux joueurs |
+| `--region eu` | eu | région annoncée à la Server List |
+
+Avec le vrai back, le plus simple est `tools/lancer_serveur.sh` (voir [LANCER.md](LANCER.md) section 7.2).
 
 Au démarrage, le serveur affiche les **adresses à donner aux joueurs**, par exemple
 `192.168.1.20:24567`. **Ctrl+C** l'arrête.
@@ -137,8 +142,9 @@ Au démarrage, le serveur affiche les **adresses à donner aux joueurs**, par ex
 Si tous les PC sont sur le même Wi-Fi ou le même câble (salle de cours, appartement) :
 
 1. Le PC serveur lance `ArenaTPS_Server` (§3) et note une des adresses affichées.
-2. Chaque joueur lance `ArenaTPS`, se connecte, saisit l'adresse dans le champ de la
-   page JOUER, puis **REJOINDRE**.
+2. Chaque joueur lance `ArenaTPS`, se connecte (« Jouer hors ligne » suffit), saisit
+   l'adresse dans le cadre **REJOINDRE PAR ADRESSE (LAN)** de la page JOUER, puis
+   **REJOINDRE**.
 3. Le premier arrivé est le **chef** : il règle les bots et la durée, puis
    **LANCER LA PARTIE** démarre le jeu chez tout le monde. S'il part, le joueur
    suivant devient chef.
@@ -159,7 +165,9 @@ fixe en `100.x.y.z`, comme si vous étiez sur le même Wi-Fi.
 2. Chacun se connecte avec le **même compte** (ou l'un invite les autres dans son réseau).
 3. Le serveur affiche son adresse Tailscale en premier (`100.…`) ; sinon, sur le PC
    serveur : icône Tailscale → nom de la machine, ou `tailscale ip -4`.
-4. Les joueurs saisissent cette adresse dans le champ d'adresse.
+4. Les joueurs saisissent cette adresse dans le champ d'adresse. Avec le vrai back, c'est
+   aussi l'**adresse du back** à saisir à la connexion, et le serveur est lancé avec
+   `--public-address` = cette adresse.
 
 **ZeroTier** fonctionne exactement pareil si vous préférez.
 
@@ -183,6 +191,10 @@ Sans logiciel tiers, mais il faut accéder à la box du PC serveur.
 3. Récupérer l'**IP publique** de la box : <https://www.monip.org> ou en tapant
    « mon ip » dans un moteur de recherche.
 4. Les joueurs saisissent cette IP publique dans le champ d'adresse.
+
+Avec le vrai back, rediriger aussi **TCP 8000** (BFF) et **TCP 8005** (temps réel) vers le
+PC qui fait tourner le back, et lancer le serveur avec `--public-address` = l'IP publique.
+Le back n'est qu'en HTTP : mots de passe et jetons y passent en clair.
 
 > Attention : l'IP publique change souvent chez les particuliers. Et si l'opérateur
 > utilise du CGNAT (IP partagée), l'ouverture de port ne fonctionnera pas :
@@ -215,6 +227,9 @@ Remove-NetFirewallRule -DisplayName "Arena TPS (UDP 24567)"
 
 **Linux** : `sudo ufw allow 24567/udp` (Ubuntu) ou
 `sudo firewall-cmd --add-port=24567/udp` (Fedora), s'il y a un pare-feu.
+
+**Avec le vrai back**, le PC qui le fait tourner doit aussi accepter **TCP 8000** (BFF) et
+**TCP 8005** (temps réel), par exemple `sudo ufw allow 8000/tcp && sudo ufw allow 8005/tcp`.
 
 ---
 

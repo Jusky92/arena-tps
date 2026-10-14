@@ -109,8 +109,8 @@ Sinon, sur un PC qui a le code et **Godot 4.7.2** :
 5. **Noter les adresses affichées**, par exemple :
 
    ```
-   === Arena TPS — serveur dédié (version 0.6.0-alpha) ===
-   Les joueurs se connectent avec REJOINDRE et une de ces adresses :
+   === Arena TPS — serveur dédié (version 0.7.0-alpha) ===
+   Mode LAN. Les joueurs se connectent avec REJOINDRE et une de ces adresses :
        192.168.1.20:24567
    ```
 
@@ -312,8 +312,10 @@ $env:GAME_SERVER_SECRET = "<la valeur du .env>"
 1. Sur l'écran de connexion, **Adresse du back** : l'IP du PC serveur (`localhost` si le
    jeu tourne sur ce même PC). Elle est retenue pour les lancements suivants.
 2. **INSCRIPTION** : pseudo (3 à 20 caractères : lettres, chiffres, `_`), e-mail, mot de
-   passe (8 caractères au moins). Un code à 6 chiffres est envoyé par e-mail. En local,
-   les e-mails arrivent dans **Mailpit** : <http://localhost:8025> sur le PC serveur.
+   passe (8 caractères au moins). Un code à 6 chiffres est envoyé par e-mail (regarder
+   aussi dans les spams). Si le back n'a pas de vrai service d'envoi configuré (variables
+   `SMTP_*` de `backend/.env`), les e-mails arrivent dans **Mailpit** :
+   <http://localhost:8025> sur le PC serveur.
 3. Ensuite, **CONNEXION** avec l'e-mail **ou** le pseudo, et le mot de passe.
 4. **Amis** (colonne de droite) : chercher un pseudo, **Ajouter** ; l'autre accepte avec ✓
    dans ses demandes reçues. La pastille montre qui est en ligne (vert) ou en partie (jaune).

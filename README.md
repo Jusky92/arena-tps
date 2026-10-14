@@ -4,16 +4,17 @@ Jeu de tir multijoueur en 3D, en vue à la troisième personne, en mode chacun p
 
 Projet réalisé en binôme par **Julien** (client de jeu) et **Elian** (micro-services et bases de données) — Architecture SI, M2, CFA INSTA.
 
-> Pour comprendre le code (dossiers, fichiers, flux d'une partie) : voir [ARCHITECTURE.md](ARCHITECTURE.md).
+> Pour comprendre le code (architecture, réseau, lien avec le back) : voir [CLAUDE.md](CLAUDE.md) (en anglais).
+> Lancer le serveur et les clients : [docs/LANCER.md](docs/LANCER.md).
 
 ## Organisation du dépôt
 
 ```
 arena-tps/
-├── front/       Client du jeu (Godot 4.7.2) — responsable : Julien
-├── services/    Micro-services et bases de données — responsable : Elian
-├── tools/       Scripts de génération des ressources et d'export du client
-├── docs/        Guides (réseau…)
+├── front/       Projet Godot 4.7.2 : le jeu ET le serveur dédié — responsable : Julien
+├── services/    Simple renvoi : le back est dans un dépôt séparé (TPSArena_backend) — Elian
+├── tools/       Génération des ressources, export et lancement du jeu et du serveur
+├── docs/        Guides : lancer le serveur et les clients, réseau
 └── README.md
 ```
 
@@ -28,22 +29,26 @@ arena-tps/
 | Écran | Contenu |
 |---|---|
 | Connexion / inscription | Connexion, création de compte, vérification de l'e-mail par code à 6 chiffres, mot de passe oublié |
-| Menu principal | Profil (niveau, XP), groupe jusqu'à 8 joueurs, créer / rejoindre un serveur, entraînement, liste d'amis avec statuts |
-| Serveurs publics | Liste des parties en cours (joueurs, ping, mode, map) |
-| Statistiques | Statistiques du joueur, classement mondial ou entre amis |
+| Menu principal | Profil (niveau, XP), groupe jusqu'à 8 joueurs et invitations, lancement en ligne, rejoindre un serveur LAN par adresse, partie solo et entraînement, amis (recherche, demandes, présence) |
+| Serveurs publics | Parties en cours avec des places libres (région, map, joueurs) |
+| Statistiques | Statistiques du joueur, succès, classements (XP, victoires, éliminations : le haut ou autour de soi) |
 | Classes | Choix de la classe avec aperçu 3D animé |
-| Partie | Match à mort de 3 minutes contre des bots, tableau des scores, écran de fin |
+| Partie | Match à mort de 3 minutes contre d'autres joueurs et des bots, tableau des scores, écran de fin |
 
 ### Jouer en ligne
 
 Le jeu se joue à plusieurs **en vrai réseau**, sur un **serveur dédié** : un PC lance
 `ArenaTPS_Server` (sans fenêtre, il ne joue pas), les joueurs le rejoignent avec le jeu.
-Le jeu et le serveur sont exportés depuis le même projet Godot.
+Le jeu et le serveur sont exportés depuis le même projet Godot. Deux façons de jouer :
 
-1. Le PC serveur lance `ArenaTPS_Server`, qui affiche ses adresses.
-2. Les joueurs : saisir l'adresse dans le champ de la page JOUER, puis **REJOINDRE**.
-3. Le premier joueur connecté (le chef) règle le nombre de bots et la durée, puis lance
-   la partie. On peut aussi rejoindre une partie en cours.
+- **Avec le vrai back** (comptes, amis, statistiques) : le serveur est lancé en mode
+  Server List (`tools/lancer_serveur.sh`). Les joueurs se connectent avec leur compte
+  (e-mail ou pseudo), forment un groupe, et le chef clique **LANCER EN LIGNE** : tout le
+  groupe rejoint le serveur automatiquement. Les **SERVEURS PUBLICS** permettent de
+  rejoindre une partie en cours.
+- **En LAN, sans back** : « Jouer hors ligne » sur l'écran de connexion, puis
+  **REJOINDRE PAR ADRESSE** avec l'adresse affichée par le serveur. Le premier joueur
+  connecté (le chef) règle les bots et la durée, puis lance la partie.
 
 Lancer le serveur et les clients pas à pas, sous Linux et Windows :
 **[docs/LANCER.md](docs/LANCER.md)**. Jouer depuis plusieurs maisons, pare-feu et
@@ -80,7 +85,7 @@ sans lancer le back.
 
 ### Menu pause
 
-**Échap** ouvre le menu pause du joueur local. La partie **ne s'arrête pas** : les bots (et plus tard les autres joueurs) continuent, et notre personnage reste dans l'arène, immobile et vulnérable. Le menu propose :
+**Échap** ouvre le menu pause du joueur local. La partie **ne s'arrête pas** : les bots et les autres joueurs continuent, et notre personnage reste dans l'arène, immobile et vulnérable. Le menu propose :
 
 - **Reprendre** ;
 - **Changer de classe** : la classe choisie est utilisée à la prochaine apparition, le score de la partie est conservé ;
@@ -135,7 +140,7 @@ Personnages humains dans le thème « néo-Edo » (`front/scripts/character/`) :
 | `character_rig.gd`, `character_designs.gd` | Robots procéduraux (mannequins d'entraînement) et modèles 3D des armes |
 | `character_preview.gd` | Aperçus 3D animés des menus |
 
-L'animation est pilotée par l'état du personnage (vitesse, au sol, accroupi, angle de visée) : en multijoueur, il suffira de transmettre cet état pour animer les autres joueurs.
+L'animation est pilotée par l'état du personnage (vitesse, au sol, accroupi, angle de visée) : en multijoueur, c'est cet état qui est transmis pour animer les autres joueurs.
 
 ## La map « NEO-EDO »
 
@@ -213,5 +218,6 @@ docs: complète le README
 - [x] Multijoueur en ligne sur serveur dédié (Godot headless), rejoint par adresse, mode LAN
 - [x] Export du client lourd Windows / Linux / macOS (macOS non testé) et du serveur dédié Windows / Linux
 - [x] Connexion au vrai back-end (BFF + temps réel côté jeu, Server List côté serveur), mode hors ligne conservé
+- [x] Micro-services et bases de données (dépôt séparé `TPSArena_backend`), envoi des codes par e-mail (Gmail)
 - [ ] Serveur entièrement autoritaire (les joueurs n'envoient que leurs commandes)
-- [ ] Micro-services et bases de données
+- [ ] HTTPS / WSS, et une adresse fixe pour jouer depuis l'extérieur de l'école
