@@ -6,6 +6,10 @@ extends Node3D
 ##                 Le résultat est envoyé au back (équivalent de match.finished).
 ##   "training"    Entraînement : le joueur seul avec les mannequins, sans limite de temps.
 ##
+## Le match à mort se joue hors ligne (contre des bots) ou EN LIGNE : voir
+## scripts/net/net.gd. En ligne, chaque machine simule son propre joueur et
+## l'hôte arbitre la vie, les éliminations, le chronomètre et les réapparitions.
+##
 ## Échap ouvre le menu pause du joueur local : la partie continue pour les autres
 ## (bots, futurs joueurs en ligne) ; seul le joueur local perd le contrôle de son
 ## personnage. Depuis ce menu, il peut changer de classe pour sa prochaine apparition.
@@ -43,6 +47,8 @@ var _respawns := {}                     # joueur -> temps restant avant réappar
 var _match_time := 0.0
 var _ping := randi_range(7, 14)          # ping simulé du joueur local
 var _pending_class: ClassData = null    # classe choisie pour la prochaine apparition
+var _online := false                    # partie en réseau (voir Net)
+var _net_nodes := {}                    # identifiant réseau -> personnage
 
 
 func _ready() -> void:
@@ -60,40 +66,53 @@ func _ready() -> void:
 	_pause.quit_requested.connect(_go_to_menu)
 	_pause.class_selected.connect(_on_class_selected)
 
-	player = _spawn_player(GameState.selected_class, Backend.username(), true)
-	hud.bind(player)
-
-	if _mode == "training":
-		_spawn_targets()
-		_ui.hide_timer()
+	_online = Net.online and Net.in_match and _mode == "deathmatch"
+	if _online:
+		_start_online_match()
 	else:
-		_bake_navigation()
-		for i in GameState.bot_count:
-			var cls: ClassData = GameState.CLASSES[randi() % GameState.CLASSES.size()]
-			_spawn_player(cls, BOT_NAMES[i % BOT_NAMES.size()], false)
-		_time_left = GameState.match_duration
-		_running = true
+		player = _spawn_player(GameState.selected_class, Backend.username(), true)
+		hud.bind(player)
+		if _mode == "training":
+			_spawn_targets()
+			_ui.hide_timer()
+		else:
+			_bake_navigation()
+			for i in GameState.bot_count:
+				var cls: ClassData = GameState.CLASSES[randi() % GameState.CLASSES.size()]
+				_spawn_player(cls, BOT_NAMES[i % BOT_NAMES.size()], false)
+			_time_left = GameState.match_duration
+			_running = true
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 func _process(delta: float) -> void:
-	# Réapparitions.
+	if _online:
+		_publish_states()
+	# Réapparitions. En ligne, c'est l'hôte qui décide : les clients attendent.
 	for p in _respawns.keys():
 		_respawns[p] -= delta
 		if p == player:
 			hud.set_respawn_countdown(_respawns[p])
 		if _respawns[p] <= 0.0:
 			_respawns.erase(p)
-			if _running or _mode == "training":
+			if _online:
+				if Net.is_host():
+					_net_respawn(p)
+				elif p == player:
+					var wanted: ClassData = _pending_class if _pending_class else p.class_data
+					Net.request_respawn(wanted.resource_path)
+			elif _running or _mode == "training":
 				_respawn(p)
 
 	if _mode == "deathmatch":
 		if _running:
-			_time_left -= delta
+			# Hors ligne, ou chez l'hôte : le temps s'écoule ici.
+			if not _online or Net.is_host():
+				_time_left -= delta
 			_match_time += delta
 			var leader: Dictionary = _scoreboard_rows()[0]
 			_ui.set_time(_time_left, leader.name, leader.kills)
-			if _time_left <= 0.0:
+			if _time_left <= 0.0 and (not _online or Net.is_host()):
 				_end_match()
 		var show_board: bool = _running and not _pause.is_open() and Input.is_action_pressed("scoreboard")
 		_ui.show_scoreboard(_scoreboard_rows(), show_board, _server_subtitle())
@@ -116,6 +135,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _go_to_menu() -> void:
+	if Net.online:
+		Net.leave()
 	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 
 
@@ -155,6 +176,8 @@ func _pause_info() -> String:
 ## Classe choisie dans le menu pause : appliquée à la prochaine apparition.
 func _on_class_selected(cls: ClassData) -> void:
 	GameState.selected_class = cls        # gardée aussi pour les prochaines parties
+	if _online:
+		Net.set_class(cls.resource_path)
 	_pending_class = null if cls == player.class_data else cls
 	if _pending_class:
 		hud.set_next_class(cls.display_name, cls.color)
@@ -180,6 +203,230 @@ func _replace_local_player(cls: ClassData) -> void:
 	_pending_class = null
 	hud.set_next_class("")
 	Sfx.play("spawn", -8.0)
+
+
+# ---------------------------------------------------------------- Partie en ligne
+#
+# Répartition des rôles (voir scripts/net/net.gd) :
+#   - chaque machine simule SON joueur et envoie son état 20 fois par seconde ;
+#   - l'hôte fait jouer les bots et les diffuse de la même façon ;
+#   - l'hôte arbitre : vie, éliminations, score, chronomètre, réapparitions.
+
+## Crée la partie en réseau à partir de la liste de joueurs reçue du salon.
+func _start_online_match() -> void:
+	if Net.is_host():
+		_bake_navigation()   # seul l'hôte a besoin du maillage : il fait jouer les bots
+	for id in Net.players:
+		_spawn_net_player(id)
+	player = _net_nodes.get(Net.my_id())
+	if player:
+		player.camera.make_current()   # toujours MA caméra, quel que soit l'ordre d'apparition
+		hud.bind(player)
+	_time_left = Net.settings.get("duration", 180.0)
+	_running = true
+
+	Net.remote_states.connect(_on_remote_states)
+	Net.player_died.connect(_on_net_death)
+	Net.player_respawned.connect(_on_net_respawn)
+	Net.health_updated.connect(_on_net_health)
+	Net.match_over.connect(_on_net_match_over)
+	Net.remote_left.connect(_on_net_left)
+	Net.disconnected.connect(_on_net_disconnected)
+	if Net.is_host():
+		# L'hôte applique les dégâts signalés par les tireurs.
+		Net.health_provider = _apply_net_damage
+		Net.respawn_requested.connect(_on_net_respawn_requested)
+
+
+## Crée le personnage d'un joueur (ou d'un bot) de la partie en réseau.
+func _spawn_net_player(id: int) -> CharacterBody3D:
+	var info: Dictionary = Net.players.get(id, {})
+	var cls: ClassData = load(info.get("class_id", GameState.CLASSES[0].resource_path))
+	var is_me := id == Net.my_id()
+	var p: CharacterBody3D = PlayerScene.instantiate()
+	p.class_data = cls
+	p.player_name = info.get("name", "Joueur")
+	p.is_local = is_me
+	p.peer_id = id
+	# Bots : simulés par l'hôte, simples pantins chez les clients.
+	var simulated_here := is_me or (Net.is_host() and Net.is_bot(id))
+	p.is_remote = not simulated_here
+	if Net.is_host() and Net.is_bot(id):
+		var brain := BotBrain.new()
+		brain.game = self
+		brain.skill = randf_range(0.35, 0.75)
+		p.brain = brain
+	p.name = "Net_%d" % id
+	add_child(p)
+	p.global_transform = _best_spawn(p)
+	p.died.connect(_on_player_died.bind(p))
+	p.add_to_group("players")
+	p.start_spawn_protection()
+	if not is_me:
+		_add_name_tag(p)
+	players.append(p)
+	_net_nodes[id] = p
+	return p
+
+
+## Envoie l'état des personnages que cette machine fait jouer.
+func _publish_states() -> void:
+	var states := {}
+	for id in _net_nodes:
+		var node: CharacterBody3D = _net_nodes[id]
+		if is_instance_valid(node) and Net.controls(id):
+			states[id] = node.net_state()
+	Net.publish_state(states)
+
+
+## États reçus d'une autre machine.
+func _on_remote_states(_sender_id: int, states: Dictionary) -> void:
+	for id in states:
+		var node = _net_nodes.get(id)
+		if is_instance_valid(node) and node.is_remote:
+			node.apply_net_state(states[id])
+
+
+## HÔTE : un tireur signale un impact. On applique les dégâts et on diffuse.
+func _apply_net_damage(target_id: int, damage: int, shooter_id: int, weapon: String) -> void:
+	var node = _net_nodes.get(target_id)
+	if not is_instance_valid(node) or not node.alive or node.is_protected():
+		return
+	if node.is_shielded():
+		damage = maxi(int(round(damage * node.class_data.ability_strength)), 1)
+	node.health = maxi(node.health - damage, 0)
+	Net.push_health.rpc(target_id, node.health, node.class_data.max_health)
+	if node.health == 0:
+		Net.push_death.rpc(target_id, shooter_id, weapon)
+
+
+## Nouvelle valeur de vie reçue (diffusée par l'hôte).
+func _on_net_health(peer_id: int, health: int, max_health: int) -> void:
+	var node = _net_nodes.get(peer_id)
+	if not is_instance_valid(node):
+		return
+	var lost: bool = health < node.health
+	node.health = health
+	node.rig.flash()
+	if lost and node == player:
+		player.damaged.emit(node.class_data.max_health - health)
+	node.health_changed.emit(health, max_health)
+
+
+## Élimination annoncée par l'hôte : animation, fil des éliminations, écran de mort.
+func _on_net_death(victim_id: int, killer_id: int, weapon: String) -> void:
+	var victim = _net_nodes.get(victim_id)
+	if not is_instance_valid(victim):
+		return
+	if victim.alive:
+		victim.net_die()
+	var killer_name := Net.player_name_of(killer_id) if killer_id != victim_id else "Arène"
+	_ui.add_kill(killer_name, victim.player_name, weapon, killer_id == Net.my_id(), victim_id == Net.my_id())
+	if killer_id == Net.my_id() and killer_id != victim_id:
+		var streak: int = Net.players.get(killer_id, {}).get("kills", 1)
+		_ui.show_banner("%s  +100" % STREAK_BANNERS.get(streak, "ÉLIMINATION"))
+		Sfx.play("kill", -2.0)
+	if victim_id == Net.my_id():
+		hud.show_death(killer_name if killer_name != "Arène" else "")
+	# Compte à rebours pour les personnages dont cette machine s'occupe
+	# (mon joueur, et les bots si je suis l'hôte).
+	if victim_id == Net.my_id() or (Net.is_host() and Net.controls(victim_id)):
+		_respawns[victim] = RESPAWN_DELAY
+
+
+## HÔTE : un client demande à réapparaître.
+func _on_net_respawn_requested(peer_id: int, class_id: String) -> void:
+	var node = _net_nodes.get(peer_id)
+	if not is_instance_valid(node):
+		return
+	var t := _best_spawn(node)
+	Net.push_respawn.rpc(peer_id, t.origin, t.basis.get_euler().y, class_id)
+
+
+## HÔTE : fait réapparaître un personnage qu'il contrôle (lui-même ou un bot).
+func _net_respawn(p: CharacterBody3D) -> void:
+	var id: int = p.peer_id
+	var class_id: String = p.class_data.resource_path
+	if p == player and _pending_class:
+		class_id = _pending_class.resource_path
+	var t := _best_spawn(p)
+	Net.push_respawn.rpc(id, t.origin, t.basis.get_euler().y, class_id)
+
+
+## Réapparition annoncée par l'hôte (pour tout le monde).
+func _on_net_respawn(peer_id: int, position: Vector3, yaw: float, class_id: String) -> void:
+	var node = _net_nodes.get(peer_id)
+	if not is_instance_valid(node):
+		return
+	# Changement de classe : on remplace le personnage en gardant le score.
+	if node.class_data.resource_path != class_id:
+		node = _replace_net_player(peer_id, class_id)
+	node.respawn(position, yaw)
+	node.teleport(position, yaw)
+	if node.brain:
+		node.brain.reset()
+	if node.has_node("NameTag"):
+		node.get_node("NameTag").visible = true
+	if peer_id == Net.my_id():
+		hud.hide_death()
+		_pending_class = null
+		hud.set_next_class("")
+
+
+## Remplace le personnage d'un joueur par un autre de classe différente.
+func _replace_net_player(peer_id: int, class_id: String) -> CharacterBody3D:
+	var old = _net_nodes.get(peer_id)
+	if is_instance_valid(old):
+		players.erase(old)
+		old.remove_from_group("players")
+		old.queue_free()
+	Net.players[peer_id]["class_id"] = class_id
+	var fresh := _spawn_net_player(peer_id)
+	if peer_id == Net.my_id():
+		player = fresh
+		fresh.input_enabled = not _pause.is_open()
+		hud.bind(fresh)
+	return fresh
+
+
+## Un joueur s'est déconnecté : on retire son personnage.
+func _on_net_left(peer_id: int) -> void:
+	var node = _net_nodes.get(peer_id)
+	if is_instance_valid(node):
+		players.erase(node)
+		node.queue_free()
+	_net_nodes.erase(peer_id)
+	_ui.show_banner("%s a quitté la partie" % Net.player_name_of(peer_id), UiTheme.MUTED)
+
+
+## Fin de partie annoncée par l'hôte.
+func _on_net_match_over(_rows: Array) -> void:
+	if _running:
+		_finish_match()
+
+
+## Tableau des scores en ligne : les compteurs tenus par l'hôte font foi.
+func _net_scoreboard_rows() -> Array:
+	var rows := []
+	for entry in Net.sorted_players():
+		var cls: ClassData = load(entry.class_id)
+		var is_bot: bool = Net.is_bot(entry.id)
+		rows.append({
+			"name": entry.name, "cls": cls.display_name, "class_color": cls.color.lightened(0.3),
+			"kills": entry.kills, "deaths": entry.deaths,
+			"best_streak": 0,
+			"ping": "BOT" if is_bot else ("%d ms" % _ping if entry.id == Net.my_id() else "—"),
+			"local": entry.id == Net.my_id(),
+		})
+	return rows
+
+
+## L'hôte a fermé la partie ou la connexion est tombée.
+func _on_net_disconnected(reason: String) -> void:
+	_running = false
+	_ui.show_banner(reason, UiTheme.RED)
+	await get_tree().create_timer(2.5).timeout
+	_go_to_menu()
 
 
 # ---------------------------------------------------------------- Joueurs
@@ -250,6 +497,8 @@ func _respawn(p: CharacterBody3D) -> void:
 
 
 func _on_player_died(killer: Node, victim: CharacterBody3D) -> void:
+	if _online:
+		return      # en ligne, l'hôte annonce les éliminations (voir _on_net_death)
 	_respawns[victim] = RESPAWN_DELAY
 	if victim.has_node("NameTag"):
 		victim.get_node("NameTag").visible = false
@@ -273,6 +522,8 @@ func _on_player_died(killer: Node, victim: CharacterBody3D) -> void:
 # ---------------------------------------------------------------- Partie
 
 func _scoreboard_rows() -> Array:
+	if _online:
+		return _net_scoreboard_rows()
 	var rows := []
 	for p in players:
 		rows.append({
@@ -285,11 +536,22 @@ func _scoreboard_rows() -> Array:
 
 
 func _server_subtitle() -> String:
+	if _online:
+		var role := "hôte" if Net.is_host() else "client"
+		return "Partie en ligne (%s) · %d joueurs · NEO-EDO" % [role, Net.players.size()]
 	var server: Dictionary = Backend.current_server
 	return "%s · NEO-EDO" % server.get("name", "Serveur local")
 
 
 func _end_match() -> void:
+	if _online:
+		if Net.is_host():
+			Net.push_match_over.rpc(_net_scoreboard_rows())
+		return       # l'affichage se fait à la réception (voir _on_net_match_over)
+	_finish_match()
+
+
+func _finish_match() -> void:
 	_running = false
 	_time_left = 0.0
 	if _pause.is_open():

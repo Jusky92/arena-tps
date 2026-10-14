@@ -53,6 +53,11 @@ const SpawnShieldShader := preload("res://shaders/spawn_shield.gdshader")
 @export var player_name := "Joueur"
 ## true = contrôlé au clavier/souris et suivi par la caméra.
 @export var is_local := true
+## true = personnage d'un autre joueur, piloté par les états reçus du réseau.
+## Il n'est pas simulé ici : on lisse sa position et on rejoue son animation.
+@export var is_remote := false
+## Identifiant réseau : peer du joueur, négatif pour un bot de l'hôte, 0 hors ligne.
+@export var peer_id := 0
 
 @onready var shield_mesh: MeshInstance3D = $Shield
 @onready var collision: CollisionShape3D = $CollisionShape3D
@@ -92,13 +97,27 @@ var _dash_direction := Vector3.ZERO
 var _shake: float = 0.0
 var _spawn_shield: MeshInstance3D
 var _spawn_shield_mat: ShaderMaterial
+# Dernier état reçu du réseau (personnages distants).
+var _net_position := Vector3.ZERO
+var _net_yaw := 0.0
+var _net_velocity := Vector3.ZERO
+var _net_pitch := 0.0
+var _net_floor := true
+var _net_crouch := 0.0
+var _net_sprint := false
+var _net_aim := false
 
 
 func _ready() -> void:
 	if class_data == null:
 		class_data = GameState.selected_class
 	spring_arm.add_excluded_object(get_rid())
-	camera.current = is_local
+	# Seul MON personnage filme l'écran. La caméra de la scène est inactive par
+	# défaut : sinon chaque bot ou joueur distant qui apparaît la volerait.
+	if is_local and not is_remote:
+		camera.make_current()
+	else:
+		camera.current = false
 	# Rampes : on reste collé à la pente en descendant au lieu de "sauter" de petits bonds.
 	floor_snap_length = 0.4
 	floor_max_angle = deg_to_rad(46.0)
@@ -125,7 +144,7 @@ func _ready() -> void:
 
 ## Souris : on cumule le mouvement, il sera appliqué dans la simulation.
 func _unhandled_input(event: InputEvent) -> void:
-	if not is_local or not alive or not input_enabled:
+	if not is_local or is_remote or not alive or not input_enabled:
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var zoom_factor := camera.fov / BASE_FOV   # moins sensible en visant
@@ -139,6 +158,9 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	_update_ability(delta)
 	_update_spawn_protection(delta)
+	if is_remote:
+		_follow_net_state(delta)
+		return
 	if not alive:
 		return
 
@@ -184,6 +206,61 @@ func _read_local_commands() -> void:
 	_cmd.aim = captured and Input.is_action_pressed("aim")
 	_cmd.reload = Input.is_action_just_pressed("reload")
 	_cmd.ability = Input.is_action_just_pressed("ability")
+
+
+# ---------------------------------------------------------------- Réseau
+
+## État de ce personnage, à envoyer aux autres machines (20 fois par seconde).
+## Volontairement court : des clés d'une lettre, et rien qui puisse se recalculer.
+func net_state() -> Dictionary:
+	return {
+		"p": global_position,
+		"y": rotation.y,
+		"x": camera_pivot.rotation.x,
+		"v": basis.inverse() * velocity,
+		"f": is_on_floor(),
+		"c": 1.0 if crouching else 0.0,
+		"s": is_sprinting(),
+		"a": _aiming,
+	}
+
+
+## État reçu pour un personnage distant.
+func apply_net_state(state: Dictionary) -> void:
+	_net_position = state.get("p", _net_position)
+	_net_yaw = state.get("y", _net_yaw)
+	_net_velocity = state.get("v", Vector3.ZERO)
+	_net_pitch = state.get("x", 0.0)
+	_net_floor = state.get("f", true)
+	_net_crouch = state.get("c", 0.0)
+	_net_sprint = state.get("s", false)
+	_net_aim = state.get("a", false)
+
+
+## Lissage : on rattrape la dernière position reçue au lieu de téléporter.
+## Au-delà de 6 m d'écart (apparition, dash, paquet perdu), on se replace d'un coup.
+func _follow_net_state(delta: float) -> void:
+	if not alive:
+		return
+	if global_position.distance_to(_net_position) > 6.0:
+		global_position = _net_position
+	else:
+		global_position = global_position.lerp(_net_position, clampf(delta * 14.0, 0.0, 1.0))
+	rotation.y = lerp_angle(rotation.y, _net_yaw, clampf(delta * 14.0, 0.0, 1.0))
+	camera_pivot.rotation.x = lerpf(camera_pivot.rotation.x, _net_pitch, clampf(delta * 10.0, 0.0, 1.0))
+	velocity = basis * _net_velocity
+	_aiming = _net_aim
+	if (_net_crouch > 0.5) != crouching:
+		_set_crouching(_net_crouch > 0.5)
+	rig.set_state(_net_velocity, _net_floor, _net_crouch, _net_pitch, _net_sprint, _net_aim)
+
+
+## Place le personnage sans lissage (apparition, changement de classe).
+func teleport(to: Vector3, yaw: float) -> void:
+	global_position = to
+	rotation.y = yaw
+	_net_position = to
+	_net_yaw = yaw
 
 
 # ---------------------------------------------------------------- Accroupi
@@ -458,11 +535,29 @@ func _die(killer: Node) -> void:
 	died.emit(killer)
 
 
+## Mort annoncée par le réseau : même effet visuel que `_die`, mais sans décompte
+## local (en ligne, c'est l'hôte qui tient les scores).
+func net_die() -> void:
+	if not alive:
+		return
+	alive = false
+	health = 0
+	_end_ability()
+	end_spawn_protection()
+	velocity = Vector3.ZERO
+	if crouching:
+		_set_crouching(false)
+	rig.play_death()
+	collision.set_deferred("disabled", true)
+
+
 ## Fait réapparaître le joueur à `spawn_position`, PV et munitions au maximum,
 ## avec la protection d'apparition.
 func respawn(spawn_position: Vector3, yaw: float) -> void:
 	global_position = spawn_position
 	rotation.y = yaw
+	_net_position = spawn_position
+	_net_yaw = yaw
 	camera_pivot.rotation.x = 0.0
 	velocity = Vector3.ZERO
 	health = class_data.max_health

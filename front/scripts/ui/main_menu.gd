@@ -7,8 +7,11 @@ extends Control
 ## Toutes les données viennent de l'autoload Backend (simulé pour l'instant).
 
 const GAME := "res://scenes/game.tscn"
+const LOBBY := "res://scenes/lobby.tscn"
 const CLASS_SELECT := "res://scenes/class_select.tscn"
 const AUTH := "res://scenes/auth.tscn"
+## Dernière adresse de connexion, gardée d'une partie à l'autre.
+const ADDRESS_PATH := "user://reseau.cfg"
 
 var _page_holder: MarginContainer
 var _nav_buttons := {}
@@ -16,6 +19,8 @@ var _profile_box: HBoxContainer
 var _friends_box: VBoxContainer
 var _party_box: VBoxContainer
 var _overlay: Control
+var _address_field: LineEdit
+var _online_error: Label
 
 
 func _ready() -> void:
@@ -45,6 +50,8 @@ func _ready() -> void:
 	root.add_child(_build_bottom_bar())
 
 	Backend.party_changed.connect(_refresh_party)
+	Net.joined.connect(_on_net_joined)
+	Net.connection_failed.connect(_on_net_failed)
 	_refresh_profile()
 	_refresh_friends()
 	_show_page("play")
@@ -189,7 +196,7 @@ func _build_play_page() -> Control:
 	mode.add_child(mode_box)
 	mode_box.add_child(UiTheme.label("MODE DE JEU", 14, UiTheme.MUTED, true))
 	mode_box.add_child(UiTheme.title("MATCH À MORT", 26, Color.WHITE))
-	mode_box.add_child(UiTheme.label("Chacun pour soi · 3 minutes · 8 joueurs max · map Arena", 18, UiTheme.MUTED))
+	mode_box.add_child(UiTheme.label("Chacun pour soi · 3 minutes · 8 joueurs max · map NEO-EDO", 18, UiTheme.MUTED))
 	col.add_child(mode)
 
 	var party := UiTheme.panel()
@@ -200,16 +207,45 @@ func _build_play_page() -> Control:
 	_refresh_party()
 
 	col.add_child(UiTheme.spacer(Vector2.ZERO, false, true))
-	var create := UiTheme.button("CRÉER UN SERVEUR", true, UiTheme.CYAN, 58)
-	create.add_theme_font_size_override("font_size", 20)
-	create.pressed.connect(_create_server)
-	col.add_child(create)
+
+	# --- Jouer en ligne (vrai réseau) ---
+	var online := UiTheme.panel(Color(UiTheme.CYAN, 0.07), Color(UiTheme.CYAN, 0.35))
+	var online_box := VBoxContainer.new()
+	online_box.add_theme_constant_override("separation", 10)
+	online.add_child(online_box)
+	online_box.add_child(UiTheme.label("JOUER EN LIGNE", 14, UiTheme.CYAN, true))
+	var host_button := UiTheme.button("HÉBERGER UNE PARTIE", true, UiTheme.CYAN, 54)
+	host_button.add_theme_font_size_override("font_size", 19)
+	host_button.tooltip_text = "Ce PC devient le serveur : les autres se connectent à son adresse"
+	host_button.pressed.connect(_host_game)
+	online_box.add_child(host_button)
+
+	var join_row := HBoxContainer.new()
+	join_row.add_theme_constant_override("separation", 10)
+	_address_field = LineEdit.new()
+	_address_field.placeholder_text = "adresse de l'hôte, ex. 192.168.1.20"
+	_address_field.text = _saved_address()
+	_address_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_address_field.text_submitted.connect(func(_t: String) -> void: _join_online())
+	join_row.add_child(_address_field)
+	var join_button := UiTheme.button("REJOINDRE", true, UiTheme.MAGENTA, 46)
+	join_button.custom_minimum_size.x = 170
+	join_button.pressed.connect(_join_online)
+	join_row.add_child(join_button)
+	online_box.add_child(join_row)
+	_online_error = UiTheme.label("", 15, UiTheme.RED)
+	_online_error.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	online_box.add_child(_online_error)
+	col.add_child(online)
+
+	# --- Hors ligne ---
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 12)
-	var join := UiTheme.button("REJOINDRE UN SERVEUR", true, UiTheme.MAGENTA, 50)
-	join.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	join.pressed.connect(_show_page.bind("servers"))
-	buttons.add_child(join)
+	var solo := UiTheme.button("PARTIE SOLO (BOTS)", false, UiTheme.CYAN, 50)
+	solo.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	solo.tooltip_text = "Match à mort hors ligne contre des bots"
+	solo.pressed.connect(_create_server)
+	buttons.add_child(solo)
 	var training := UiTheme.button("ENTRAÎNEMENT", false, UiTheme.CYAN, 50)
 	training.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	training.tooltip_text = "Seul sur la map avec des mannequins d'entraînement"
@@ -217,6 +253,74 @@ func _build_play_page() -> Control:
 	buttons.add_child(training)
 	col.add_child(buttons)
 	return row
+
+
+# --------------------------------------------------------------------------- en ligne
+
+## Héberge une partie sur ce PC et ouvre le salon.
+func _host_game() -> void:
+	Sfx.ui("ui_click")
+	var error := Net.host(Backend.username(), Net.DEFAULT_PORT, 2, 180.0)
+	if not error.is_empty():
+		_online_error.text = error
+		return
+	get_tree().change_scene_to_file(LOBBY)
+
+
+## Rejoint la partie d'un camarade à partir de son adresse (IP ou IP:port).
+func _join_online() -> void:
+	Sfx.ui("ui_click")
+	var address := _address_field.text.strip_edges()
+	if address.is_empty():
+		_online_error.text = "Entre l'adresse de l'hôte (celle affichée sur son écran)."
+		return
+	var port := Net.DEFAULT_PORT
+	if address.contains(":"):
+		var parts := address.split(":")
+		address = parts[0]
+		port = int(parts[1])
+	if Net.is_connecting():
+		return
+	var error := Net.join(address, Backend.username(), port)
+	if not error.is_empty():
+		_show_online_error(error)
+		return
+	_save_address(_address_field.text.strip_edges())
+	# On reste sur cette page tant que l'hôte n'a pas répondu : le salon ne
+	# s'ouvre que si la connexion a vraiment abouti.
+	_online_error.add_theme_color_override("font_color", UiTheme.CYAN)
+	while Net.is_connecting() and is_inside_tree():
+		_online_error.text = "Connexion à %s:%d…  %d s" % [address, port, ceili(Net.CONNECT_TIMEOUT - Net._connect_elapsed)]
+		await get_tree().create_timer(0.2).timeout
+
+
+func _on_net_joined() -> void:
+	get_tree().change_scene_to_file(LOBBY)
+
+
+func _on_net_failed(reason: String) -> void:
+	if is_instance_valid(_online_error):
+		_show_online_error(reason + "\nJournal détaillé : " + Net.log_file_path())
+
+
+func _show_online_error(text: String) -> void:
+	_online_error.add_theme_color_override("font_color", UiTheme.RED)
+	_online_error.text = text
+
+
+## La dernière adresse utilisée est gardée sur la machine, pour ne pas la retaper.
+func _saved_address() -> String:
+	var cfg := ConfigFile.new()
+	if cfg.load(ADDRESS_PATH) != OK:
+		return ""
+	return cfg.get_value("reseau", "derniere_adresse", "")
+
+
+func _save_address(address: String) -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(ADDRESS_PATH)
+	cfg.set_value("reseau", "derniere_adresse", address)
+	cfg.save(ADDRESS_PATH)
 
 
 func _refresh_party() -> void:

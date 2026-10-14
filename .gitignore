@@ -1,7 +1,8 @@
 # ---------- Godot (front) ----------
 # Cache régénéré automatiquement par Godot : ne jamais versionner
 .godot/
-# Builds exportés
+# Builds exportés (le .exe du client lourd fait ~125 Mo : on ne le versionne pas)
+build/
 front/export/
 front/builds/
 

@@ -12,7 +12,8 @@ Projet réalisé en binôme par **Julien** (client de jeu) et **Elian** (micro-s
 arena-tps/
 ├── front/       Client du jeu (Godot 4.7.2) — responsable : Julien
 ├── services/    Micro-services et bases de données — responsable : Elian
-├── tools/       Scripts de génération des ressources (textures, masques, animations)
+├── tools/       Scripts de génération des ressources et d'export du client
+├── docs/        Guides (réseau…)
 └── README.md
 ```
 
@@ -32,6 +33,22 @@ arena-tps/
 | Statistiques | Statistiques du joueur, classement mondial ou entre amis |
 | Classes | Choix de la classe avec aperçu 3D animé |
 | Partie | Match à mort de 3 minutes contre des bots, tableau des scores, écran de fin |
+
+### Jouer en ligne
+
+Le jeu se joue à plusieurs **en vrai réseau**, sans back-end : un PC héberge (il joue
+en même temps qu'il sert), les autres le rejoignent avec son adresse.
+
+1. L'hôte : **JOUER → HÉBERGER UNE PARTIE**. Le salon affiche son adresse.
+2. Les autres : coller l'adresse dans le champ de la page JOUER, puis **REJOINDRE**.
+3. L'hôte règle le nombre de bots et la durée, puis lance la partie.
+
+Pour jouer depuis deux maisons différentes, et pour exporter le client lourd (`.exe`)
+à donner à un camarade : **[docs/RESEAU.md](docs/RESEAU.md)**.
+
+Qui décide de quoi : chaque machine simule son propre joueur et signale ses impacts ;
+l'hôte arbitre la vie, les éliminations, le score, le chronomètre et les réapparitions,
+et fait jouer les bots. Tout est dans `front/scripts/net/net.gd`.
 
 Le **back-end est simulé** (`front/scripts/backend/backend.gd`) : la connexion accepte tout, les amis, serveurs et classements sont factices, et les statistiques des parties jouées sont enregistrées localement. Les fonctions reprennent les routes du BFF prévues dans l'architecture ; il suffira de remplacer leur contenu par des appels HTTP.
 
@@ -139,6 +156,7 @@ Les éléments de la map sont des listes et fonctions dans le script : après un
 | `extract_animations.gd` | Extraction d'une bibliothèque d'animations compacte depuis le pack d'animations |
 | `generate_sounds.py` | Effets sonores du jeu, calculés par synthèse (aucun son externe) |
 | `subset_font.py` | Allège la police japonaise en ne gardant que les caractères affichés par le jeu |
+| `build_client.sh` | Exporte le client lourd (`.exe` Windows ou binaire Linux) |
 
 Dépendances Python : `numpy`, `pillow`.
 
@@ -181,6 +199,8 @@ docs: complète le README
 - [x] Map « NEO-EDO » 120 x 120 m texturée (sanctuaire, marché, pagode, jardin, ruelles néon), décor CFA INSTA et IoT animé
 - [x] Match à mort contre des bots, tableau des scores, écran de fin
 - [x] Menu pause local (changement de classe, son, sensibilité), protection d'apparition, effets sonores
+- [x] Multijoueur en ligne (un PC héberge, les autres rejoignent par adresse)
+- [x] Export du client lourd Windows / Linux
 - [ ] Connexion au vrai back-end (BFF)
 - [ ] Serveur de jeu dédié (Godot headless) et joueurs distants
 - [ ] Micro-services et bases de données

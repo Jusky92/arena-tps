@@ -16,7 +16,7 @@ extends Node
 signal session_changed
 signal party_changed
 
-const BUILD_VERSION := "0.5.0-alpha"
+const BUILD_VERSION := "0.6.0-alpha"
 const SIMULATED_LATENCY := Vector2(0.25, 0.6)
 const SAVE_PATH := "user://profil_simule.cfg"
 

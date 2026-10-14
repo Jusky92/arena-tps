@@ -130,7 +130,13 @@ func _fire_pellet(spread_deg: float) -> Dictionary:
 			break
 		if target.has_method("take_damage"):
 			Effects.impact(_world(), hit.position, Color(1, 0.25, 0.2), 0.09)
-			var killed: bool = target.take_damage(data.damage, _shooter)
+			var killed := false
+			if Net.online and target.get("peer_id") != null and target.peer_id != 0:
+				# En ligne, c'est l'hôte qui applique les dégâts : on lui signale l'impact.
+				# L'élimination nous reviendra par le réseau (signal player_died).
+				Net.hit(target.peer_id, data.damage, data.display_name)
+			else:
+				killed = target.take_damage(data.damage, _shooter)
 			result.hit = true
 			result.killed = result.killed or killed
 			exclude.append(hit.rid)
