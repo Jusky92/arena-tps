@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://cjm71wtcuyfsx"
 path.s3tc="res://.godot/imported/gravel_zen_albedo.png-fc1ad383faa399634e7b12ee1601856d.s3tc.ctex"
+path.etc2="res://.godot/imported/gravel_zen_albedo.png-fc1ad383faa399634e7b12ee1601856d.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://textures/gravel_zen_albedo.png"
-dest_files=["res://.godot/imported/gravel_zen_albedo.png-fc1ad383faa399634e7b12ee1601856d.s3tc.ctex"]
+dest_files=["res://.godot/imported/gravel_zen_albedo.png-fc1ad383faa399634e7b12ee1601856d.s3tc.ctex", "res://.godot/imported/gravel_zen_albedo.png-fc1ad383faa399634e7b12ee1601856d.etc2.ctex"]
 
 [params]
 

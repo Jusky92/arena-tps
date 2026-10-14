@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://c5xbobqo6i1w6"
 path.s3tc="res://.godot/imported/plaza_tiles_albedo.png-a5e89eeacc6ae7026b1128bbc7d12a83.s3tc.ctex"
+path.etc2="res://.godot/imported/plaza_tiles_albedo.png-a5e89eeacc6ae7026b1128bbc7d12a83.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://textures/plaza_tiles_albedo.png"
-dest_files=["res://.godot/imported/plaza_tiles_albedo.png-a5e89eeacc6ae7026b1128bbc7d12a83.s3tc.ctex"]
+dest_files=["res://.godot/imported/plaza_tiles_albedo.png-a5e89eeacc6ae7026b1128bbc7d12a83.s3tc.ctex", "res://.godot/imported/plaza_tiles_albedo.png-a5e89eeacc6ae7026b1128bbc7d12a83.etc2.ctex"]
 
 [params]
 

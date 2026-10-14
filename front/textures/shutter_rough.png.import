@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://c3n824utj3ne1"
 path.s3tc="res://.godot/imported/shutter_rough.png-099b162377835906bca9eeaaac5d82ef.s3tc.ctex"
+path.etc2="res://.godot/imported/shutter_rough.png-099b162377835906bca9eeaaac5d82ef.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://textures/shutter_rough.png"
-dest_files=["res://.godot/imported/shutter_rough.png-099b162377835906bca9eeaaac5d82ef.s3tc.ctex"]
+dest_files=["res://.godot/imported/shutter_rough.png-099b162377835906bca9eeaaac5d82ef.s3tc.ctex", "res://.godot/imported/shutter_rough.png-099b162377835906bca9eeaaac5d82ef.etc2.ctex"]
 
 [params]
 

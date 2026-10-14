@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://dykg2mij3jyje"
 path.s3tc="res://.godot/imported/shoji_albedo.png-49e4bb9639df7d191a9f292cf406de5f.s3tc.ctex"
+path.etc2="res://.godot/imported/shoji_albedo.png-49e4bb9639df7d191a9f292cf406de5f.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://textures/shoji_albedo.png"
-dest_files=["res://.godot/imported/shoji_albedo.png-49e4bb9639df7d191a9f292cf406de5f.s3tc.ctex"]
+dest_files=["res://.godot/imported/shoji_albedo.png-49e4bb9639df7d191a9f292cf406de5f.s3tc.ctex", "res://.godot/imported/shoji_albedo.png-49e4bb9639df7d191a9f292cf406de5f.etc2.ctex"]
 
 [params]
 

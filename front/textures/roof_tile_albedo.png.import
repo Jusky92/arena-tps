@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://dbtnc3hrsnq16"
 path.s3tc="res://.godot/imported/roof_tile_albedo.png-1c03ee97cee419055e20359d5fc1c1ab.s3tc.ctex"
+path.etc2="res://.godot/imported/roof_tile_albedo.png-1c03ee97cee419055e20359d5fc1c1ab.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://textures/roof_tile_albedo.png"
-dest_files=["res://.godot/imported/roof_tile_albedo.png-1c03ee97cee419055e20359d5fc1c1ab.s3tc.ctex"]
+dest_files=["res://.godot/imported/roof_tile_albedo.png-1c03ee97cee419055e20359d5fc1c1ab.s3tc.ctex", "res://.godot/imported/roof_tile_albedo.png-1c03ee97cee419055e20359d5fc1c1ab.etc2.ctex"]
 
 [params]
 

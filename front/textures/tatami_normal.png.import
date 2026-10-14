@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://b1mpfkfbu78eu"
 path.s3tc="res://.godot/imported/tatami_normal.png-7cf23dfd9fef74ab43e068ad8408edaa.s3tc.ctex"
+path.etc2="res://.godot/imported/tatami_normal.png-7cf23dfd9fef74ab43e068ad8408edaa.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://textures/tatami_normal.png"
-dest_files=["res://.godot/imported/tatami_normal.png-7cf23dfd9fef74ab43e068ad8408edaa.s3tc.ctex"]
+dest_files=["res://.godot/imported/tatami_normal.png-7cf23dfd9fef74ab43e068ad8408edaa.s3tc.ctex", "res://.godot/imported/tatami_normal.png-7cf23dfd9fef74ab43e068ad8408edaa.etc2.ctex"]
 
 [params]
 

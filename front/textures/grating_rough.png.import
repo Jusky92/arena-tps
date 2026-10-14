@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://tn0ep27m0jy0"
 path.s3tc="res://.godot/imported/grating_rough.png-70a7e9ff0100ef8215ed40ef543b3ecb.s3tc.ctex"
+path.etc2="res://.godot/imported/grating_rough.png-70a7e9ff0100ef8215ed40ef543b3ecb.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://textures/grating_rough.png"
-dest_files=["res://.godot/imported/grating_rough.png-70a7e9ff0100ef8215ed40ef543b3ecb.s3tc.ctex"]
+dest_files=["res://.godot/imported/grating_rough.png-70a7e9ff0100ef8215ed40ef543b3ecb.s3tc.ctex", "res://.godot/imported/grating_rough.png-70a7e9ff0100ef8215ed40ef543b3ecb.etc2.ctex"]
 
 [params]
 

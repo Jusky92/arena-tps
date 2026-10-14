@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://clu0pj2fefo4e"
 path.s3tc="res://.godot/imported/stone_paver_albedo.png-a380e12b5fcfd3397a926c29368aa46a.s3tc.ctex"
+path.etc2="res://.godot/imported/stone_paver_albedo.png-a380e12b5fcfd3397a926c29368aa46a.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://textures/stone_paver_albedo.png"
-dest_files=["res://.godot/imported/stone_paver_albedo.png-a380e12b5fcfd3397a926c29368aa46a.s3tc.ctex"]
+dest_files=["res://.godot/imported/stone_paver_albedo.png-a380e12b5fcfd3397a926c29368aa46a.s3tc.ctex", "res://.godot/imported/stone_paver_albedo.png-a380e12b5fcfd3397a926c29368aa46a.etc2.ctex"]
 
 [params]
 

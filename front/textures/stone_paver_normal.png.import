@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://cxy6eaufjcdja"
 path.s3tc="res://.godot/imported/stone_paver_normal.png-7b1de13c58a378842e15578a09e204b1.s3tc.ctex"
+path.etc2="res://.godot/imported/stone_paver_normal.png-7b1de13c58a378842e15578a09e204b1.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://textures/stone_paver_normal.png"
-dest_files=["res://.godot/imported/stone_paver_normal.png-7b1de13c58a378842e15578a09e204b1.s3tc.ctex"]
+dest_files=["res://.godot/imported/stone_paver_normal.png-7b1de13c58a378842e15578a09e204b1.s3tc.ctex", "res://.godot/imported/stone_paver_normal.png-7b1de13c58a378842e15578a09e204b1.etc2.ctex"]
 
 [params]
 

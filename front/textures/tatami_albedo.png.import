@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://bbfwkwbp25ene"
 path.s3tc="res://.godot/imported/tatami_albedo.png-d041493fb826eeb76b46cc06df6e2616.s3tc.ctex"
+path.etc2="res://.godot/imported/tatami_albedo.png-d041493fb826eeb76b46cc06df6e2616.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://textures/tatami_albedo.png"
-dest_files=["res://.godot/imported/tatami_albedo.png-d041493fb826eeb76b46cc06df6e2616.s3tc.ctex"]
+dest_files=["res://.godot/imported/tatami_albedo.png-d041493fb826eeb76b46cc06df6e2616.s3tc.ctex", "res://.godot/imported/tatami_albedo.png-d041493fb826eeb76b46cc06df6e2616.etc2.ctex"]
 
 [params]
 

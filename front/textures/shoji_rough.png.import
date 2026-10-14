@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://37lsyitl5xf5"
 path.s3tc="res://.godot/imported/shoji_rough.png-45190e5c22ee73a572cf4ee162681323.s3tc.ctex"
+path.etc2="res://.godot/imported/shoji_rough.png-45190e5c22ee73a572cf4ee162681323.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://textures/shoji_rough.png"
-dest_files=["res://.godot/imported/shoji_rough.png-45190e5c22ee73a572cf4ee162681323.s3tc.ctex"]
+dest_files=["res://.godot/imported/shoji_rough.png-45190e5c22ee73a572cf4ee162681323.s3tc.ctex", "res://.godot/imported/shoji_rough.png-45190e5c22ee73a572cf4ee162681323.etc2.ctex"]
 
 [params]
 

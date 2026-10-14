@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://b6qsmj62wiot2"
 path.s3tc="res://.godot/imported/gravel_zen_rough.png-fd72b7b109e5f28183567f579d403417.s3tc.ctex"
+path.etc2="res://.godot/imported/gravel_zen_rough.png-fd72b7b109e5f28183567f579d403417.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://textures/gravel_zen_rough.png"
-dest_files=["res://.godot/imported/gravel_zen_rough.png-fd72b7b109e5f28183567f579d403417.s3tc.ctex"]
+dest_files=["res://.godot/imported/gravel_zen_rough.png-fd72b7b109e5f28183567f579d403417.s3tc.ctex", "res://.godot/imported/gravel_zen_rough.png-fd72b7b109e5f28183567f579d403417.etc2.ctex"]
 
 [params]
 

@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://0lse3ibbm2nq"
 path.s3tc="res://.godot/imported/f9f4f2fb3eeeefb0b6f0fdef38b0770fd6607640c1c680b8139dd76697e9f9b3.png-486f8808f8a81a14ffab1d23dcd0c338.s3tc.ctex"
+path.etc2="res://.godot/imported/f9f4f2fb3eeeefb0b6f0fdef38b0770fd6607640c1c680b8139dd76697e9f9b3.png-486f8808f8a81a14ffab1d23dcd0c338.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/characters/quaternius/textures/f9f4f2fb3eeeefb0b6f0fdef38b0770fd6607640c1c680b8139dd76697e9f9b3.png"
-dest_files=["res://.godot/imported/f9f4f2fb3eeeefb0b6f0fdef38b0770fd6607640c1c680b8139dd76697e9f9b3.png-486f8808f8a81a14ffab1d23dcd0c338.s3tc.ctex"]
+dest_files=["res://.godot/imported/f9f4f2fb3eeeefb0b6f0fdef38b0770fd6607640c1c680b8139dd76697e9f9b3.png-486f8808f8a81a14ffab1d23dcd0c338.s3tc.ctex", "res://.godot/imported/f9f4f2fb3eeeefb0b6f0fdef38b0770fd6607640c1c680b8139dd76697e9f9b3.png-486f8808f8a81a14ffab1d23dcd0c338.etc2.ctex"]
 
 [params]
 

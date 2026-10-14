@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://do8bbne8e47o3"
 path.s3tc="res://.godot/imported/plaza_tiles_normal.png-6f823cd05771ce976671459a7fb24a3f.s3tc.ctex"
+path.etc2="res://.godot/imported/plaza_tiles_normal.png-6f823cd05771ce976671459a7fb24a3f.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://textures/plaza_tiles_normal.png"
-dest_files=["res://.godot/imported/plaza_tiles_normal.png-6f823cd05771ce976671459a7fb24a3f.s3tc.ctex"]
+dest_files=["res://.godot/imported/plaza_tiles_normal.png-6f823cd05771ce976671459a7fb24a3f.s3tc.ctex", "res://.godot/imported/plaza_tiles_normal.png-6f823cd05771ce976671459a7fb24a3f.etc2.ctex"]
 
 [params]
 

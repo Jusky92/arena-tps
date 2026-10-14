@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://yf850pot3jsx"
 path.s3tc="res://.godot/imported/water_pond_normal.png-cc2bb7a2acecc7eb7dbb1c00c7743a5a.s3tc.ctex"
+path.etc2="res://.godot/imported/water_pond_normal.png-cc2bb7a2acecc7eb7dbb1c00c7743a5a.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://textures/water_pond_normal.png"
-dest_files=["res://.godot/imported/water_pond_normal.png-cc2bb7a2acecc7eb7dbb1c00c7743a5a.s3tc.ctex"]
+dest_files=["res://.godot/imported/water_pond_normal.png-cc2bb7a2acecc7eb7dbb1c00c7743a5a.s3tc.ctex", "res://.godot/imported/water_pond_normal.png-cc2bb7a2acecc7eb7dbb1c00c7743a5a.etc2.ctex"]
 
 [params]
 

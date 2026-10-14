@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://cxeqmr7qoxucg"
 path.s3tc="res://.godot/imported/container_rough.png-96590a6f9a6938f85dd146bcc52acfc0.s3tc.ctex"
+path.etc2="res://.godot/imported/container_rough.png-96590a6f9a6938f85dd146bcc52acfc0.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://textures/container_rough.png"
-dest_files=["res://.godot/imported/container_rough.png-96590a6f9a6938f85dd146bcc52acfc0.s3tc.ctex"]
+dest_files=["res://.godot/imported/container_rough.png-96590a6f9a6938f85dd146bcc52acfc0.s3tc.ctex", "res://.godot/imported/container_rough.png-96590a6f9a6938f85dd146bcc52acfc0.etc2.ctex"]
 
 [params]
 
