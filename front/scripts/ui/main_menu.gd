@@ -214,16 +214,14 @@ func _build_play_page() -> Control:
 	online_box.add_theme_constant_override("separation", 10)
 	online.add_child(online_box)
 	online_box.add_child(UiTheme.label("JOUER EN LIGNE", 14, UiTheme.CYAN, true))
-	var host_button := UiTheme.button("HÉBERGER UNE PARTIE", true, UiTheme.CYAN, 54)
-	host_button.add_theme_font_size_override("font_size", 19)
-	host_button.tooltip_text = "Ce PC devient le serveur : les autres se connectent à son adresse"
-	host_button.pressed.connect(_host_game)
-	online_box.add_child(host_button)
+	var online_help := UiTheme.label("Entre l'adresse affichée par le serveur (ArenaTPS_Server) au démarrage.", 15, UiTheme.MUTED)
+	online_help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	online_box.add_child(online_help)
 
 	var join_row := HBoxContainer.new()
 	join_row.add_theme_constant_override("separation", 10)
 	_address_field = LineEdit.new()
-	_address_field.placeholder_text = "adresse de l'hôte, ex. 192.168.1.20"
+	_address_field.placeholder_text = "adresse du serveur, ex. 192.168.1.20"
 	_address_field.text = _saved_address()
 	_address_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_address_field.text_submitted.connect(func(_t: String) -> void: _join_online())
@@ -257,22 +255,12 @@ func _build_play_page() -> Control:
 
 # --------------------------------------------------------------------------- en ligne
 
-## Héberge une partie sur ce PC et ouvre le salon.
-func _host_game() -> void:
-	Sfx.ui("ui_click")
-	var error := Net.host(Backend.username(), Net.DEFAULT_PORT, 2, 180.0)
-	if not error.is_empty():
-		_online_error.text = error
-		return
-	get_tree().change_scene_to_file(LOBBY)
-
-
-## Rejoint la partie d'un camarade à partir de son adresse (IP ou IP:port).
+## Rejoint le serveur dédié à partir de son adresse (IP ou IP:port).
 func _join_online() -> void:
 	Sfx.ui("ui_click")
 	var address := _address_field.text.strip_edges()
 	if address.is_empty():
-		_online_error.text = "Entre l'adresse de l'hôte (celle affichée sur son écran)."
+		_online_error.text = "Entre l'adresse du serveur (celle affichée par ArenaTPS_Server)."
 		return
 	var port := Net.DEFAULT_PORT
 	if address.contains(":"):
@@ -286,16 +274,21 @@ func _join_online() -> void:
 		_show_online_error(error)
 		return
 	_save_address(_address_field.text.strip_edges())
-	# On reste sur cette page tant que l'hôte n'a pas répondu : le salon ne
+	# On reste sur cette page tant que le serveur n'a pas répondu : le salon ne
 	# s'ouvre que si la connexion a vraiment abouti.
 	_online_error.add_theme_color_override("font_color", UiTheme.CYAN)
 	while Net.is_connecting() and is_inside_tree():
-		_online_error.text = "Connexion à %s:%d…  %d s" % [address, port, ceili(Net.CONNECT_TIMEOUT - Net._connect_elapsed)]
+		_online_error.text = "Connexion à %s:%d…  %d s" % [address, port, ceili(Net.connect_time_left())]
 		await get_tree().create_timer(0.2).timeout
 
 
+## Accepté par le serveur : salon, ou directement la partie si elle a déjà commencé.
 func _on_net_joined() -> void:
-	get_tree().change_scene_to_file(LOBBY)
+	if Net.in_match:
+		GameState.mode = "deathmatch"
+		get_tree().change_scene_to_file(GAME)
+	else:
+		get_tree().change_scene_to_file(LOBBY)
 
 
 func _on_net_failed(reason: String) -> void:

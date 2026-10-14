@@ -1,32 +1,42 @@
 extends Node
-## Multijoueur en ligne (autoload "Net").
+## Multijoueur en ligne (autoload "Net"), commun au client et au serveur dédié.
 ##
-## Modèle retenu pour cette première version jouable à deux :
+##   SERVEUR DÉDIÉ (ArenaTPS_Server, sans fenêtre) = serveur ENet, ne joue pas.
+##   CLIENTS (ArenaTPS)                            = se connectent au serveur par IP.
 ##
-##   HÔTE (le PC de Julien)        = serveur ENet + joueur. On dit « serveur d'écoute ».
-##   CLIENT (le PC d'Elian)        = client lourd qui se connecte par IP.
+## Le même fichier tourne des deux côtés : Godot exige que les fonctions @rpc
+## existent, à l'identique, sur le même nœud (/root/Net) chez tout le monde.
+## `is_server()` dit de quel côté on est.
 ##
-## Qui décide de quoi :
-##   - chaque machine simule SON joueur (déplacement, saut, visée) et envoie son
-##     état aux autres 20 fois par seconde : le jeu reste parfaitement réactif ;
-##   - le tireur détecte ses impacts et envoie les dégâts : `hit()` ;
-##   - l'HÔTE est seul juge du reste : points de vie, éliminations, score,
-##     chronomètre, réapparitions. Il diffuse le résultat à tout le monde.
+## Qui décide de quoi (première étape, voir project-context.md) :
+##   - chaque client simule SON joueur (déplacement, saut, visée) et envoie son
+##     état au serveur 20 fois par seconde ; le serveur le rediffuse aux autres ;
+##   - le tireur détecte ses impacts et les signale : `hit()` ;
+##   - le SERVEUR est seul juge du reste : points de vie, éliminations, score,
+##     chronomètre, réapparitions, bots. Il diffuse le résultat à tout le monde.
+## Plus tard, le serveur simulera tout à partir des commandes des joueurs
+## (PlayerCommands) pour empêcher la triche.
 ##
-## C'est le compromis habituel des petits jeux de tir en LAN : simple, nerveux,
-## suffisant à deux. Un serveur de jeu dédié (celui prévu avec Elian) déplacerait
-## toute la simulation côté serveur pour empêcher la triche ; la séparation
-## entrées / simulation (PlayerCommands) est déjà prête pour ça.
+## Les joueurs sont identifiés par leur `user_id` (compte Auth). Avec le vrai back,
+## le client présente un ticket d'accès que le serveur fait vérifier par la
+## Server List ; en LAN, le ticket est vide et le serveur accepte (voir
+## scripts/server/backend_link.gd).
+##
+## États du serveur (comme dans la Server List) :
+##   idle -> reserved -> in_progress -> ending -> idle
+## En LAN, il n'y a pas de réservation : le premier joueur connecté (le « chef »)
+## règle la partie et la lance, idle -> in_progress.
 ##
 ## Protocole (toutes les fonctions marquées @rpc) :
-##   client -> hôte    hello, set_class, state, hit, request_respawn
-##   hôte   -> clients welcome, lobby, start_match, state, health, died, score, match_over
+##   client -> serveur  hello, set_class, request_settings, request_start, state, hit
+##   serveur -> clients refuse, lobby, start_match, player_joined, player_left,
+##                      states, health, death, respawn, match_over
 ##
 ## Port par défaut : 24567 (UDP). Voir docs/RESEAU.md pour l'ouverture du port.
 
-signal lobby_changed                      ## la liste des joueurs a changé
-signal joined                             ## client : l'hôte nous a acceptés dans le salon
-signal match_starting                     ## l'hôte a lancé la partie
+signal lobby_changed                      ## la liste des joueurs ou les réglages ont changé
+signal joined                             ## client : le serveur nous a acceptés
+signal match_starting                     ## la partie commence (ou on la rejoint en cours)
 signal connection_failed(reason: String)
 signal disconnected(reason: String)
 signal remote_states(sender_id: int, states: Dictionary)
@@ -36,36 +46,55 @@ signal health_updated(peer_id: int, health: int, max_health: int)
 signal player_died(victim_id: int, killer_id: int, weapon: String)
 signal player_respawned(peer_id: int, position: Vector3, yaw: float, class_id: String)
 signal match_over(rows: Array)
+## Serveur : un joueur a passé la vérification d'accès / est parti.
+signal player_accepted(peer_id: int)
+## Serveur : le chef demande le lancement.
+signal start_requested
 
 const DEFAULT_PORT := 24567
+## Joueurs humains par partie (max_players de la Server List).
 const MAX_PLAYERS := 8
 const STATE_HZ := 20.0                    ## envois d'état par seconde
-## Au-delà de ce délai sans réponse de l'hôte, on abandonne avec un diagnostic.
+## Au-delà de ce délai sans réponse, on abandonne (client) ou on coupe (serveur).
 const CONNECT_TIMEOUT := 6.0
 ## Journal réseau, utile pour comprendre un échec de connexion.
 ## Windows : %APPDATA%\Godot\app_userdata\Arena TPS\reseau.log
 ## Linux   : ~/.local/share/godot/app_userdata/Arena TPS/reseau.log
 const LOG_PATH := "user://reseau.log"
 
-## true dès qu'on est en ligne (hôte ou client).
+## true dès qu'on est en ligne (serveur ou client).
 var online := false
-## true si cette machine héberge la partie.
-var hosting := false
-## Pseudo local.
+## Pseudo local (client).
 var pseudo := "Joueur"
-## Joueurs connectés : id de pair -> {name, class_id, kills, deaths, ready, ping}
+## Joueurs de la partie : id de pair -> {name, class_id, kills, deaths, bot, user_id}.
+## Le serveur (pair 1) n'y figure pas : il ne joue pas. Les bots ont un id négatif.
 var players := {}
-## Réglages de la partie, choisis par l'hôte.
+## Réglages de la partie, choisis par le chef.
 var settings := {"bots": 2, "duration": 180.0}
-## true quand la partie est lancée (on n'accepte plus de nouveaux joueurs).
+## Pair qui peut régler et lancer la partie (LAN uniquement, 0 = personne).
+var leader_id := 0
+## idle | reserved | in_progress | ending
+var server_status := "idle"
+## true pendant une partie.
 var in_match := false
+## Temps restant de la partie en cours. Tenu par le serveur ; un client qui
+## rejoint en cours de partie le reçoit avec `start_match`.
+var match_time_left := 0.0
+## Serveur : vérifie le ticket d'un joueur. Reçoit (ticket, user_id annoncé) et
+## renvoie le user_id vérifié, ou "" si l'accès est refusé. Peut être une coroutine.
+var ticket_verifier: Callable = Callable()
+## Serveur : applique les dégâts signalés par un tireur (rempli par server_game.gd).
+var health_provider: Callable = Callable()
 
 var _peer: ENetMultiplayerPeer
+var _serving := false
 var _state_timer := 0.0
 var _last_state := {}
 ## Client : temps écoulé depuis la demande de connexion (-1 = pas en cours).
 var _connect_elapsed := -1.0
 var _target := ""
+## Serveur : pairs connectés qui ne se sont pas encore présentés -> secondes écoulées.
+var _unidentified := {}
 
 
 func _ready() -> void:
@@ -80,42 +109,51 @@ func my_id() -> int:
 	return multiplayer.get_unique_id() if online else 1
 
 
-func is_host() -> bool:
-	return hosting
+## true sur le serveur dédié.
+func is_server() -> bool:
+	return _serving
 
 
-## Ouvre une partie sur cette machine. Renvoie "" si tout va bien, sinon l'erreur.
-func host(player_name: String, port := DEFAULT_PORT, bots := 2, duration := 180.0) -> String:
+## true si ce client est le chef du salon.
+func is_leader() -> bool:
+	return online and not _serving and leader_id == my_id()
+
+
+## Serveur : ouvre l'écoute. Renvoie "" si tout va bien, sinon l'erreur.
+func serve(port := DEFAULT_PORT) -> String:
 	leave()
-	log_line("HÔTE : ouverture du serveur sur le port UDP %d (version %s)" % [port, Backend.BUILD_VERSION])
+	log_line("SERVEUR : ouverture sur le port UDP %d (version %s)" % [port, Backend.BUILD_VERSION])
+	# Deux places de plus que de joueurs : un joueur en trop doit pouvoir se
+	# connecter le temps de recevoir le message « partie pleine ».
 	_peer = ENetMultiplayerPeer.new()
-	var err := _peer.create_server(port, MAX_PLAYERS)
+	var err := _peer.create_server(port, MAX_PLAYERS + 2)
 	if err != OK and err != ERR_ALREADY_IN_USE:
 		# Certains Linux ont l'IPv6 désactivé : on réessaie en IPv4 seul.
-		log_line("HÔTE : échec en IPv4+IPv6 (code %d), nouvel essai en IPv4 seul" % err)
+		log_line("SERVEUR : échec en IPv4+IPv6 (code %d), nouvel essai en IPv4 seul" % err)
 		_peer = ENetMultiplayerPeer.new()
 		_peer.set_bind_ip("0.0.0.0")
-		err = _peer.create_server(port, MAX_PLAYERS)
+		err = _peer.create_server(port, MAX_PLAYERS + 2)
 	if err != OK:
 		_peer = null
-		log_line("HÔTE : impossible d'ouvrir le serveur (code %d)" % err)
-		if err == ERR_ALREADY_IN_USE:
-			return "Le port %d est déjà utilisé sur ce PC (le jeu est peut-être ouvert deux fois)." % port
+		log_line("SERVEUR : impossible d'ouvrir le port (code %d)" % err)
+		# ENet ne dit pas pourquoi il échoue : un port déjà pris donne souvent
+		# ERR_CANT_CREATE plutôt que ERR_ALREADY_IN_USE.
+		if err == ERR_ALREADY_IN_USE or err == ERR_CANT_CREATE:
+			return "Le port %d est déjà utilisé sur ce PC (le serveur est peut-être lancé deux fois)." % port
 		return "Impossible d'ouvrir le serveur (code %d)." % err
-	log_line("HÔTE : en écoute. Adresses à donner : %s" % ", ".join(local_addresses()))
 	multiplayer.multiplayer_peer = _peer
+	# Tout passe par le serveur : les clients ne se parlent jamais directement.
+	(multiplayer as SceneMultiplayer).server_relay = false
 	online = true
-	hosting = true
-	in_match = false
-	pseudo = player_name
-	settings = {"bots": bots, "duration": duration}
-	players = {1: _new_player(player_name, GameState.selected_class.resource_path)}
-	lobby_changed.emit()
+	_serving = true
+	server_status = "idle"
+	log_line("SERVEUR : en écoute. Adresses à donner aux joueurs : %s" % ", ".join(local_addresses()))
 	return ""
 
 
-## Rejoint une partie. `address` = IP ou nom d'hôte de l'hôte.
-func join(address: String, player_name: String, port := DEFAULT_PORT) -> String:
+## Client : rejoint un serveur. `address` = IP ou nom d'hôte du PC serveur.
+## `ticket` = ticket d'accès donné par le back (vide en LAN).
+func join(address: String, player_name: String, port := DEFAULT_PORT, ticket := "") -> String:
 	leave()
 	_target = "%s:%d" % [address, port]
 	log_line("CLIENT : connexion à %s (version %s)" % [_target, Backend.BUILD_VERSION])
@@ -133,17 +171,23 @@ func join(address: String, player_name: String, port := DEFAULT_PORT) -> String:
 		return "Adresse invalide ou injoignable (code %d)." % err
 	multiplayer.multiplayer_peer = _peer
 	online = true
-	hosting = false
-	in_match = false
 	pseudo = player_name
-	players = {}
+	_ticket = ticket
 	_connect_elapsed = 0.0
 	return ""
 
 
-## true pendant qu'un client attend la réponse de l'hôte.
+var _ticket := ""
+
+
+## true pendant qu'un client attend la réponse du serveur.
 func is_connecting() -> bool:
 	return _connect_elapsed >= 0.0
+
+
+## Secondes restantes avant d'abandonner la connexion.
+func connect_time_left() -> float:
+	return maxf(CONNECT_TIMEOUT - _connect_elapsed, 0.0)
 
 
 ## Ajoute une ligne horodatée au journal réseau (et dans la console).
@@ -161,7 +205,7 @@ func log_file_path() -> String:
 	return ProjectSettings.globalize_path(LOG_PATH)
 
 
-## Ferme la connexion (retour au menu, ou déconnexion subie).
+## Ferme la connexion (retour au menu, déconnexion subie, arrêt du serveur).
 func leave() -> void:
 	_connect_elapsed = -1.0
 	if _peer:
@@ -169,10 +213,13 @@ func leave() -> void:
 	_peer = null
 	multiplayer.multiplayer_peer = null
 	online = false
-	hosting = false
+	_serving = false
 	in_match = false
+	server_status = "idle"
+	leader_id = 0
 	players = {}
 	_last_state = {}
+	_unidentified = {}
 
 
 func player_name_of(peer_id: int) -> String:
@@ -192,44 +239,79 @@ func sorted_players() -> Array:
 	return rows
 
 
-func _new_player(name: String, class_id: String) -> Dictionary:
-	return {"name": name, "class_id": class_id, "kills": 0, "deaths": 0, "bot": false}
+func _new_player(name: String, class_id: String, user_id := "") -> Dictionary:
+	return {"name": name, "class_id": class_id, "kills": 0, "deaths": 0, "bot": false, "user_id": user_id}
 
 
-## true si cet identifiant est un bot de l'hôte.
+## true si cet identifiant est un bot (joué par le serveur).
 func is_bot(id: int) -> bool:
 	return id < 0
 
 
-## true si cette machine fait jouer ce personnage (et doit donc envoyer son état).
+## Nombre de joueurs humains (les bots ne comptent pas).
+func human_count() -> int:
+	var count := 0
+	for id in players:
+		if not is_bot(id):
+			count += 1
+	return count
+
+
+## true si cette machine fait jouer ce personnage (et doit donc envoyer son état) :
+## le client son propre joueur, le serveur les bots.
 func controls(id: int) -> bool:
-	return id == my_id() or (hosting and is_bot(id))
+	if _serving:
+		return is_bot(id)
+	return id == my_id()
+
+
+func _lobby_info() -> Dictionary:
+	return {"bots": settings.bots, "duration": settings.duration, "leader_id": leader_id, "status": server_status}
+
+
+func _apply_lobby_info(info: Dictionary) -> void:
+	settings = {"bots": info.get("bots", 2), "duration": info.get("duration", 180.0)}
+	leader_id = info.get("leader_id", 0)
+	server_status = info.get("status", "idle")
 
 
 # =========================================================================== connexion
 
 func _on_peer_connected(id: int) -> void:
-	# Côté hôte uniquement : le client va se présenter avec `hello`.
-	if hosting:
-		log_line("HÔTE : un joueur se connecte (id %d)" % id)
-	if hosting and in_match:
-		# Partie déjà lancée : on refuse poliment.
-		_refuse.rpc_id(id, "La partie a déjà commencé.")
+	if not _serving:
+		return
+	# Le client va se présenter avec `hello` ; sinon il est coupé (voir _process).
+	log_line("SERVEUR : connexion du pair %d" % id)
+	_unidentified[id] = 0.0
 
 
 func _on_peer_disconnected(id: int) -> void:
-	log_line("Joueur %d déconnecté" % id)
+	if not _serving:
+		return
+	_unidentified.erase(id)
+	if not players.has(id):
+		return
+	log_line("SERVEUR : %s est parti (pair %d)" % [player_name_of(id), id])
 	players.erase(id)
+	if leader_id == id:
+		leader_id = _first_human()
 	remote_left.emit(id)
+	if in_match:
+		_player_left.rpc(id)
 	lobby_changed.emit()
-	if hosting:
-		_lobby.rpc(players, settings)
+	_send_lobby()
+
+
+func _first_human() -> int:
+	var ids := players.keys().filter(func(i): return not is_bot(i))
+	ids.sort()
+	return ids[0] if not ids.is_empty() else 0
 
 
 func _on_connected() -> void:
-	# Le réseau passe : on se présente à l'hôte (pseudo, classe, version du jeu).
-	log_line("CLIENT : connexion ENet établie avec %s, présentation à l'hôte" % _target)
-	_hello.rpc_id(1, pseudo, GameState.selected_class.resource_path, Backend.BUILD_VERSION)
+	# Le réseau passe : on se présente au serveur (compte, pseudo, classe, version).
+	log_line("CLIENT : connexion ENet établie avec %s, présentation au serveur" % _target)
+	_hello.rpc_id(1, Backend.user_id(), pseudo, GameState.selected_class.resource_path, _ticket, Backend.BUILD_VERSION)
 
 
 func _on_connection_failed() -> void:
@@ -237,127 +319,251 @@ func _on_connection_failed() -> void:
 
 
 func _on_server_disconnected() -> void:
-	log_line("Connexion avec l'hôte perdue")
+	log_line("Connexion avec le serveur perdue")
 	var was_connecting := is_connecting()
 	leave()
 	if was_connecting:
-		connection_failed.emit("L'hôte a coupé la connexion avant d'accepter (versions différentes ?).")
+		connection_failed.emit("Le serveur a coupé la connexion avant d'accepter.")
 	else:
-		disconnected.emit("L'hôte a fermé la partie.")
+		disconnected.emit("Le serveur a fermé la connexion.")
 
 
-## Aucune réponse de l'hôte : on explique les causes possibles, dans l'ordre.
+## Aucune réponse du serveur : on explique les causes possibles, dans l'ordre.
 func _fail_connection() -> void:
 	var target := _target
 	log_line("CLIENT : aucune réponse de %s après %.0f s" % [target, CONNECT_TIMEOUT])
 	leave()
 	connection_failed.emit(
 		("Aucune réponse de %s.\n" % target)
-		+ "1. L'hôte doit déjà être dans le salon (HÉBERGER).\n"
-		+ "2. L'adresse doit être celle affichée dans SON salon.\n"
-		+ ("3. Son pare-feu doit autoriser le port UDP %d (voir docs/RESEAU.md)." % DEFAULT_PORT))
+		+ "1. Le serveur (ArenaTPS_Server) doit être lancé sur le PC serveur.\n"
+		+ "2. L'adresse doit être une de celles affichées par le serveur au démarrage.\n"
+		+ ("3. Le pare-feu du PC serveur doit autoriser le port UDP %d (voir docs/RESEAU.md)." % DEFAULT_PORT))
 
 
 # =========================================================================== salon
 
-## Client -> hôte : je me présente.
+## Client -> serveur : je me présente.
 @rpc("any_peer", "call_remote", "reliable")
-func _hello(name: String, class_id: String, version: String) -> void:
-	if not hosting:
+func _hello(user_id: String, name: String, class_id: String, ticket: String, version: String) -> void:
+	if not _serving:
 		return
 	var id := multiplayer.get_remote_sender_id()
-	log_line("HÔTE : %s se présente (version %s)" % [name, version])
+	if not _unidentified.has(id):
+		return              # déjà présenté (ou en cours de vérification)
+	_unidentified.erase(id)
+	log_line("SERVEUR : %s se présente (pair %d, version %s)" % [name, id, version])
 	if version != Backend.BUILD_VERSION:
-		_refuse.rpc_id(id, "Versions différentes : l'hôte a la %s, toi la %s. Réexportez le jeu depuis le même code." % [Backend.BUILD_VERSION, version])
+		_kick(id, "Versions différentes : le serveur a la %s, toi la %s. Réexportez le jeu depuis le même code." % [Backend.BUILD_VERSION, version])
 		return
-	if players.size() >= MAX_PLAYERS:
-		_refuse.rpc_id(id, "La partie est pleine (%d joueurs)." % MAX_PLAYERS)
+	if human_count() >= MAX_PLAYERS:
+		_kick(id, "La partie est pleine (%d joueurs)." % MAX_PLAYERS)
 		return
-	players[id] = _new_player(name.left(16), class_id)
+	if server_status == "ending":
+		_kick(id, "La partie se termine, réessaie dans quelques secondes.")
+		return
+	# Vérification du ticket (appel à la Server List avec le vrai back).
+	var verified := user_id
+	if ticket_verifier.is_valid():
+		verified = await ticket_verifier.call(ticket, user_id)
+	if not multiplayer.get_peers().has(id):
+		return              # parti pendant la vérification
+	if verified.is_empty():
+		_kick(id, "Accès refusé : ticket invalide ou expiré.")
+		return
+	for other in players.values():
+		if other.user_id == verified:
+			_kick(id, "Ce compte est déjà connecté à ce serveur.")
+			return
+	if human_count() >= MAX_PLAYERS:
+		_kick(id, "La partie est pleine (%d joueurs)." % MAX_PLAYERS)
+		return
+	players[id] = _new_player(name.left(16), class_id, verified)
+	if leader_id == 0:
+		leader_id = id
+	player_accepted.emit(id)
+	if in_match:
+		# Arrivée en cours de partie : le nouveau reçoit tout, les autres l'ajoutent.
+		_start_match.rpc_id(id, players, _lobby_info(), match_time_left)
+		for other in players:
+			if other != id and not is_bot(other):
+				_player_joined.rpc_id(other, id, players[id])
+		remote_spawned.emit(id, players[id])
 	lobby_changed.emit()
-	_lobby.rpc(players, settings)
+	_send_lobby()
 
 
-## Hôte -> clients : état du salon.
+## Serveur : refuse un joueur avec un message, puis coupe sa connexion.
+func _kick(id: int, reason: String) -> void:
+	log_line("SERVEUR : pair %d refusé : %s" % [id, reason])
+	_refuse.rpc_id(id, reason)
+	get_tree().create_timer(1.0).timeout.connect(func() -> void:
+		if _peer and multiplayer.get_peers().has(id):
+			_peer.disconnect_peer(id))
+
+
+## Serveur : envoie l'état du salon à tous les joueurs.
+func _send_lobby() -> void:
+	if _serving and not players.is_empty():
+		_lobby.rpc(players, _lobby_info())
+
+
+## Serveur -> clients : état du salon.
 @rpc("authority", "call_remote", "reliable")
-func _lobby(list: Dictionary, host_settings: Dictionary) -> void:
+func _lobby(list: Dictionary, info: Dictionary) -> void:
 	players = list
-	settings = host_settings
+	_apply_lobby_info(info)
 	if is_connecting():
 		_connect_elapsed = -1.0
-		log_line("CLIENT : accepté dans le salon (%d joueur(s))" % players.size())
+		log_line("CLIENT : accepté par le serveur (%d joueur(s))" % players.size())
 		joined.emit()
 	lobby_changed.emit()
 
 
 @rpc("authority", "call_remote", "reliable")
 func _refuse(reason: String) -> void:
-	log_line("Refusé par l'hôte : " + reason)
+	log_line("Refusé par le serveur : " + reason)
 	leave()
 	connection_failed.emit(reason)
 
 
-## Changement de classe depuis le salon ou le menu pause.
+## Changement de classe depuis le salon ou le menu pause (appliqué à la
+## prochaine apparition si la partie est en cours).
 func set_class(class_id: String) -> void:
-	if not online:
-		return
-	if hosting:
-		players[1].class_id = class_id
-		lobby_changed.emit()
-		_lobby.rpc(players, settings)
-	else:
+	if online and not _serving:
 		_set_class.rpc_id(1, class_id)
 
 
 @rpc("any_peer", "call_remote", "reliable")
 func _set_class(class_id: String) -> void:
-	if not hosting:
+	if not _serving:
 		return
 	var id := multiplayer.get_remote_sender_id()
 	if players.has(id):
 		players[id].class_id = class_id
-		lobby_changed.emit()
-		_lobby.rpc(players, settings)
+		if not in_match:
+			lobby_changed.emit()
+			_send_lobby()
 
 
-## Hôte : règle le nombre de bots et la durée, puis prévient les clients.
-func update_settings(bots: int, duration: float) -> void:
-	if not hosting:
+## Chef : règle le nombre de bots et la durée.
+func request_settings(bots: int, duration: float) -> void:
+	if is_leader():
+		_request_settings.rpc_id(1, bots, duration)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_settings(bots: int, duration: float) -> void:
+	if not _serving or multiplayer.get_remote_sender_id() != leader_id or in_match:
 		return
-	settings = {"bots": bots, "duration": duration}
+	settings = {"bots": clampi(bots, 0, MAX_PLAYERS - 1), "duration": clampf(duration, 60.0, 600.0)}
 	lobby_changed.emit()
-	_lobby.rpc(players, settings)
+	_send_lobby()
 
 
-## Noms des bots ajoutés par l'hôte pour compléter la partie.
+## Chef : demande le lancement de la partie.
+func request_start() -> void:
+	if is_leader():
+		_request_start.rpc_id(1)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_start() -> void:
+	if _serving and multiplayer.get_remote_sender_id() == leader_id and server_status == "idle":
+		start_requested.emit()
+
+
+## Noms des bots ajoutés par le serveur pour compléter la partie.
 const BOT_NAMES := ["NeoByte", "Gl1tch", "V0LT", "Cipher", "Kairo", "Nova", "Raven", "Hexa"]
 
 
-## Hôte : lance la partie pour tout le monde.
+## Serveur : lance la partie pour tout le monde.
 ## Les bots entrent dans la même liste que les joueurs, avec un identifiant négatif :
-## tout le monde les affiche, mais seul l'hôte les fait jouer.
+## tout le monde les affiche, mais seul le serveur les fait jouer.
 func start_match() -> void:
-	if not hosting:
+	if not _serving or in_match:
 		return
 	for id in players.keys():
-		if id < 0:
+		if is_bot(id):
 			players.erase(id)
+	for id in players:
+		players[id].kills = 0
+		players[id].deaths = 0
 	var bots: int = clampi(settings.get("bots", 0), 0, MAX_PLAYERS - players.size())
 	for i in bots:
 		var cls: ClassData = GameState.CLASSES[i % GameState.CLASSES.size()]
 		players[-(i + 1)] = _new_player(BOT_NAMES[i % BOT_NAMES.size()], cls.resource_path)
 		players[-(i + 1)]["bot"] = true
 	in_match = true
-	_start_match.rpc(players, settings)
+	server_status = "in_progress"
+	match_time_left = settings.get("duration", 180.0)
+	log_line("SERVEUR : partie lancée (%d joueur(s), %d bot(s))" % [human_count(), bots])
+	_start_match.rpc(players, _lobby_info(), match_time_left)
 	match_starting.emit()
 
 
 @rpc("authority", "call_remote", "reliable")
-func _start_match(list: Dictionary, host_settings: Dictionary) -> void:
+func _start_match(list: Dictionary, info: Dictionary, time_left: float) -> void:
 	players = list
-	settings = host_settings
+	_apply_lobby_info(info)
+	match_time_left = time_left
 	in_match = true
-	match_starting.emit()
+	if is_connecting():
+		# Accepté directement dans une partie en cours : le menu principal, qui
+		# attend `joined`, ouvre la partie au lieu du salon (Net.in_match).
+		_connect_elapsed = -1.0
+		log_line("CLIENT : accepté dans une partie en cours (%d joueur(s))" % players.size())
+		joined.emit()
+	else:
+		match_starting.emit()
+
+
+## Serveur -> clients déjà en partie : un joueur arrive en cours de partie.
+@rpc("authority", "call_remote", "reliable")
+func _player_joined(id: int, info: Dictionary) -> void:
+	players[id] = info
+	remote_spawned.emit(id, info)
+	lobby_changed.emit()
+
+
+## Serveur : retire un personnage de la partie (bot remplacé par un joueur).
+func remove_player(id: int) -> void:
+	if not _serving or not players.has(id):
+		return
+	players.erase(id)
+	remote_left.emit(id)
+	_player_left.rpc(id)
+	lobby_changed.emit()
+
+
+## Serveur -> clients : un joueur (ou un bot) quitte la partie.
+@rpc("authority", "call_remote", "reliable")
+func _player_left(id: int) -> void:
+	players.erase(id)
+	remote_left.emit(id)
+	lobby_changed.emit()
+
+
+## Serveur : change d'état (idle, reserved, in_progress, ending) et prévient.
+func set_status(status: String) -> void:
+	if not _serving or status == server_status:
+		return
+	server_status = status
+	log_line("SERVEUR : état %s" % status)
+	_send_lobby()
+
+
+## Serveur : fin de partie, retour au salon. Les bots sont retirés.
+func back_to_lobby() -> void:
+	if not _serving:
+		return
+	in_match = false
+	for id in players.keys():
+		if is_bot(id):
+			players.erase(id)
+	server_status = "idle"
+	log_line("SERVEUR : retour au salon")
+	lobby_changed.emit()
+	_send_lobby()
 
 
 # =========================================================================== en partie
@@ -368,63 +574,79 @@ func _process(delta: float) -> void:
 		if _connect_elapsed > CONNECT_TIMEOUT:
 			_fail_connection()
 		return
+	if _serving:
+		for id in _unidentified.keys():
+			_unidentified[id] += delta
+			if _unidentified[id] > CONNECT_TIMEOUT:
+				log_line("SERVEUR : pair %d coupé (pas de présentation)" % id)
+				_unidentified.erase(id)
+				_peer.disconnect_peer(id)
 	if not online or not in_match or _last_state.is_empty():
 		return
 	_state_timer -= delta
 	if _state_timer <= 0.0:
 		_state_timer = 1.0 / STATE_HZ
-		_state.rpc(_last_state)
+		if _serving:
+			_states.rpc(_last_state)
+		else:
+			_state.rpc_id(1, _last_state)
 
 
-## Appelé par la scène de jeu à chaque image : états des personnages que cette
-## machine fait jouer (son joueur, plus les bots si c'est l'hôte).
-## Clés = identifiants (peer pour les joueurs, négatif pour les bots).
+## Appelé par la scène de jeu à chaque image : le client donne l'état de son
+## joueur, le serveur celui de tous les personnages (bots et joueurs).
+## Clés = identifiants (pair pour les joueurs, négatif pour les bots).
 func publish_state(states: Dictionary) -> void:
 	_last_state = states
 
 
-## États reçus — envoi NON fiable : si un paquet se perd, le suivant (20 ms plus
-## tard) le remplace, inutile de le retransmettre.
+## Client -> serveur : état de mon joueur. Envoi NON fiable : si un paquet se
+## perd, le suivant (50 ms plus tard) le remplace, inutile de le retransmettre.
 @rpc("any_peer", "call_remote", "unreliable_ordered")
 func _state(states: Dictionary) -> void:
-	remote_states.emit(multiplayer.get_remote_sender_id(), states)
+	if not _serving:
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if states.has(id) and players.has(id):
+		remote_states.emit(id, {id: states[id]})   # un client ne parle que pour lui
 
 
-## Le tireur signale un impact. Seul l'hôte applique les dégâts.
-func hit(target_id: int, damage: int, weapon: String) -> void:
+## Serveur -> clients : états de tous les personnages.
+@rpc("authority", "call_remote", "unreliable_ordered")
+func _states(states: Dictionary) -> void:
+	remote_states.emit(1, states)
+
+
+## Le tireur signale un impact. Seul le serveur applique les dégâts.
+## `shooter_id` sert au serveur quand ce sont ses bots qui tirent ; un client
+## est toujours le tireur de ses propres impacts.
+func hit(target_id: int, damage: int, weapon: String, shooter_id: int) -> void:
 	if not online or not in_match:
 		return
-	if hosting:
-		_apply_damage(target_id, damage, 1, weapon)
+	if _serving:
+		_apply_damage(target_id, damage, shooter_id, weapon)
 	else:
 		_hit.rpc_id(1, target_id, damage, weapon)
 
 
 @rpc("any_peer", "call_remote", "reliable")
 func _hit(target_id: int, damage: int, weapon: String) -> void:
-	if not hosting:
-		return
-	_apply_damage(target_id, damage, multiplayer.get_remote_sender_id(), weapon)
-
-
-## Côté hôte : applique les dégâts et diffuse le résultat.
-## `health_of` est rempli par la scène de jeu (voir game.gd).
-var health_provider: Callable = Callable()
+	var shooter := multiplayer.get_remote_sender_id()
+	if _serving and players.has(shooter):
+		_apply_damage(target_id, damage, shooter, weapon)
 
 
 func _apply_damage(target_id: int, damage: int, shooter_id: int, weapon: String) -> void:
-	if not hosting or not health_provider.is_valid():
-		return
-	health_provider.call(target_id, damage, shooter_id, weapon)
+	if _serving and in_match and health_provider.is_valid():
+		health_provider.call(target_id, damage, shooter_id, weapon)
 
 
-## Hôte -> tous : nouvelle valeur de vie d'un joueur.
+## Serveur -> tous : nouvelle valeur de vie d'un joueur.
 @rpc("authority", "call_local", "reliable")
 func push_health(peer_id: int, health: int, max_health: int) -> void:
 	health_updated.emit(peer_id, health, max_health)
 
 
-## Hôte -> tous : élimination.
+## Serveur -> tous : élimination.
 @rpc("authority", "call_local", "reliable")
 func push_death(victim_id: int, killer_id: int, weapon: String) -> void:
 	if players.has(victim_id):
@@ -435,7 +657,7 @@ func push_death(victim_id: int, killer_id: int, weapon: String) -> void:
 	lobby_changed.emit()
 
 
-## Hôte -> tous : réapparition (position décidée par l'hôte).
+## Serveur -> tous : réapparition (position et classe décidées par le serveur).
 @rpc("authority", "call_local", "reliable")
 func push_respawn(peer_id: int, position: Vector3, yaw: float, class_id: String) -> void:
 	if players.has(peer_id):
@@ -443,30 +665,13 @@ func push_respawn(peer_id: int, position: Vector3, yaw: float, class_id: String)
 	player_respawned.emit(peer_id, position, yaw, class_id)
 
 
-## Hôte -> tous : fin de partie avec le classement.
+## Serveur -> tous : fin de partie avec le classement.
 @rpc("authority", "call_local", "reliable")
 func push_match_over(rows: Array) -> void:
 	in_match = false
+	if _serving:
+		server_status = "ending"
 	match_over.emit(rows)
-
-
-## Client -> hôte : je suis mort, je demande à réapparaître (avec ma classe).
-func request_respawn(class_id: String) -> void:
-	if not online:
-		return
-	if hosting:
-		respawn_requested.emit(1, class_id)
-	else:
-		_request_respawn.rpc_id(1, class_id)
-
-
-signal respawn_requested(peer_id: int, class_id: String)
-
-
-@rpc("any_peer", "call_remote", "reliable")
-func _request_respawn(class_id: String) -> void:
-	if hosting:
-		respawn_requested.emit(multiplayer.get_remote_sender_id(), class_id)
 
 
 # =========================================================================== adresses
@@ -474,7 +679,7 @@ func _request_respawn(class_id: String) -> void:
 ## Adresses IPv4 utiles de cette machine, les plus probables en premier.
 ##
 ## Un PC Windows en expose souvent une dizaine (Wi-Fi, Ethernet, WSL, VirtualBox,
-## Hyper-V, cartes sans adresse valide…). On ne garde que celles qu'un camarade
+## Hyper-V, cartes sans adresse valide…). On ne garde que celles qu'un joueur
 ## peut vraiment utiliser, dans cet ordre :
 ##   1. Tailscale / ZeroTier (100.x)  : réseau privé, marche depuis n'importe où
 ##   2. réseau local classique (192.168.x)

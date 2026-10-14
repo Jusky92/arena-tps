@@ -43,7 +43,7 @@ func play(sound: String, volume_db := 0.0, pitch := 1.0) -> void:
 
 
 func play_at(sound: String, position: Vector3, volume_db := 0.0, pitch := 1.0) -> void:
-	if not SOUNDS.has(sound) or _voices >= MAX_VOICES:
+	if Effects.headless() or not SOUNDS.has(sound) or _voices >= MAX_VOICES:
 		return
 	var scene := get_tree().current_scene
 	if scene == null or not scene is Node3D:
@@ -70,7 +70,7 @@ func ability_sound(ability: int) -> String:
 
 
 func _play_2d(sound: String, bus: String, volume_db: float, pitch: float) -> void:
-	if not SOUNDS.has(sound) or _voices >= MAX_VOICES:
+	if Effects.headless() or not SOUNDS.has(sound) or _voices >= MAX_VOICES:
 		return
 	var p := AudioStreamPlayer.new()
 	p.stream = SOUNDS[sound]

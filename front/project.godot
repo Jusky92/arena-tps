@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Arena TPS"
-run/main_scene="res://scenes/auth.tscn"
+run/main_scene="res://scenes/boot.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [autoload]

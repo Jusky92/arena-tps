@@ -53,6 +53,12 @@ func username() -> String:
 	return user.get("username", "Joueur")
 
 
+## Identifiant du compte (le `sub` du JWT dans le vrai back) : c'est lui qui
+## identifie le joueur auprès du serveur de jeu et dans les résultats de match.
+func user_id() -> String:
+	return user.get("user_id", "")
+
+
 # =========================================================================== Auth
 
 ## Inscription : crée le compte (non vérifié) et "envoie" un code par e-mail.
@@ -291,14 +297,10 @@ func _error(message: String) -> Dictionary:
 	return {"ok": false, "error": message}
 
 
+## Aléatoire à chaque session : deux clients lancés sur le même PC ne doivent
+## pas recevoir le même identifiant (le serveur de jeu refuse un compte déjà connecté).
 func _fake_uuid() -> String:
-	var hex := "0123456789abcdef"
-	var s := ""
-	for i in 32:
-		s += hex[_rng.randi_range(0, 15)]
-		if i in [7, 11, 15, 19]:
-			s += "-"
-	return s
+	return Uuid.v4()
 
 
 func _load_stats() -> void:

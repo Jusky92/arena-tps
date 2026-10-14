@@ -6,9 +6,10 @@ extends Node3D
 ##                 Le résultat est envoyé au back (équivalent de match.finished).
 ##   "training"    Entraînement : le joueur seul avec les mannequins, sans limite de temps.
 ##
-## Le match à mort se joue hors ligne (contre des bots) ou EN LIGNE : voir
-## scripts/net/net.gd. En ligne, chaque machine simule son propre joueur et
-## l'hôte arbitre la vie, les éliminations, le chronomètre et les réapparitions.
+## Le match à mort se joue hors ligne (contre des bots) ou EN LIGNE sur un serveur
+## dédié : voir scripts/net/net.gd. En ligne, chaque client simule son propre
+## joueur ; le serveur (scripts/server/server_game.gd) fait jouer les bots et
+## arbitre la vie, les éliminations, le chronomètre et les réapparitions.
 ##
 ## Échap ouvre le menu pause du joueur local : la partie continue pour les autres
 ## (bots, futurs joueurs en ligne) ; seul le joueur local perd le contrôle de son
@@ -16,11 +17,11 @@ extends Node3D
 ##
 ## Chaque apparition donne quelques secondes de protection (voir player.gd).
 ##
-## La map est une scène à part (scenes/maps/) : le futur serveur de jeu pourra
-## charger exactement la même. Les bots utilisent un maillage de navigation calculé
-## au chargement à partir des collisions de la map.
+## La map est une scène à part (scenes/maps/) : le serveur dédié charge exactement
+## la même. Hors ligne, les bots utilisent un maillage de navigation calculé au
+## chargement à partir des collisions de la map (MatchRules.bake_navigation).
 
-const RESPAWN_DELAY := 3.0
+const LOBBY := "res://scenes/lobby.tscn"
 const MapScene := preload("res://scenes/maps/arena.tscn")
 const PlayerScene := preload("res://scenes/player.tscn")
 const TargetScene := preload("res://scenes/target_dummy.tscn")
@@ -47,7 +48,7 @@ var _respawns := {}                     # joueur -> temps restant avant réappar
 var _match_time := 0.0
 var _ping := randi_range(7, 14)          # ping simulé du joueur local
 var _pending_class: ClassData = null    # classe choisie pour la prochaine apparition
-var _online := false                    # partie en réseau (voir Net)
+var _online := false                    # partie sur le serveur dédié (voir Net)
 var _net_nodes := {}                    # identifiant réseau -> personnage
 
 
@@ -57,7 +58,7 @@ func _ready() -> void:
 	add_child(map)
 	_ui = MatchUIScript.new()
 	add_child(_ui)
-	_ui.play_again.connect(func() -> void: get_tree().reload_current_scene())
+	_ui.play_again.connect(_play_again)
 	_ui.back_to_menu.connect(_go_to_menu)
 
 	_pause = PauseMenuScript.new()
@@ -76,7 +77,8 @@ func _ready() -> void:
 			_spawn_targets()
 			_ui.hide_timer()
 		else:
-			_bake_navigation()
+			nav_map = MatchRules.bake_navigation(self, map)
+			roam_points = MatchRules.roam_points()
 			for i in GameState.bot_count:
 				var cls: ClassData = GameState.CLASSES[randi() % GameState.CLASSES.size()]
 				_spawn_player(cls, BOT_NAMES[i % BOT_NAMES.size()], false)
@@ -88,32 +90,27 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _online:
 		_publish_states()
-	# Réapparitions. En ligne, c'est l'hôte qui décide : les clients attendent.
+	# Réapparitions. En ligne, c'est le serveur qui décide : le compte à rebours
+	# ne sert qu'à l'affichage, la réapparition arrive par le réseau.
 	for p in _respawns.keys():
 		_respawns[p] -= delta
 		if p == player:
 			hud.set_respawn_countdown(_respawns[p])
 		if _respawns[p] <= 0.0:
 			_respawns.erase(p)
-			if _online:
-				if Net.is_host():
-					_net_respawn(p)
-				elif p == player:
-					var wanted: ClassData = _pending_class if _pending_class else p.class_data
-					Net.request_respawn(wanted.resource_path)
-			elif _running or _mode == "training":
+			if not _online and (_running or _mode == "training"):
 				_respawn(p)
 
 	if _mode == "deathmatch":
 		if _running:
-			# Hors ligne, ou chez l'hôte : le temps s'écoule ici.
-			if not _online or Net.is_host():
-				_time_left -= delta
+			# En ligne, le chronomètre ne sert qu'à l'affichage : c'est le serveur
+			# qui annonce la fin de la partie.
+			_time_left = maxf(_time_left - delta, 0.0)
 			_match_time += delta
 			var leader: Dictionary = _scoreboard_rows()[0]
 			_ui.set_time(_time_left, leader.name, leader.kills)
-			if _time_left <= 0.0 and (not _online or Net.is_host()):
-				_end_match()
+			if _time_left <= 0.0 and not _online:
+				_finish_match()
 		var show_board: bool = _running and not _pause.is_open() and Input.is_action_pressed("scoreboard")
 		_ui.show_scoreboard(_scoreboard_rows(), show_board, _server_subtitle())
 
@@ -132,6 +129,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseButton and event.pressed and not _pause.is_open() \
 			and (_running or _mode == "training") and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+## En ligne, on reste connecté au serveur et on retourne au salon.
+func _play_again() -> void:
+	if _online and Net.online:
+		get_tree().change_scene_to_file(LOBBY)
+	else:
+		get_tree().reload_current_scene()
 
 
 func _go_to_menu() -> void:
@@ -208,21 +213,20 @@ func _replace_local_player(cls: ClassData) -> void:
 # ---------------------------------------------------------------- Partie en ligne
 #
 # Répartition des rôles (voir scripts/net/net.gd) :
-#   - chaque machine simule SON joueur et envoie son état 20 fois par seconde ;
-#   - l'hôte fait jouer les bots et les diffuse de la même façon ;
-#   - l'hôte arbitre : vie, éliminations, score, chronomètre, réapparitions.
+#   - chaque client simule SON joueur et envoie son état 20 fois par seconde ;
+#   - le serveur fait jouer les bots et rediffuse l'état de tout le monde ;
+#   - le serveur arbitre : vie, éliminations, score, chronomètre, réapparitions.
 
-## Crée la partie en réseau à partir de la liste de joueurs reçue du salon.
+## Crée la partie en réseau à partir de la liste de joueurs reçue du serveur.
 func _start_online_match() -> void:
-	if Net.is_host():
-		_bake_navigation()   # seul l'hôte a besoin du maillage : il fait jouer les bots
 	for id in Net.players:
 		_spawn_net_player(id)
 	player = _net_nodes.get(Net.my_id())
 	if player:
 		player.camera.make_current()   # toujours MA caméra, quel que soit l'ordre d'apparition
 		hud.bind(player)
-	_time_left = Net.settings.get("duration", 180.0)
+	# Si on rejoint une partie en cours, le serveur donne le temps restant.
+	_time_left = Net.match_time_left
 	_running = true
 
 	Net.remote_states.connect(_on_remote_states)
@@ -230,15 +234,14 @@ func _start_online_match() -> void:
 	Net.player_respawned.connect(_on_net_respawn)
 	Net.health_updated.connect(_on_net_health)
 	Net.match_over.connect(_on_net_match_over)
+	Net.remote_spawned.connect(_on_net_joined)
 	Net.remote_left.connect(_on_net_left)
 	Net.disconnected.connect(_on_net_disconnected)
-	if Net.is_host():
-		# L'hôte applique les dégâts signalés par les tireurs.
-		Net.health_provider = _apply_net_damage
-		Net.respawn_requested.connect(_on_net_respawn_requested)
 
 
 ## Crée le personnage d'un joueur (ou d'un bot) de la partie en réseau.
+## Seul MON joueur est simulé ici : les autres, bots compris, sont des pantins
+## qui suivent l'état diffusé par le serveur.
 func _spawn_net_player(id: int) -> CharacterBody3D:
 	var info: Dictionary = Net.players.get(id, {})
 	var cls: ClassData = load(info.get("class_id", GameState.CLASSES[0].resource_path))
@@ -248,17 +251,10 @@ func _spawn_net_player(id: int) -> CharacterBody3D:
 	p.player_name = info.get("name", "Joueur")
 	p.is_local = is_me
 	p.peer_id = id
-	# Bots : simulés par l'hôte, simples pantins chez les clients.
-	var simulated_here := is_me or (Net.is_host() and Net.is_bot(id))
-	p.is_remote = not simulated_here
-	if Net.is_host() and Net.is_bot(id):
-		var brain := BotBrain.new()
-		brain.game = self
-		brain.skill = randf_range(0.35, 0.75)
-		p.brain = brain
+	p.is_remote = not is_me
 	p.name = "Net_%d" % id
 	add_child(p)
-	p.global_transform = _best_spawn(p)
+	p.global_transform = MatchRules.best_spawn(map, players, p)
 	p.died.connect(_on_player_died.bind(p))
 	p.add_to_group("players")
 	p.start_spawn_protection()
@@ -269,17 +265,15 @@ func _spawn_net_player(id: int) -> CharacterBody3D:
 	return p
 
 
-## Envoie l'état des personnages que cette machine fait jouer.
+## Envoie l'état de mon joueur au serveur.
 func _publish_states() -> void:
-	var states := {}
-	for id in _net_nodes:
-		var node: CharacterBody3D = _net_nodes[id]
-		if is_instance_valid(node) and Net.controls(id):
-			states[id] = node.net_state()
-	Net.publish_state(states)
+	var id := Net.my_id()
+	var node = _net_nodes.get(id)
+	if is_instance_valid(node):
+		Net.publish_state({id: node.net_state()})
 
 
-## États reçus d'une autre machine.
+## États diffusés par le serveur.
 func _on_remote_states(_sender_id: int, states: Dictionary) -> void:
 	for id in states:
 		var node = _net_nodes.get(id)
@@ -287,20 +281,7 @@ func _on_remote_states(_sender_id: int, states: Dictionary) -> void:
 			node.apply_net_state(states[id])
 
 
-## HÔTE : un tireur signale un impact. On applique les dégâts et on diffuse.
-func _apply_net_damage(target_id: int, damage: int, shooter_id: int, weapon: String) -> void:
-	var node = _net_nodes.get(target_id)
-	if not is_instance_valid(node) or not node.alive or node.is_protected():
-		return
-	if node.is_shielded():
-		damage = maxi(int(round(damage * node.class_data.ability_strength)), 1)
-	node.health = maxi(node.health - damage, 0)
-	Net.push_health.rpc(target_id, node.health, node.class_data.max_health)
-	if node.health == 0:
-		Net.push_death.rpc(target_id, shooter_id, weapon)
-
-
-## Nouvelle valeur de vie reçue (diffusée par l'hôte).
+## Nouvelle valeur de vie reçue (diffusée par le serveur).
 func _on_net_health(peer_id: int, health: int, max_health: int) -> void:
 	var node = _net_nodes.get(peer_id)
 	if not is_instance_valid(node):
@@ -313,7 +294,7 @@ func _on_net_health(peer_id: int, health: int, max_health: int) -> void:
 	node.health_changed.emit(health, max_health)
 
 
-## Élimination annoncée par l'hôte : animation, fil des éliminations, écran de mort.
+## Élimination annoncée par le serveur : animation, fil des éliminations, écran de mort.
 func _on_net_death(victim_id: int, killer_id: int, weapon: String) -> void:
 	var victim = _net_nodes.get(victim_id)
 	if not is_instance_valid(victim):
@@ -328,32 +309,13 @@ func _on_net_death(victim_id: int, killer_id: int, weapon: String) -> void:
 		Sfx.play("kill", -2.0)
 	if victim_id == Net.my_id():
 		hud.show_death(killer_name if killer_name != "Arène" else "")
-	# Compte à rebours pour les personnages dont cette machine s'occupe
-	# (mon joueur, et les bots si je suis l'hôte).
-	if victim_id == Net.my_id() or (Net.is_host() and Net.controls(victim_id)):
-		_respawns[victim] = RESPAWN_DELAY
+		# Compte à rebours affiché ; la réapparition viendra du serveur.
+		_respawns[victim] = MatchRules.RESPAWN_DELAY
+	if victim.has_node("NameTag"):
+		victim.get_node("NameTag").visible = false
 
 
-## HÔTE : un client demande à réapparaître.
-func _on_net_respawn_requested(peer_id: int, class_id: String) -> void:
-	var node = _net_nodes.get(peer_id)
-	if not is_instance_valid(node):
-		return
-	var t := _best_spawn(node)
-	Net.push_respawn.rpc(peer_id, t.origin, t.basis.get_euler().y, class_id)
-
-
-## HÔTE : fait réapparaître un personnage qu'il contrôle (lui-même ou un bot).
-func _net_respawn(p: CharacterBody3D) -> void:
-	var id: int = p.peer_id
-	var class_id: String = p.class_data.resource_path
-	if p == player and _pending_class:
-		class_id = _pending_class.resource_path
-	var t := _best_spawn(p)
-	Net.push_respawn.rpc(id, t.origin, t.basis.get_euler().y, class_id)
-
-
-## Réapparition annoncée par l'hôte (pour tout le monde).
+## Réapparition annoncée par le serveur (pour tout le monde).
 func _on_net_respawn(peer_id: int, position: Vector3, yaw: float, class_id: String) -> void:
 	var node = _net_nodes.get(peer_id)
 	if not is_instance_valid(node):
@@ -389,23 +351,34 @@ func _replace_net_player(peer_id: int, class_id: String) -> CharacterBody3D:
 	return fresh
 
 
-## Un joueur s'est déconnecté : on retire son personnage.
+## Un joueur arrive en cours de partie.
+func _on_net_joined(peer_id: int, _info: Dictionary) -> void:
+	if _net_nodes.has(peer_id):
+		return
+	_spawn_net_player(peer_id)
+	_ui.show_banner("%s a rejoint la partie" % Net.player_name_of(peer_id), UiTheme.MUTED)
+
+
+## Un joueur s'est déconnecté (ou un bot lui a cédé sa place) : on retire son personnage.
 func _on_net_left(peer_id: int) -> void:
 	var node = _net_nodes.get(peer_id)
-	if is_instance_valid(node):
-		players.erase(node)
-		node.queue_free()
+	if not is_instance_valid(node):
+		_net_nodes.erase(peer_id)
+		return
+	players.erase(node)
+	_respawns.erase(node)
+	_ui.show_banner("%s a quitté la partie" % node.player_name, UiTheme.MUTED)
+	node.queue_free()
 	_net_nodes.erase(peer_id)
-	_ui.show_banner("%s a quitté la partie" % Net.player_name_of(peer_id), UiTheme.MUTED)
 
 
-## Fin de partie annoncée par l'hôte.
+## Fin de partie annoncée par le serveur.
 func _on_net_match_over(_rows: Array) -> void:
 	if _running:
 		_finish_match()
 
 
-## Tableau des scores en ligne : les compteurs tenus par l'hôte font foi.
+## Tableau des scores en ligne : les compteurs tenus par le serveur font foi.
 func _net_scoreboard_rows() -> Array:
 	var rows := []
 	for entry in Net.sorted_players():
@@ -421,7 +394,7 @@ func _net_scoreboard_rows() -> Array:
 	return rows
 
 
-## L'hôte a fermé la partie ou la connexion est tombée.
+## Le serveur a fermé la connexion, ou elle est tombée.
 func _on_net_disconnected(reason: String) -> void:
 	_running = false
 	_ui.show_banner(reason, UiTheme.RED)
@@ -443,7 +416,7 @@ func _spawn_player(cls: ClassData, display_name: String, local: bool) -> Charact
 		brain.skill = randf_range(0.35, 0.75)
 		p.brain = brain
 	add_child(p)
-	p.global_transform = _best_spawn(p)
+	p.global_transform = MatchRules.best_spawn(map, players, p)
 	p.died.connect(_on_player_died.bind(p))
 	p.add_to_group("players")   # utilisé par les caméras et capteurs de la map
 	p.start_spawn_protection()
@@ -468,25 +441,11 @@ func _add_name_tag(p: CharacterBody3D) -> void:
 	p.add_child(tag)
 
 
-## Point d'apparition le plus éloigné des adversaires vivants (un peu de hasard).
-func _best_spawn(for_player: Node) -> Transform3D:
-	var spawns := map.get_spawn_transforms()
-	var scored := []
-	for t in spawns:
-		var nearest := INF
-		for other in players:
-			if other != for_player and other.alive:
-				nearest = minf(nearest, t.origin.distance_to(other.global_position))
-		scored.append([nearest + randf() * 8.0, t])
-	scored.sort_custom(func(a, b): return a[0] > b[0])
-	return scored[0][1]
-
-
 func _respawn(p: CharacterBody3D) -> void:
 	if p == player and _pending_class:
 		_replace_local_player(_pending_class)
 		return
-	var t := _best_spawn(p)
+	var t := MatchRules.best_spawn(map, players, p)
 	p.respawn(t.origin, t.basis.get_euler().y)
 	if p.brain:
 		p.brain.reset()
@@ -498,8 +457,8 @@ func _respawn(p: CharacterBody3D) -> void:
 
 func _on_player_died(killer: Node, victim: CharacterBody3D) -> void:
 	if _online:
-		return      # en ligne, l'hôte annonce les éliminations (voir _on_net_death)
-	_respawns[victim] = RESPAWN_DELAY
+		return      # en ligne, le serveur annonce les éliminations (voir _on_net_death)
+	_respawns[victim] = MatchRules.RESPAWN_DELAY
 	if victim.has_node("NameTag"):
 		victim.get_node("NameTag").visible = false
 	var killer_name := "Arène"
@@ -537,18 +496,9 @@ func _scoreboard_rows() -> Array:
 
 func _server_subtitle() -> String:
 	if _online:
-		var role := "hôte" if Net.is_host() else "client"
-		return "Partie en ligne (%s) · %d joueurs · NEO-EDO" % [role, Net.players.size()]
+		return "Serveur dédié · %d joueurs · NEO-EDO" % Net.players.size()
 	var server: Dictionary = Backend.current_server
 	return "%s · NEO-EDO" % server.get("name", "Serveur local")
-
-
-func _end_match() -> void:
-	if _online:
-		if Net.is_host():
-			Net.push_match_over.rpc(_net_scoreboard_rows())
-		return       # l'affichage se fait à la réception (voir _on_net_match_over)
-	_finish_match()
 
 
 func _finish_match() -> void:
@@ -585,32 +535,3 @@ func _spawn_targets() -> void:
 		target.global_position = point
 		target.rotation.y = randf() * TAU
 		index += 1
-
-
-# ---------------------------------------------------------------- Navigation des bots
-
-## Calcule le maillage de navigation (zones où l'on peut marcher) à partir des
-## collisions de la map, puis l'enregistre auprès du serveur de navigation.
-func _bake_navigation() -> void:
-	var navmesh := NavigationMesh.new()
-	navmesh.agent_radius = 0.5
-	navmesh.agent_height = 1.75
-	navmesh.agent_max_climb = 0.25
-	navmesh.agent_max_slope = 46.0
-	navmesh.cell_size = 0.25
-	navmesh.cell_height = 0.25
-	navmesh.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
-	navmesh.filter_baking_aabb = AABB(Vector3(-61, -1, -61), Vector3(122, 16, 122))
-	var source := NavigationMeshSourceGeometryData3D.new()
-	NavigationServer3D.parse_source_geometry_data(navmesh, source, map)
-	NavigationServer3D.bake_from_source_geometry_data(navmesh, source)
-	var region := NavigationRegion3D.new()
-	region.navigation_mesh = navmesh
-	add_child(region)
-	nav_map = get_world_3d().navigation_map
-
-	roam_points = []
-	for p in ArenaMap.SPAWN_POINTS:
-		roam_points.append(p)
-	for p in ArenaMap.TARGET_POINTS:
-		roam_points.append(p)

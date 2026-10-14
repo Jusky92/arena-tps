@@ -1,16 +1,22 @@
 extends Control
-## Salon d'une partie en ligne (scenes/lobby.tscn).
+## Salon du serveur dédié (scenes/lobby.tscn), entre deux parties.
 ##
 ## Deux rôles :
-##   HÔTE   — il voit l'adresse à donner à ses camarades, règle le nombre de bots
-##            et la durée, puis lance la partie pour tout le monde.
-##   CLIENT — il attend que l'hôte lance ; il peut changer de classe avant.
+##   CHEF   — le premier joueur connecté : il règle le nombre de bots et la durée,
+##            puis lance la partie pour tout le monde. S'il part, le suivant prend sa place.
+##   JOUEUR — il voit les réglages et attend le lancement ; il peut changer de classe.
 ##
-## Tout passe par l'autoload Net (scripts/net/net.gd).
+## Tout passe par l'autoload Net (scripts/net/net.gd) ; le serveur fait foi.
 
 const MAIN_MENU := "res://scenes/main_menu.tscn"
 const GAME := "res://scenes/game.tscn"
 const CLASS_SELECT := "res://scenes/class_select.tscn"
+const STATUS_TEXT := {
+	"idle": "En attente du lancement.",
+	"reserved": "Réservé pour un groupe.",
+	"in_progress": "Partie en cours.",
+	"ending": "Fin de partie, retour au salon dans quelques secondes.",
+}
 
 var _players_box: VBoxContainer
 var _status: Label
@@ -19,9 +25,14 @@ var _bots_label: Label
 var _bots_slider: HSlider
 var _duration_label: Label
 var _duration_slider: HSlider
+var _server_label: Label
 
 
 func _ready() -> void:
+	if Net.in_match:
+		# Une nouvelle partie a commencé pendant qu'on regardait l'écran de fin.
+		_on_match_starting.call_deferred()
+		return
 	theme = UiTheme.get_theme()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	add_child(UiTheme.background())
@@ -43,9 +54,9 @@ func _exit_tree() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		_leave()
-	elif event.is_action_pressed("ui_accept") and Net.is_host():
+	elif event.is_action_pressed("ui_accept") and Net.is_leader():
 		Sfx.ui("ui_click")
-		Net.start_match()
+		Net.request_start()
 
 
 # ---------------------------------------------------------------- Construction
@@ -114,8 +125,7 @@ func _build() -> void:
 	scrolled.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(scrolled)
 	scrolled.add_child(_build_connection_panel())
-	if Net.is_host():
-		scrolled.add_child(_build_settings_panel())
+	scrolled.add_child(_build_settings_panel())
 
 	_status = UiTheme.label("", 17, UiTheme.MUTED)
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -125,47 +135,24 @@ func _build() -> void:
 	_start_button.add_theme_font_size_override("font_size", 20)
 	_start_button.pressed.connect(func() -> void:
 		Sfx.ui("ui_click")
-		Net.start_match())
+		Net.request_start())
 	right.add_child(_start_button)
 
 
-## Adresse de connexion (hôte) ou adresse rejointe (client).
+## Serveur rejoint et son état.
 func _build_connection_panel() -> Control:
 	var panel := UiTheme.panel()
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
 	panel.add_child(box)
-	if Net.is_host():
-		box.add_child(UiTheme.label("TON SERVEUR", 15, UiTheme.MUTED, true))
-		box.add_child(UiTheme.label("Donne une de ces adresses à tes camarades, avec le port %d." % Net.DEFAULT_PORT, 16, UiTheme.TEXT))
-		for address in Net.local_addresses():
-			var row := HBoxContainer.new()
-			row.add_theme_constant_override("separation", 10)
-			var field := LineEdit.new()
-			field.text = "%s:%d" % [address, Net.DEFAULT_PORT]
-			field.editable = false
-			field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			row.add_child(field)
-			var copy := UiTheme.button("COPIER", false, UiTheme.CYAN, 38)
-			copy.pressed.connect(func() -> void:
-				DisplayServer.clipboard_set(field.text)
-				copy.text = "COPIÉ"
-				Sfx.ui("ui_click"))
-			row.add_child(copy)
-			box.add_child(row)
-		var help := UiTheme.label(
-			"Sur le même réseau (Wi-Fi, LAN), l'adresse ci-dessus suffit. Par Internet, il faut "
-			+ "soit un réseau privé type Tailscale ou ZeroTier, soit ouvrir le port %d (UDP) sur la box. "
-			% Net.DEFAULT_PORT + "Voir docs/RESEAU.md.", 15, UiTheme.MUTED)
-		help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		box.add_child(help)
-	else:
-		box.add_child(UiTheme.label("CONNEXION", 15, UiTheme.MUTED, true))
-		box.add_child(UiTheme.label("Connecté à l'hôte. En attente du lancement…", 17, UiTheme.GREEN))
+	box.add_child(UiTheme.label("SERVEUR", 15, UiTheme.MUTED, true))
+	_server_label = UiTheme.label("", 17, UiTheme.GREEN)
+	_server_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_server_label)
 	return panel
 
 
-## Réglages de la partie (hôte uniquement).
+## Réglages de la partie : modifiables par le chef, affichés pour les autres.
 func _build_settings_panel() -> Control:
 	var panel := UiTheme.panel()
 	var box := VBoxContainer.new()
@@ -208,7 +195,13 @@ func _build_settings_panel() -> Control:
 
 
 func _push_settings() -> void:
-	Net.update_settings(int(_bots_slider.value), _duration_slider.value)
+	_show_settings(int(_bots_slider.value), _duration_slider.value)
+	Net.request_settings(int(_bots_slider.value), _duration_slider.value)
+
+
+func _show_settings(bots: int, duration: float) -> void:
+	_bots_label.text = "%d" % bots
+	_duration_label.text = "%d:%02d" % [int(duration) / 60, int(duration) % 60]
 
 
 # ---------------------------------------------------------------- Mise à jour
@@ -222,18 +215,29 @@ func _refresh() -> void:
 	ids.sort()
 	for id in ids:
 		_players_box.add_child(_player_row(id))
-	var count: int = Net.players.size()
-	if Net.is_host():
-		_bots_label.text = "%d" % int(_bots_slider.value)
-		var seconds := int(_duration_slider.value)
-		_duration_label.text = "%d:%02d" % [seconds / 60, seconds % 60]
-		_start_button.disabled = false
-		_status.text = "%d joueur(s) dans le salon. Tu peux lancer dès que tout le monde est là." % count
+	var count: int = Net.human_count()
+	var leader := Net.is_leader()
+	# Réglages tenus par le serveur ; le chef garde la main sur ses curseurs.
+	var bots: int = Net.settings.get("bots", 2)
+	var duration: float = Net.settings.get("duration", 180.0)
+	_bots_slider.editable = leader
+	_duration_slider.editable = leader
+	if not leader:
+		_bots_slider.set_value_no_signal(bots)
+		_duration_slider.set_value_no_signal(duration)
+		_show_settings(bots, duration)
 	else:
-		_start_button.disabled = true
-		_start_button.text = "EN ATTENTE DE L'HÔTE…"
-		_start_button.focus_mode = Control.FOCUS_NONE
-		_status.text = "%d joueur(s) dans le salon." % count
+		_show_settings(int(_bots_slider.value), _duration_slider.value)
+	_server_label.text = "Connecté. %s" % STATUS_TEXT.get(Net.server_status, Net.server_status)
+	var can_start := leader and Net.server_status == "idle"
+	_start_button.disabled = not can_start
+	_start_button.focus_mode = Control.FOCUS_ALL if can_start else Control.FOCUS_NONE
+	if leader:
+		_start_button.text = "LANCER LA PARTIE  (Entrée)"
+		_status.text = "%d joueur(s) dans le salon. Tu es le chef : lance dès que tout le monde est là." % count
+	else:
+		_start_button.text = "EN ATTENTE DU CHEF…"
+		_status.text = "%d joueur(s) dans le salon. %s lancera la partie." % [count, Net.player_name_of(Net.leader_id)]
 
 
 func _player_row(id: int) -> Control:
@@ -248,8 +252,8 @@ func _player_row(id: int) -> Control:
 	row.add_child(name_label)
 	if id == Net.my_id():
 		row.add_child(UiTheme.label("toi", 15, UiTheme.CYAN))
-	elif id == 1:
-		row.add_child(UiTheme.label("hôte", 15, UiTheme.YELLOW))
+	if id == Net.leader_id:
+		row.add_child(UiTheme.label("chef", 15, UiTheme.YELLOW))
 	row.add_child(UiTheme.label(cls.display_name, 17, cls.color.lightened(0.3), true))
 	return row
 

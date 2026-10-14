@@ -36,19 +36,23 @@ arena-tps/
 
 ### Jouer en ligne
 
-Le jeu se joue à plusieurs **en vrai réseau**, sans back-end : un PC héberge (il joue
-en même temps qu'il sert), les autres le rejoignent avec son adresse.
+Le jeu se joue à plusieurs **en vrai réseau**, sur un **serveur dédié** : un PC lance
+`ArenaTPS_Server` (sans fenêtre, il ne joue pas), les joueurs le rejoignent avec le jeu.
+Le jeu et le serveur sont exportés depuis le même projet Godot.
 
-1. L'hôte : **JOUER → HÉBERGER UNE PARTIE**. Le salon affiche son adresse.
-2. Les autres : coller l'adresse dans le champ de la page JOUER, puis **REJOINDRE**.
-3. L'hôte règle le nombre de bots et la durée, puis lance la partie.
+1. Le PC serveur lance `ArenaTPS_Server`, qui affiche ses adresses.
+2. Les joueurs : saisir l'adresse dans le champ de la page JOUER, puis **REJOINDRE**.
+3. Le premier joueur connecté (le chef) règle le nombre de bots et la durée, puis lance
+   la partie. On peut aussi rejoindre une partie en cours.
 
-Pour jouer depuis deux maisons différentes, et pour exporter le client lourd (`.exe`)
-à donner à un camarade : **[docs/RESEAU.md](docs/RESEAU.md)**.
+Lancer le serveur et les clients pas à pas, sous Linux et Windows :
+**[docs/LANCER.md](docs/LANCER.md)**. Jouer depuis plusieurs maisons, pare-feu et
+dépannage réseau : **[docs/RESEAU.md](docs/RESEAU.md)**.
 
-Qui décide de quoi : chaque machine simule son propre joueur et signale ses impacts ;
-l'hôte arbitre la vie, les éliminations, le score, le chronomètre et les réapparitions,
-et fait jouer les bots. Tout est dans `front/scripts/net/net.gd`.
+Qui décide de quoi : chaque jeu simule son propre joueur et signale ses impacts ; le
+serveur arbitre la vie, les éliminations, le score, le chronomètre et les réapparitions,
+et fait jouer les bots. Le protocole est dans `front/scripts/net/net.gd`, le serveur dans
+`front/scripts/server/`.
 
 Le **back-end est simulé** (`front/scripts/backend/backend.gd`) : la connexion accepte tout, les amis, serveurs et classements sont factices, et les statistiques des parties jouées sont enregistrées localement. Les fonctions reprennent les routes du BFF prévues dans l'architecture ; il suffira de remplacer leur contenu par des appels HTTP.
 
@@ -130,7 +134,7 @@ L'animation est pilotée par l'état du personnage (vitesse, au sol, accroupi, a
 
 ## La map « NEO-EDO »
 
-Arène de 120 x 120 m définie dans `front/scripts/maps/arena_map.gd` et chargée par `front/scenes/maps/arena.tscn` (scène séparée du jeu, réutilisable par le futur serveur). Deux ambiances se répondent : un quartier traditionnel et un quartier néon.
+Arène de 120 x 120 m définie dans `front/scripts/maps/arena_map.gd` et chargée par `front/scenes/maps/arena.tscn` (scène séparée du jeu, chargée aussi par le serveur dédié). Deux ambiances se répondent : un quartier traditionnel et un quartier néon.
 
 | Zone | Contenu |
 |---|---|
@@ -157,6 +161,7 @@ Les éléments de la map sont des listes et fonctions dans le script : après un
 | `generate_sounds.py` | Effets sonores du jeu, calculés par synthèse (aucun son externe) |
 | `subset_font.py` | Allège la police japonaise en ne gardant que les caractères affichés par le jeu |
 | `build_client.sh` | Exporte le client lourd (`.exe` Windows ou binaire Linux) |
+| `build_server.sh` | Exporte le serveur dédié dans `../server/` (Windows ou Linux, sans fenêtre) |
 
 Dépendances Python : `numpy`, `pillow`.
 
@@ -199,8 +204,8 @@ docs: complète le README
 - [x] Map « NEO-EDO » 120 x 120 m texturée (sanctuaire, marché, pagode, jardin, ruelles néon), décor CFA INSTA et IoT animé
 - [x] Match à mort contre des bots, tableau des scores, écran de fin
 - [x] Menu pause local (changement de classe, son, sensibilité), protection d'apparition, effets sonores
-- [x] Multijoueur en ligne (un PC héberge, les autres rejoignent par adresse)
-- [x] Export du client lourd Windows / Linux
-- [ ] Connexion au vrai back-end (BFF)
-- [ ] Serveur de jeu dédié (Godot headless) et joueurs distants
+- [x] Multijoueur en ligne sur serveur dédié (Godot headless), rejoint par adresse, mode LAN
+- [x] Export du client lourd et du serveur dédié Windows / Linux
+- [ ] Connexion au vrai back-end (BFF côté jeu, Server List côté serveur)
+- [ ] Serveur entièrement autoritaire (les joueurs n'envoient que leurs commandes)
 - [ ] Micro-services et bases de données

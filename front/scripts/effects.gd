@@ -6,6 +6,8 @@ extends RefCounted
 
 ## Trait lumineux entre deux points, visible une fraction de seconde.
 static func tracer(parent: Node, from: Vector3, to: Vector3, color: Color, lifetime := 0.06) -> void:
+	if headless():
+		return
 	var mesh := ImmediateMesh.new()
 	mesh.surface_begin(Mesh.PRIMITIVE_LINES)
 	mesh.surface_add_vertex(from)
@@ -21,6 +23,8 @@ static func tracer(parent: Node, from: Vector3, to: Vector3, color: Color, lifet
 
 ## Petite boule qui grossit puis disparaît à l'endroit touché.
 static func impact(parent: Node, position: Vector3, color: Color, size := 0.07) -> void:
+	if headless():
+		return
 	var sphere := SphereMesh.new()
 	sphere.radius = size
 	sphere.height = size * 2.0
@@ -39,12 +43,19 @@ static func impact(parent: Node, position: Vector3, color: Color, size := 0.07) 
 
 ## Éclair de lumière au bout du canon.
 static func muzzle_flash(parent: Node3D, color: Color) -> void:
+	if headless():
+		return
 	var light := OmniLight3D.new()
 	light.light_color = color
 	light.light_energy = 3.0
 	light.omni_range = 4.0
 	parent.add_child(light)
 	parent.get_tree().create_timer(0.05).timeout.connect(light.queue_free)
+
+
+## true sur le serveur dédié (aucun affichage) : les effets ne servent à rien.
+static func headless() -> bool:
+	return DisplayServer.get_name() == "headless"
 
 
 static func _unshaded(color: Color) -> StandardMaterial3D:

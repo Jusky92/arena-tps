@@ -43,11 +43,16 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _choose(class_data: ClassData) -> void:
 	GameState.selected_class = class_data
-	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+	Net.set_class(class_data.resource_path)
+	_go_back()
 
 
+## Ouvert depuis le salon d'une partie en ligne : on y retourne, toujours connecté.
 func _go_back() -> void:
-	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+	if Net.online:
+		get_tree().change_scene_to_file("res://scenes/lobby.tscn")
+	else:
+		get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 
 
 # ---------------------------------------------------------------- Construction des cartes
