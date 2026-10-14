@@ -25,7 +25,9 @@ extends Node
 ## États du serveur (comme dans la Server List) :
 ##   idle -> reserved -> in_progress -> ending -> idle
 ## En LAN, il n'y a pas de réservation : le premier joueur connecté (le « chef »)
-## règle la partie et la lance, idle -> in_progress.
+## règle la partie et la lance, idle -> in_progress. Avec la Server List, un
+## groupe réserve le serveur et la partie démarre seule quand il est connecté ;
+## à la fin, le serveur renvoie tout le monde au menu et redevient libre.
 ##
 ## Protocole (toutes les fonctions marquées @rpc) :
 ##   client -> serveur  hello, set_class, request_settings, request_start, state, hit
@@ -71,6 +73,9 @@ var pseudo := "Joueur"
 var players := {}
 ## Réglages de la partie, choisis par le chef.
 var settings := {"bots": 2, "duration": 180.0}
+## true en LAN : le chef (premier joueur) règle et lance la partie. false avec
+## la Server List : pas de chef, la partie démarre quand le groupe est connecté.
+var lan_lobby := true
 ## Pair qui peut régler et lancer la partie (LAN uniquement, 0 = personne).
 var leader_id := 0
 ## idle | reserved | in_progress | ending
@@ -114,9 +119,9 @@ func is_server() -> bool:
 	return _serving
 
 
-## true si ce client est le chef du salon.
+## true si ce client est le chef du salon (LAN uniquement).
 func is_leader() -> bool:
-	return online and not _serving and leader_id == my_id()
+	return online and not _serving and lan_lobby and leader_id == my_id()
 
 
 ## Serveur : ouvre l'écoute. Renvoie "" si tout va bien, sinon l'erreur.
@@ -266,13 +271,14 @@ func controls(id: int) -> bool:
 
 
 func _lobby_info() -> Dictionary:
-	return {"bots": settings.bots, "duration": settings.duration, "leader_id": leader_id, "status": server_status}
+	return {"bots": settings.bots, "duration": settings.duration, "leader_id": leader_id, "status": server_status, "lan": lan_lobby}
 
 
 func _apply_lobby_info(info: Dictionary) -> void:
 	settings = {"bots": info.get("bots", 2), "duration": info.get("duration", 180.0)}
 	leader_id = info.get("leader_id", 0)
 	server_status = info.get("status", "idle")
+	lan_lobby = info.get("lan", true)
 
 
 # =========================================================================== connexion
@@ -325,7 +331,9 @@ func _on_server_disconnected() -> void:
 	if was_connecting:
 		connection_failed.emit("Le serveur a coupé la connexion avant d'accepter.")
 	else:
-		disconnected.emit("Le serveur a fermé la connexion.")
+		var reason := _close_reason if not _close_reason.is_empty() else "Le serveur a fermé la connexion."
+		_close_reason = ""
+		disconnected.emit(reason)
 
 
 ## Aucune réponse du serveur : on explique les causes possibles, dans l'ordre.
@@ -378,7 +386,7 @@ func _hello(user_id: String, name: String, class_id: String, ticket: String, ver
 		_kick(id, "La partie est pleine (%d joueurs)." % MAX_PLAYERS)
 		return
 	players[id] = _new_player(name.left(16), class_id, verified)
-	if leader_id == 0:
+	if lan_lobby and leader_id == 0:
 		leader_id = id
 	player_accepted.emit(id)
 	if in_match:
@@ -453,7 +461,7 @@ func request_settings(bots: int, duration: float) -> void:
 
 @rpc("any_peer", "call_remote", "reliable")
 func _request_settings(bots: int, duration: float) -> void:
-	if not _serving or multiplayer.get_remote_sender_id() != leader_id or in_match:
+	if not _serving or not lan_lobby or multiplayer.get_remote_sender_id() != leader_id or in_match:
 		return
 	settings = {"bots": clampi(bots, 0, MAX_PLAYERS - 1), "duration": clampf(duration, 60.0, 600.0)}
 	lobby_changed.emit()
@@ -468,7 +476,7 @@ func request_start() -> void:
 
 @rpc("any_peer", "call_remote", "reliable")
 func _request_start() -> void:
-	if _serving and multiplayer.get_remote_sender_id() == leader_id and server_status == "idle":
+	if _serving and lan_lobby and multiplayer.get_remote_sender_id() == leader_id and server_status == "idle":
 		start_requested.emit()
 
 
@@ -550,6 +558,32 @@ func set_status(status: String) -> void:
 	server_status = status
 	log_line("SERVEUR : état %s" % status)
 	_send_lobby()
+
+
+## Serveur : renvoie tous les joueurs au menu avec un message, puis coupe leur
+## connexion (fin d'une partie réservée par un groupe : le serveur redevient libre).
+func close_all(reason: String) -> void:
+	if not _serving:
+		return
+	log_line("SERVEUR : déconnexion de tous les joueurs (%s)" % reason)
+	_closing.rpc(reason)
+	await get_tree().create_timer(0.5).timeout
+	if _peer:
+		for id in multiplayer.get_peers():
+			_peer.disconnect_peer(id)
+			# Retirés tout de suite : rien ne doit plus leur être envoyé pendant
+			# que la déconnexion se termine (le départ est déjà compté).
+			players.erase(id)
+	leader_id = 0
+
+
+var _close_reason := ""
+
+
+## Serveur -> clients : la connexion va être coupée, voici pourquoi.
+@rpc("authority", "call_remote", "reliable")
+func _closing(reason: String) -> void:
+	_close_reason = reason
 
 
 ## Serveur : fin de partie, retour au salon. Les bots sont retirés.
@@ -678,29 +712,46 @@ func push_match_over(rows: Array) -> void:
 
 ## Adresses IPv4 utiles de cette machine, les plus probables en premier.
 ##
-## Un PC Windows en expose souvent une dizaine (Wi-Fi, Ethernet, WSL, VirtualBox,
-## Hyper-V, cartes sans adresse valide…). On ne garde que celles qu'un joueur
-## peut vraiment utiliser, dans cet ordre :
+## Un PC en expose souvent une dizaine (Wi-Fi, Ethernet, Docker, WSL, VirtualBox,
+## Hyper-V, cartes sans adresse valide…). On écarte les interfaces virtuelles et on
+## garde celles qu'un joueur peut vraiment utiliser, dans cet ordre :
 ##   1. Tailscale / ZeroTier (100.x)  : réseau privé, marche depuis n'importe où
 ##   2. réseau local classique (192.168.x)
 ##   3. autres réseaux privés (10.x, 172.16-31.x)
 static func local_addresses(limit := 4) -> Array:
 	var ranked := []
-	for address in IP.get_local_addresses():
-		if address.contains(":") or address.begins_with("127."):
+	for interface in IP.get_local_interfaces():
+		if _is_virtual_interface(str(interface.get("name", "")) + " " + str(interface.get("friendly", ""))):
 			continue
-		if address.begins_with("169.254."):
-			continue                                  # adresse auto-attribuée : inutilisable
-		var rank := 3
-		if address.begins_with("100."):
-			rank = 0                                  # Tailscale / ZeroTier
-		elif address.begins_with("192.168."):
-			rank = 1
-		elif address.begins_with("10."):
-			rank = 2
-		ranked.append([rank, address])
+		for address in interface.get("addresses", []):
+			if address.contains(":") or address.begins_with("127."):
+				continue
+			if address.begins_with("169.254."):
+				continue                                  # adresse auto-attribuée : inutilisable
+			var rank := 3
+			if address.begins_with("100."):
+				rank = 0                                  # Tailscale / ZeroTier
+			elif address.begins_with("192.168."):
+				rank = 1
+			elif address.begins_with("10."):
+				rank = 2
+			ranked.append([rank, address])
 	ranked.sort_custom(func(a, b): return a[0] < b[0])
 	var result := []
 	for entry in ranked:
-		result.append(entry[1])
+		if not result.has(entry[1]):
+			result.append(entry[1])
 	return result.slice(0, limit)
+
+
+## Interfaces des machines virtuelles et conteneurs : injoignables par les autres PC.
+const VIRTUAL_INTERFACES := ["docker", "br-", "veth", "virbr", "vboxnet", "vmnet", "virtualbox",
+	"vmware", "hyper-v", "wsl", "vethernet", "lxc", "lxd", "podman", "cni"]
+
+
+static func _is_virtual_interface(names: String) -> bool:
+	var lower := names.to_lower()
+	for prefix in VIRTUAL_INTERFACES:
+		if lower.begins_with(prefix) or lower.contains(" " + prefix) or lower.contains("(" + prefix):
+			return true
+	return false

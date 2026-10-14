@@ -12,9 +12,10 @@ Sommaire :
 3. [Lancer le serveur sous Linux](#3-lancer-le-serveur-sous-linux)
 4. [Lancer le serveur sous Windows](#4-lancer-le-serveur-sous-windows)
 5. [Lancer un client (joueur)](#5-lancer-un-client-joueur)
-6. [Jouer une partie](#6-jouer-une-partie)
-7. [Sans exporter : depuis le code source](#7-sans-exporter--depuis-le-code-source)
-8. [Si ça ne marche pas](#8-si-ça-ne-marche-pas)
+6. [Jouer une partie (LAN)](#6-jouer-une-partie-lan)
+7. [Avec le vrai back : comptes, amis, groupes, statistiques](#7-avec-le-vrai-back--comptes-amis-groupes-statistiques)
+8. [Sans exporter : depuis le code source](#8-sans-exporter--depuis-le-code-source)
+9. [Si ça ne marche pas](#9-si-ça-ne-marche-pas)
 
 ---
 
@@ -28,6 +29,15 @@ Sommaire :
 - Le serveur écoute sur le port **UDP 24567**. C'est le pare-feu **du PC serveur** qui
   doit l'autoriser. Les PC des joueurs n'ont rien à ouvrir.
 - 8 joueurs au maximum par partie.
+- **Deux façons de jouer** :
+
+  | | **LAN** (sections 3 à 6) | **Avec le vrai back** (section 7) |
+  |---|---|---|
+  | À lancer en plus | rien | la stack Docker du back (`backend/`) |
+  | Comptes | « Jouer hors ligne » : n'importe quel identifiant | vrais comptes (inscription + code par e-mail) |
+  | Rejoindre | par l'adresse IP du serveur | le chef du groupe lance, chacun rejoint seul ; ou la liste des serveurs publics |
+  | Lancement | le premier joueur du salon (le chef) | automatique dès que le groupe est connecté |
+  | Statistiques | rien n'est enregistré | parties, XP, niveaux, succès, classements |
 
 ---
 
@@ -212,10 +222,12 @@ seulement.
 
 ### Ensuite, pour tout le monde
 
-3. **Se connecter.** Le back-end est encore simulé : n'importe quel identifiant et mot
-   de passe sont acceptés. Le pseudo affiché en jeu vient de l'identifiant (la partie
-   avant `@` pour une adresse e-mail) : choisissez-en un différent pour chaque joueur.
-4. Dans la page **JOUER**, cadre **JOUER EN LIGNE** : taper l'adresse donnée par le
+3. **Se connecter.** Pour une partie LAN sans back, cliquer **« Jouer hors ligne »** sur
+   l'écran de connexion : n'importe quel identifiant et mot de passe sont acceptés. Le
+   pseudo affiché en jeu vient de l'identifiant (la partie avant `@`) : choisissez-en un
+   différent pour chaque joueur. (Avec un vrai compte, voir la section 7 ; on peut aussi
+   rejoindre un serveur LAN connecté au vrai back.)
+4. Dans la page **JOUER**, cadre **REJOINDRE PAR ADRESSE (LAN)** : taper l'adresse donnée par le
    serveur, par exemple `192.168.1.20` (ajouter `:port` seulement si le serveur a été
    lancé avec un autre port que 24567, ex. `192.168.1.20:24568`).
 5. Cliquer **REJOINDRE**. Après quelques secondes, le **salon** s'ouvre. Si une partie
@@ -225,7 +237,7 @@ L'adresse est retenue pour la prochaine fois.
 
 ---
 
-## 6. Jouer une partie
+## 6. Jouer une partie (LAN)
 
 1. Le **premier joueur arrivé dans le salon est le chef** (étiquette « chef »).
 2. Le chef règle **les bots** et **la durée**. Les autres voient les réglages changer.
@@ -240,7 +252,75 @@ partie la rejoint directement.
 
 ---
 
-## 7. Sans exporter : depuis le code source
+## 7. Avec le vrai back : comptes, amis, groupes, statistiques
+
+Le jeu se connecte alors aux micro-services du dépôt `backend/` : comptes (Auth), amis
+et groupes (Social), liste des serveurs (Server List), statistiques (Stats) et présence
+en temps réel (Real-time). Les commandes ci-dessous supposent que le back et le serveur
+de jeu tournent sur le même PC (le « PC serveur »).
+
+### 7.1 Lancer le back (une fois par séance)
+
+Sur le PC serveur, dans le dossier `backend/` (voir son `README.md` pour la première
+installation : `.env`, clé de signature, `ssh-add`) :
+
+```bash
+docker compose up -d --build
+```
+
+Ports à ouvrir sur ce PC, en plus de l'UDP 24567 du serveur de jeu : **TCP 8000** (BFF :
+les menus du jeu) et **TCP 8005** (Real-time : présence et notifications). Exemple avec
+ufw : `sudo ufw allow 8000/tcp && sudo ufw allow 8005/tcp`.
+
+### 7.2 Lancer le serveur de jeu en mode Server List
+
+Le serveur s'enregistre auprès de la Server List avec le secret partagé
+`GAME_SERVER_SECRET` (le même que dans `backend/.env`) :
+
+```bash
+# Linux
+GAME_SERVER_SECRET=<la valeur du .env> ./ArenaTPS_Server.x86_64 \
+    --serverlist-url http://localhost:8002 --public-address 192.168.1.20
+
+# Windows (PowerShell)
+$env:GAME_SERVER_SECRET = "<la valeur du .env>"
+.\ArenaTPS_Server.console.exe --serverlist-url http://localhost:8002 --public-address 192.168.1.20
+```
+
+- `--public-address` : l'adresse que la Server List donne aux joueurs pour se connecter
+  (l'IP du PC serveur sur le réseau, ou son adresse Tailscale). Par défaut, la première
+  adresse locale trouvée.
+- Le serveur affiche « SERVER LIST : enregistré ». Il envoie ensuite un battement de cœur
+  toutes les 5 s, et se réenregistre seul si la Server List l'a oublié.
+- Plusieurs serveurs peuvent tourner sur le même PC (un `--port` différent chacun) :
+  chaque groupe qui lance une partie en réserve un libre.
+
+### 7.3 Côté joueurs
+
+1. Sur l'écran de connexion, **Adresse du back** : l'IP du PC serveur (`localhost` si le
+   jeu tourne sur ce même PC). Elle est retenue pour les lancements suivants.
+2. **INSCRIPTION** : pseudo (3 à 20 caractères : lettres, chiffres, `_`), e-mail, mot de
+   passe (8 caractères au moins). Un code à 6 chiffres est envoyé par e-mail. En local,
+   les e-mails arrivent dans **Mailpit** : <http://localhost:8025> sur le PC serveur.
+3. Ensuite, **CONNEXION** avec l'e-mail et le mot de passe.
+4. **Amis** (colonne de droite) : chercher un pseudo, **Ajouter** ; l'autre accepte avec ✓
+   dans ses demandes reçues. La pastille montre qui est en ligne (vert) ou en partie (jaune).
+5. **Groupe** : le bouton **+** à côté d'un ami en ligne l'invite ; il clique **REJOINDRE**
+   sur le bandeau d'invitation. 8 joueurs au plus.
+6. Le chef clique **LANCER EN LIGNE** (seul, c'est un groupe d'une personne) : un serveur
+   libre est réservé, tout le groupe s'y connecte automatiquement et la partie démarre dès
+   que tout le monde est là (30 s au plus).
+7. **SERVEURS PUBLICS** : les parties en cours qui ont des places libres. **REJOINDRE**
+   pour y entrer en cours de route.
+8. À la fin, le serveur renvoie tout le monde au menu ; le groupe reste formé pour
+   relancer. Les **STATISTIQUES** montrent la partie (XP, niveau, succès, classements).
+
+Les parties hors ligne (contre des bots, entraînement) et les parties LAN sans back ne
+comptent pas dans les statistiques.
+
+---
+
+## 8. Sans exporter : depuis le code source
 
 Pour tester pendant le développement, avec **Godot 4.7.2** installé et `godot` dans le
 PATH, depuis le dossier `client/front/` :
@@ -261,14 +341,21 @@ instances de lancement…**, activer plusieurs instances (par exemple 3), et don
 première les arguments `--headless -- --server`. F5 lance alors le serveur et deux
 clients.
 
+Avec le vrai back, ajouter `--serverlist-url http://localhost:8002` au serveur, avec la
+variable d'environnement `GAME_SERVER_SECRET`.
+
 ---
 
-## 8. Si ça ne marche pas
+## 9. Si ça ne marche pas
 
 | Problème | À vérifier |
 |---|---|
 | « Aucune réponse de … » | Le serveur est-il lancé ? L'adresse est-elle une de celles **qu'il affiche** ? Le pare-feu **du PC serveur** autorise-t-il l'UDP 24567 ? (Windows : réseau en **privé**.) |
 | « Versions différentes » | Réexporter le serveur **et** les jeux depuis le même code, et redistribuer. |
+| « Impossible de joindre le serveur du jeu » (connexion) | Le back n'est pas lancé, ou l'**Adresse du back** est fausse, ou le pare-feu du PC serveur bloque les ports TCP 8000 / 8005. |
+| « Aucun serveur de jeu n'est libre » | Aucun `ArenaTPS_Server` en mode Server List n'est lancé (ou tous sont occupés), ou sa version diffère de celle du jeu. |
+| « La Server List refuse GAME_SERVER_SECRET » | La variable ne correspond pas à `GAME_SERVER_SECRET` dans `backend/.env`. |
+| « Accès refusé : ticket invalide ou expiré » | On a rejoint un serveur Server List par son adresse IP : avec le vrai back, on passe par **LANCER EN LIGNE** ou **SERVEURS PUBLICS**. |
 | « Le port 24567 est déjà utilisé » (ou « Couldn't create an ENet host ») | Un serveur tourne déjà sur ce PC, souvent lancé d'un double-clic donc sans fenêtre. Linux : `pgrep -af ArenaTPS_Server` pour le voir, `pkill -f ArenaTPS_Server` pour l'arrêter. Windows : Gestionnaire des tâches. Ou lancer avec `--port 24568`. |
 | « La partie est pleine » | 8 joueurs sont déjà là. |
 | « Ce compte est déjà connecté » | Le même jeu est ouvert deux fois avec la même session : se reconnecter. |

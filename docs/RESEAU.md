@@ -270,15 +270,13 @@ Ce qui est volontairement simple pour l'instant :
   le décalage de la latence. Acceptable en dessous de ~100 ms.
 - **Pas de reconnexion automatique** : si la connexion tombe, il faut revenir au menu
   et rejoindre à nouveau (la partie en cours reste rejoignable).
-- **Pas encore de back** : le serveur fonctionne en mode LAN (`LanLink`). Il accepte
-  tout le monde et écrit seulement dans sa console les évènements `player.match` et
-  `match.finished` qu'il enverra au back.
+- **Deux modes de serveur** : en LAN (`LanLink`, ce guide), il accepte tout le monde
+  et écrit seulement dans sa console les évènements `player.match` et `match.finished`.
+  Branché sur le back (`--serverlist-url`, voir [LANCER.md](LANCER.md) section 7), il
+  vérifie le ticket de chaque joueur et envoie les résultats aux statistiques.
 
 La suite :
 
-1. **Brancher le back** : le serveur s'enregistrera auprès de la Server List, vérifiera
-   le ticket d'accès de chaque joueur et enverra les résultats (`match.finished`). Une
-   partie sera lancée par un groupe (party) depuis le menu, au lieu du chef du salon.
-2. **Serveur entièrement autoritaire** : la simulation passera côté serveur, qui
+1. **Serveur entièrement autoritaire** : la simulation passera côté serveur, qui
    recevra seulement les commandes des joueurs (`PlayerCommands`, déjà séparées des
    entrées depuis le début) et renverra l'état du monde.

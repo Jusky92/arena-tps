@@ -1,7 +1,10 @@
 extends Control
 ## Écran de démarrage : connexion, inscription, vérification de l'e-mail (code à
-## 6 chiffres) et mot de passe oublié. Suit le flux prévu par l'architecture (service
-## Auth via le BFF). Le back étant simulé, la connexion mène directement au menu.
+## 6 chiffres) et mot de passe oublié (code puis nouveau mot de passe), auprès du
+## service Auth via le BFF (voir scripts/backend/).
+##
+## L'adresse du back se règle ici. « Jouer hors ligne » passe au back simulé :
+## aucune connexion, on joue en LAN par adresse IP.
 
 const MAIN_MENU := "res://scenes/main_menu.tscn"
 
@@ -11,6 +14,7 @@ var _busy := false
 var _email_for_code := ""
 var _code_fields: Array[LineEdit] = []
 var _submit: Callable = func() -> void: pass
+var _host_field: LineEdit
 
 
 func _ready() -> void:
@@ -136,9 +140,46 @@ func _link(text: String, action: Callable) -> Button:
 func _footer() -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
-	row.add_child(UiTheme.dot(UiTheme.YELLOW, 8))
-	row.add_child(UiTheme.label("Back-end simulé · version %s" % Backend.BUILD_VERSION, 14, UiTheme.MUTED))
+	if Backend.is_simulated():
+		row.add_child(UiTheme.dot(UiTheme.YELLOW, 8))
+		row.add_child(UiTheme.label("Hors ligne (back simulé) · version %s" % Backend.BUILD_VERSION, 14, UiTheme.MUTED))
+	else:
+		row.add_child(UiTheme.dot(UiTheme.CYAN, 8))
+		row.add_child(UiTheme.label("Back : %s · version %s" % [Backend.host, Backend.BUILD_VERSION], 14, UiTheme.MUTED))
 	return row
+
+
+## Adresse du back (vrai back), ou rappel du mode hors ligne, avec le lien pour changer.
+func _back_section() -> Control:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	if Backend.is_simulated():
+		box.add_child(UiTheme.label("Mode hors ligne : n'importe quel identifiant est accepté.", 15, UiTheme.YELLOW))
+		box.add_child(_link("Se connecter au vrai back", func() -> void:
+			Backend.use("bff")
+			_show_login()))
+		_host_field = null
+	else:
+		box.add_child(_field_label("Adresse du back"))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		_host_field = _field("localhost ou 192.168.1.20")
+		_host_field.text = Backend.host
+		_host_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(_host_field)
+		box.add_child(row)
+		box.add_child(_link("Jouer hors ligne (back simulé, LAN uniquement)", func() -> void:
+			Backend.use("simulated")
+			_show_login()))
+	return box
+
+
+## Applique l'adresse du back saisie, si elle a changé.
+func _apply_host() -> void:
+	if _host_field and is_instance_valid(_host_field):
+		var typed := _host_field.text.strip_edges()
+		if not typed.is_empty() and typed != Backend.host:
+			Backend.use("bff", typed)
 
 
 # --------------------------------------------------------------------------- vues
@@ -149,7 +190,7 @@ func _show_login() -> void:
 	_card_content.add_child(UiTheme.spacer(Vector2(0, 4)))
 	_card_content.add_child(UiTheme.title("CONTENT DE TE REVOIR", 20))
 	_card_content.add_child(UiTheme.label("Connecte-toi pour rejoindre l'arène.", 17, UiTheme.MUTED))
-	_card_content.add_child(_field_label("E-mail ou pseudo"))
+	_card_content.add_child(_field_label("E-mail"))
 	var ident := _field("julien@exemple.fr")
 	_card_content.add_child(ident)
 	_card_content.add_child(_field_label("Mot de passe"))
@@ -160,10 +201,19 @@ func _show_login() -> void:
 	var go := UiTheme.button("SE CONNECTER", true)
 	_card_content.add_child(go)
 	_card_content.add_child(UiTheme.neon_line(UiTheme.CYAN, 1))
+	_card_content.add_child(_back_section())
 	_card_content.add_child(_footer())
 	_submit = func() -> void:
+		_apply_host()
 		_run(go, "CONNEXION…", func() -> Dictionary: return await Backend.login(ident.text, password.text),
-			func(_r: Dictionary) -> void: _enter_game())
+			func(_r: Dictionary) -> void: _enter_game(),
+			func(r: Dictionary) -> bool:
+				# Compte pas encore vérifié : on passe à la saisie du code.
+				if r.get("error") == "email_not_verified":
+					_show_verify(ident.text.strip_edges())
+					_show_error(r.message, UiTheme.YELLOW)
+					return true
+				return false)
 	go.pressed.connect(func() -> void: _submit.call())
 	ident.grab_focus.call_deferred()
 
@@ -174,7 +224,7 @@ func _show_register() -> void:
 	_card_content.add_child(UiTheme.spacer(Vector2(0, 4)))
 	_card_content.add_child(UiTheme.title("CRÉER UN COMPTE", 20))
 	_card_content.add_child(_field_label("Pseudo"))
-	var pseudo := _field("3 à 16 caractères")
+	var pseudo := _field("3 à 20 caractères : lettres, chiffres, _")
 	_card_content.add_child(pseudo)
 	_card_content.add_child(_field_label("E-mail"))
 	var email := _field("toi@exemple.fr")
@@ -187,8 +237,10 @@ func _show_register() -> void:
 	_card_content.add_child(go)
 	_card_content.add_child(UiTheme.label("Un code de vérification à 6 chiffres te sera envoyé par e-mail.", 15, UiTheme.MUTED))
 	_card_content.add_child(UiTheme.neon_line(UiTheme.MAGENTA, 1))
+	_card_content.add_child(_back_section())
 	_card_content.add_child(_footer())
 	_submit = func() -> void:
+		_apply_host()
 		_run(go, "CRÉATION…", func() -> Dictionary: return await Backend.register(pseudo.text, email.text, password.text),
 			func(_r: Dictionary) -> void: _show_verify(email.text))
 	go.pressed.connect(func() -> void: _submit.call())
@@ -218,7 +270,10 @@ func _show_verify(email: String) -> void:
 		digits.add_child(f)
 		_code_fields.append(f)
 	_card_content.add_child(digits)
-	_card_content.add_child(UiTheme.label("Back simulé : n'importe quels 6 chiffres conviennent.", 14, UiTheme.YELLOW))
+	if Backend.is_simulated():
+		_card_content.add_child(UiTheme.label("Hors ligne : n'importe quels 6 chiffres conviennent.", 14, UiTheme.YELLOW))
+	else:
+		_card_content.add_child(UiTheme.label("En local, les e-mails arrivent dans Mailpit : http://localhost:8025", 14, UiTheme.MUTED))
 	_card_content.add_child(_error_label)
 	var go := UiTheme.button("VALIDER", true)
 	_card_content.add_child(go)
@@ -264,15 +319,46 @@ func _show_reset() -> void:
 	_card_content.add_child(_link("← Retour à la connexion", _show_login))
 	_submit = func() -> void:
 		_run(go, "ENVOI…", func() -> Dictionary: return await Backend.request_password_reset(email.text),
-			func(r: Dictionary) -> void: _show_error(r.message, UiTheme.GREEN))
+			func(r: Dictionary) -> void:
+				_show_reset_confirm(email.text.strip_edges())
+				_show_error(r.message, UiTheme.GREEN))
 	go.pressed.connect(func() -> void: _submit.call())
 	email.grab_focus.call_deferred()
+
+
+## Deuxième étape du mot de passe oublié : le code reçu et le nouveau mot de passe.
+func _show_reset_confirm(email: String) -> void:
+	_clear_card()
+	_card_content.add_child(UiTheme.title("NOUVEAU MOT DE PASSE", 20))
+	var info := UiTheme.label("Saisis le code à 6 chiffres envoyé à\n%s, puis ton nouveau mot de passe." % email, 17, UiTheme.MUTED)
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_card_content.add_child(info)
+	_card_content.add_child(_field_label("Code"))
+	var code := _field("123456")
+	code.max_length = 6
+	_card_content.add_child(code)
+	_card_content.add_child(_field_label("Nouveau mot de passe"))
+	var password := _field("8 caractères minimum", true)
+	_card_content.add_child(password)
+	_card_content.add_child(_error_label)
+	var go := UiTheme.button("CHANGER LE MOT DE PASSE", true)
+	_card_content.add_child(go)
+	_card_content.add_child(_link("← Retour à la connexion", _show_login))
+	_submit = func() -> void:
+		_run(go, "ENREGISTREMENT…",
+			func() -> Dictionary: return await Backend.confirm_password_reset(email, code.text.strip_edges(), password.text),
+			func(r: Dictionary) -> void:
+				_show_login()
+				_show_error(r.message, UiTheme.GREEN))
+	go.pressed.connect(func() -> void: _submit.call())
+	code.grab_focus.call_deferred()
 
 
 # --------------------------------------------------------------------------- actions
 
 ## Lance une requête : bouton désactivé pendant l'attente, erreur affichée si besoin.
-func _run(button: Button, busy_text: String, request: Callable, on_success: Callable) -> void:
+## `on_error` (facultatif) peut traiter une erreur lui-même : il renvoie alors true.
+func _run(button: Button, busy_text: String, request: Callable, on_success: Callable, on_error := Callable()) -> void:
 	if _busy:
 		return
 	_busy = true
@@ -288,8 +374,8 @@ func _run(button: Button, busy_text: String, request: Callable, on_success: Call
 	button.disabled = false
 	if result.get("ok", false):
 		on_success.call(result)
-	else:
-		_show_error(result.get("error", "Erreur inconnue."))
+	elif not (on_error.is_valid() and on_error.call(result)):
+		_show_error(result.get("message", "Erreur inconnue."))
 
 
 func _show_error(message: String, color := UiTheme.RED) -> void:

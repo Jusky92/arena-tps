@@ -54,7 +54,12 @@ serveur arbitre la vie, les éliminations, le score, le chronomètre et les réa
 et fait jouer les bots. Le protocole est dans `front/scripts/net/net.gd`, le serveur dans
 `front/scripts/server/`.
 
-Le **back-end est simulé** (`front/scripts/backend/backend.gd`) : la connexion accepte tout, les amis, serveurs et classements sont factices, et les statistiques des parties jouées sont enregistrées localement. Les fonctions reprennent les routes du BFF prévues dans l'architecture ; il suffira de remplacer leur contenu par des appels HTTP.
+Le jeu est **connecté au vrai back** (micro-services du dépôt `backend/`, via le BFF et le
+service temps réel) : comptes avec vérification de l'e-mail, amis et présence, groupes et
+invitations, lancement d'une partie de groupe sur un serveur dédié, serveurs publics,
+statistiques, succès et classements (`front/scripts/backend/`). Le lien **« Jouer hors
+ligne »** de l'écran de connexion garde un back simulé, sans réseau, pour jouer en LAN
+sans lancer le back.
 
 ### Commandes
 
@@ -92,7 +97,7 @@ Effets sonores générés par `tools/generate_sounds.py` (tirs des 3 armes, impa
 
 ## Modes de jeu
 
-- **Match à mort** (« Créer un serveur » ou « Rejoindre un serveur ») : le joueur affronte des bots pendant 3 minutes. Fil des éliminations, séries, meneur, tableau des scores et classement final. Le résultat est envoyé au back simulé (équivalent de l'événement `match.finished`).
+- **Match à mort** (en ligne sur serveur dédié, ou « Partie solo » hors ligne contre des bots) : 3 minutes par défaut. Fil des éliminations, séries, meneur, tableau des scores et classement final. En ligne, le serveur envoie le résultat au back (`match.finished`) ; hors ligne, rien n'est compté.
 - **Entraînement** : le joueur seul avec des mannequins-robots (dont certains accroupis), sans limite de temps.
 
 ### Bots
@@ -197,7 +202,7 @@ docs: complète le README
 ## État d'avancement
 
 - [x] Écrans de connexion, inscription, vérification par code, mot de passe oublié
-- [x] Menu principal multijoueur (profil, groupe, amis, serveurs, statistiques) sur back-end simulé
+- [x] Menu principal multijoueur (profil, groupe, amis, serveurs, statistiques)
 - [x] Personnages humains cyberpunk animés (3 classes) et mannequins-robots
 - [x] Déplacement, course, saut, accroupissement, caméra à la troisième personne
 - [x] Tir, munitions, classes, armes et capacités
@@ -206,6 +211,6 @@ docs: complète le README
 - [x] Menu pause local (changement de classe, son, sensibilité), protection d'apparition, effets sonores
 - [x] Multijoueur en ligne sur serveur dédié (Godot headless), rejoint par adresse, mode LAN
 - [x] Export du client lourd Windows / Linux / macOS (macOS non testé) et du serveur dédié Windows / Linux
-- [ ] Connexion au vrai back-end (BFF côté jeu, Server List côté serveur)
+- [x] Connexion au vrai back-end (BFF + temps réel côté jeu, Server List côté serveur), mode hors ligne conservé
 - [ ] Serveur entièrement autoritaire (les joueurs n'envoient que leurs commandes)
 - [ ] Micro-services et bases de données

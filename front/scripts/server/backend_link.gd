@@ -16,32 +16,50 @@ extends Node
 ## Les deux événements partent en HTTP vers la Server List, qui les publie dans
 ## Redis Streams : le serveur de jeu n'a jamais d'accès à Redis.
 ##
-## Cette classe ne fait rien : voir lan_link.gd (sans back) et, plus tard,
-## server_list_link.gd (vrai back).
+## Cette classe ne fait rien : voir lan_link.gd (sans back) et server_list_link.gd
+## (vrai back).
+##
+## start(), report() et verify() sont des coroutines (elles contiennent un await)
+## même ici : le serveur les appelle à travers une variable typée BackendLink, et
+## GDScript décide d'après ce type statique si l'appel attend une coroutine. Une
+## méthode ordinaire ici mais coroutine dans ServerListLink fait planter Godot
+## (pile corrompue après l'await). Une implémentation qui répond tout de suite
+## (LanLink) reste compatible.
 
 ## La Server List a réservé ce serveur pour un groupe (party).
 signal reserved(party_id: String)
+## La réservation a expiré sans que la partie commence : le serveur est de nouveau libre.
+signal reservation_ended
 
 ## Identifiant du serveur (donné par la Server List à l'enregistrement).
 var server_id := ""
 ## Groupe qui a lancé la partie, ou null (LAN, ou partie sans groupe).
 var party_id: Variant = null
+## Tickets pas encore utilisés (places réservées), d'après le dernier battement de cœur.
+var reserved_slots := 0
 
 
-## Enregistre le serveur. `info` = {name, address, port, map, max_players, build_version}.
-## Renvoie "" si tout va bien, sinon l'erreur.
+## true pour le mode LAN : pas de back, le premier joueur règle et lance la partie.
+func is_lan() -> bool:
+	return false
+
+
+## Enregistre le serveur. `info` = {name, address, port, region, map, max_players, build_version}.
+## Renvoie "" si tout va bien, sinon l'erreur. Peut être une coroutine : l'appeler avec `await`.
 func start(_info: Dictionary) -> String:
+	await get_tree().process_frame
 	return ""
 
 
 ## Battement de cœur : état (idle, in_progress, ending), nombre de joueurs humains, map.
 func report(_status: String, _players: int, _map: String) -> void:
-	pass
+	await get_tree().process_frame
 
 
 ## Vérifie le ticket d'un joueur. Renvoie son user_id, ou "" si l'accès est refusé.
 ## Avec le vrai back, c'est une coroutine (appel HTTP) : l'appeler avec `await`.
 func verify(_ticket: String, _claimed_user_id: String) -> String:
+	await get_tree().process_frame
 	return ""
 
 

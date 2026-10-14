@@ -17,7 +17,7 @@ There is no build system, package manager, or test runner in this repo — it's 
 
 **Run the game**: open `front/project.godot` in the Godot 4.7.2 editor and press F5. `front/` must stay on exactly this Godot version — opening it with another version converts the project files and causes conflicts for the other dev.
 
-**Run the dedicated server** locally (from `front/`): `godot --headless -- --server --bots 2 --duration 60`, then start clients with `godot` and REJOINDRE `127.0.0.1`. In the editor: Debug → Customize Run Instances, first instance with `--headless -- --server`.
+**Run the dedicated server** locally (from `front/`): `godot --headless -- --server --bots 2 --duration 60`, then start clients with `godot` and REJOINDRE `127.0.0.1`. In the editor: Debug → Customize Run Instances, first instance with `--headless -- --server`. With the real backend (stack from `backend/`: `docker compose up -d`), add `--serverlist-url http://localhost:8002 --public-address <IP>` and set `GAME_SERVER_SECRET` (same value as `backend/.env`). Test accounts: register in the game, and read the code in Mailpit (http://localhost:8025).
 
 **Export the client** (Windows/Linux standalone build, for giving to the other player):
 ```bash
@@ -52,9 +52,17 @@ The central design idea, used everywhere a character is controlled: a character 
 
 This split exists so the dedicated server can later drive the simulation from commands sent over the network (full server authority) without touching the character code. Keep this separation when adding new controllable behavior — don't branch on "is this a bot" inside `player.gd`.
 
-### Simulated back-end (`Backend` autoload)
+### Back-end access (`Backend` autoload)
 
-`front/scripts/backend/backend.gd` fakes every BFF route the real micro-services architecture will eventually expose (`register`, `verify_email`, `login`, `get_profile`, `get_friends`, `get_servers`, `report_match`, etc.). Login accepts anything, social/leaderboard data is fabricated, local match stats are saved to `user://profil_simule.cfg`. All functions are `async` (called with `await`) specifically so that swapping their bodies for real `HTTPRequest` calls later won't require touching any screen. **When adding a new back-end-shaped feature, add a function here first following this same signature convention** rather than hardcoding data in a screen script.
+`front/scripts/backend/backend.gd` is a facade, the only thing screens talk to. It keeps the shared state (`user`, `party`, `friends`, `incoming`/`outgoing` friend requests, `invites`) and its signals (`party_changed`, `friends_changed`, `invites_changed`, `match_ready`, `session_lost`, `services_changed`, `toast`). It delegates to one of two implementations with the same functions and the same data shapes:
+- `bff_backend.gd` is the real backend: HTTP to the BFF (`http://<host>:8000`) through `scripts/shared/api_client.gd`, and a WebSocket to Real-time (`ws://<host>:8005/ws`) through `realtime_client.gd` for presence and notifications (`party.invite_sent`, `party.updated`, `party.match_ready`, `friend.*`, `progress.*`). Tokens are kept in memory only. The access token is refreshed 60 s before expiry, or once on a 401, then re-sent to Real-time.
+- `simulated_backend.gd` is "Jouer hors ligne" on the login screen: no network, fake data. Online launch and public servers return an error there; you play LAN by IP.
+
+The mode and the backend host (typed on the login screen) are saved in `user://reseau.cfg`. Functions are `await`ed and return `{ok, error, message, …}`. `error` is the backend's error code (API contract), and `ApiClient.ERROR_MESSAGES` maps it to French. When adding a backend feature, add it to both implementations and the facade.
+
+Online flow: the party leader calls `Backend.launch_party()`, which returns its ticket. The other members get theirs through `match_ready` (Real-time `party.match_ready`). Everyone calls `Net.join(address, name, port, ticket)`. Public servers: `get_servers()`, then `get_join_ticket()`. Offline matches (bots, training) are never reported: stats only come from the dedicated server's `match.finished`.
+
+`Backend.BUILD_VERSION` must match between client and server, and it filters the public server list. Bump it when the network protocol changes.
 
 ### Client and dedicated server in one project
 
@@ -72,7 +80,17 @@ This split exists so the dedicated server can later drive the simulation from co
 
 ### Server ↔ backend (`BackendLink`)
 
-All of the server's backend calls go through `scripts/server/backend_link.gd`: register, heartbeat, ticket verification, `player.match` and `match.finished` events (sent over HTTP to the Server List, which publishes them; the game server has no Redis access). Today only `LanLink` exists: it accepts every ticket and logs the events, already shaped like the backend's Pydantic models (`backend/libs/common/tpsarena_common/events.py`). Keep that shape when changing results: `match.finished` has one row per `user_id`, bots excluded, placements computed bots included. `ServerListLink` (the real backend) is the next step; see `backend/TODO.md`.
+All of the server's backend calls go through `scripts/server/backend_link.gd`: register, heartbeat, ticket verification, `player.match` and `match.finished` events (sent over HTTP to the Server List, which publishes them; the game server has no Redis access). There are two implementations:
+- `LanLink` (default) accepts every ticket and logs the events.
+- `ServerListLink` (`--serverlist-url http://host:8002` plus the env var `GAME_SERVER_SECRET`) does the real calls.
+  - It registers and re-registers on `404 server_not_found`, and heartbeats every 5 s.
+  - The heartbeat reply tells it about a reservation (`reserved` signal). `server_main.gd` then auto-starts when every ticket is used, or 30 s after the reservation.
+  - At match end it sends `match.finished`, then disconnects everyone (`Net.close_all`) and goes back to `idle`.
+  - No lobby leader in that mode: `Net.lan_lobby = false`.
+
+Keep the event payloads shaped like the backend's Pydantic models (`backend/libs/common/tpsarena_common/events.py`): `match.finished` has one row per `user_id`, bots excluded, placements computed bots included.
+
+**GDScript pitfall:** `start()`, `report()` and `verify()` are coroutines in the base class too (they contain an `await`). GDScript decides from the *static* type whether a call awaits a coroutine. Calling, through a `BackendLink`-typed variable, a method that is a coroutine only in the subclass crashes the engine after the await (corrupted stack, signal 11). Keep any method a subclass makes async async in the base class too.
 
 ### Data-driven classes and weapons
 

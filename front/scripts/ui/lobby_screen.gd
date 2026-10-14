@@ -5,6 +5,8 @@ extends Control
 ##   CHEF   — le premier joueur connecté : il règle le nombre de bots et la durée,
 ##            puis lance la partie pour tout le monde. S'il part, le suivant prend sa place.
 ##   JOUEUR — il voit les réglages et attend le lancement ; il peut changer de classe.
+## Sur un serveur de la Server List (partie lancée par un groupe), il n'y a pas de
+## chef : la partie démarre seule dès que le groupe est connecté.
 ##
 ## Tout passe par l'autoload Net (scripts/net/net.gd) ; le serveur fait foi.
 
@@ -13,7 +15,7 @@ const GAME := "res://scenes/game.tscn"
 const CLASS_SELECT := "res://scenes/class_select.tscn"
 const STATUS_TEXT := {
 	"idle": "En attente du lancement.",
-	"reserved": "Réservé pour un groupe.",
+	"reserved": "Réservé pour ton groupe : la partie démarre dès que tout le monde est connecté.",
 	"in_progress": "Partie en cours.",
 	"ending": "Fin de partie, retour au salon dans quelques secondes.",
 }
@@ -232,7 +234,10 @@ func _refresh() -> void:
 	var can_start := leader and Net.server_status == "idle"
 	_start_button.disabled = not can_start
 	_start_button.focus_mode = Control.FOCUS_ALL if can_start else Control.FOCUS_NONE
-	if leader:
+	if not Net.lan_lobby:
+		_start_button.text = "DÉMARRAGE AUTOMATIQUE…"
+		_status.text = "%d joueur(s) connecté(s). La partie démarre dès que tout ton groupe est là (30 s au plus)." % count
+	elif leader:
 		_start_button.text = "LANCER LA PARTIE  (Entrée)"
 		_status.text = "%d joueur(s) dans le salon. Tu es le chef : lance dès que tout le monde est là." % count
 	else:

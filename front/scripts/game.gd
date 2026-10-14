@@ -3,7 +3,8 @@ extends Node3D
 ##
 ##   "deathmatch"  Match à mort chacun pour soi : le joueur + des bots, chronomètre,
 ##                 fil des éliminations, tableau des scores (Tab), écran de fin.
-##                 Le résultat est envoyé au back (équivalent de match.finished).
+##                 Hors ligne, rien n'est envoyé au back : seules les parties sur
+##                 serveur dédié comptent dans les statistiques.
 ##   "training"    Entraînement : le joueur seul avec les mannequins, sans limite de temps.
 ##
 ## Le match à mort se joue hors ligne (contre des bots) ou EN LIGNE sur un serveur
@@ -132,9 +133,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 ## En ligne, on reste connecté au serveur et on retourne au salon.
+## Si le serveur a déjà fermé la connexion (fin d'une partie de groupe), retour au menu.
 func _play_again() -> void:
-	if _online and Net.online:
-		get_tree().change_scene_to_file(LOBBY)
+	if _online:
+		get_tree().change_scene_to_file(LOBBY if Net.online else "res://scenes/main_menu.tscn")
 	else:
 		get_tree().reload_current_scene()
 
@@ -497,8 +499,7 @@ func _scoreboard_rows() -> Array:
 func _server_subtitle() -> String:
 	if _online:
 		return "Serveur dédié · %d joueurs · NEO-EDO" % Net.players.size()
-	var server: Dictionary = Backend.current_server
-	return "%s · NEO-EDO" % server.get("name", "Serveur local")
+	return "Hors ligne · NEO-EDO"
 
 
 func _finish_match() -> void:
@@ -518,10 +519,8 @@ func _finish_match() -> void:
 		if rows[i].local:
 			rank = i + 1
 	_ui.show_end_screen(rows, rank, "%s · %d joueurs · durée %d:%02d" % [_server_subtitle(), rows.size(), int(_match_time) / 60, int(_match_time) % 60])
-	Backend.report_match({
-		"kills": player.kills, "deaths": player.deaths, "won": rank == 1, "duration": _match_time,
-		"class": player.class_data.display_name, "best_streak": player.best_streak,
-	})
+	# Les statistiques ne comptent que les parties en ligne : c'est le serveur de
+	# jeu qui envoie les résultats au back (match.finished), jamais le jeu.
 
 
 # ---------------------------------------------------------------- Entraînement

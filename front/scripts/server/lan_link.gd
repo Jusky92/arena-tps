@@ -8,6 +8,10 @@ extends BackendLink
 ## serveur soit branché à la Server List.
 
 
+func is_lan() -> bool:
+	return true
+
+
 func start(info: Dictionary) -> String:
 	server_id = Uuid.v4()
 	Net.log_line("LAN : pas de back, serveur %s « %s » (id %s)" % [info.get("map", ""), info.get("name", ""), server_id])
