@@ -105,6 +105,8 @@ func _ready() -> void:
 		for address in Net.local_addresses():
 			print("    %s:%d" % [address, port])
 		print("Le premier joueur connecté règle la partie et la lance. Ctrl+C pour arrêter.")
+		print("(Pour les parties lancées depuis le jeu avec le vrai back : --serverlist-url http://<back>:8002")
+		print(" et la variable d'environnement GAME_SERVER_SECRET, voir docs/LANCER.md section 7.)")
 	else:
 		print("Mode Server List (%s). Les groupes lancent leurs parties depuis le jeu." % serverlist_url)
 		print("Adresse donnée aux joueurs : %s:%d. Ctrl+C pour arrêter." % [args.get("public-address", _first_address()), port])

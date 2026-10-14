@@ -167,6 +167,7 @@ Les éléments de la map sont des listes et fonctions dans le script : après un
 | `subset_font.py` | Allège la police japonaise en ne gardant que les caractères affichés par le jeu |
 | `build_client.sh` | Exporte le client lourd (`.exe` Windows, binaire Linux ou `.app` macOS) |
 | `build_server.sh` | Exporte le serveur dédié dans `../server/` (Windows ou Linux, sans fenêtre) |
+| `lancer_serveur.sh` | Lance le serveur Linux exporté, branché sur le vrai back (secret lu dans `backend/.env`, adresse IP détectée) |
 
 Dépendances Python : `numpy`, `pillow`.
 

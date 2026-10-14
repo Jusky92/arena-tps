@@ -439,8 +439,7 @@ func _launch_online() -> void:
 	_set_overlay_step("Demande d'un serveur libre…")
 	var r: Dictionary = await Backend.launch_party()
 	if not r.ok:
-		_close_overlay()
-		_show_toast(r.message)
+		_overlay_error(r.message)
 		return
 	_connect_with_ticket(r)
 
@@ -458,8 +457,7 @@ func _connect_with_ticket(info: Dictionary) -> void:
 	_set_overlay_step("Connexion à %s:%d…" % [info.address, info.port])
 	var error := Net.join(info.address, Backend.username(), info.port, info.ticket)
 	if not error.is_empty():
-		_close_overlay()
-		_show_toast(error)
+		_overlay_error(error)
 
 
 # --------------------------------------------------------------------------- LAN par adresse
@@ -501,7 +499,9 @@ func _on_net_joined() -> void:
 
 
 func _on_net_failed(reason: String) -> void:
-	_close_overlay()
+	if is_instance_valid(_overlay):
+		_overlay_error(reason)     # connexion avec un ticket (lancement, serveur public)
+		return
 	if is_instance_valid(_online_error):
 		_show_online_error(reason + "\nJournal détaillé : " + Net.log_file_path())
 	else:
@@ -606,8 +606,7 @@ func _join_public(server: Dictionary) -> void:
 	_set_overlay_step("Demande d'un ticket pour %s…" % server.name)
 	var r: Dictionary = await Backend.get_join_ticket(server.server_id)
 	if not r.ok:
-		_close_overlay()
-		_show_toast(r.message)
+		_overlay_error(r.message)
 		return
 	_connect_with_ticket(r)
 
@@ -1005,6 +1004,28 @@ func _set_overlay_step(text: String) -> void:
 		var step := _overlay.find_child("Step", true, false) as Label
 		if step:
 			step.text = text
+
+
+## Échec pendant l'écran d'attente : le message reste affiché jusqu'à FERMER.
+func _overlay_error(message: String) -> void:
+	if not is_instance_valid(_overlay):
+		_show_toast(message)
+		return
+	var bar := _overlay.find_child("Bar", true, false) as ProgressBar
+	if bar:
+		bar.visible = false
+	var step := _overlay.find_child("Step", true, false) as Label
+	if step:
+		step.text = message
+		step.add_theme_color_override("font_color", UiTheme.RED)
+		step.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		step.custom_minimum_size.x = 520
+		var close := UiTheme.button("FERMER", true, UiTheme.RED, 46)
+		close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		close.custom_minimum_size.x = 200
+		close.pressed.connect(_close_overlay)
+		step.get_parent().add_child(close)
+		close.grab_focus()
 
 
 func _close_overlay() -> void:

@@ -28,6 +28,8 @@ tools/build_client.sh all        # all three
 ```
 Requires `godot` on PATH (or `GODOT=/path/to/godot`) and export templates installed once in the editor. Output goes to `build/` (gitignored).
 
+**Launch the exported Linux server against the real backend**: `tools/lancer_serveur.sh [extra server args]`. It reads `GAME_SERVER_SECRET` from `../../backend/.env`, detects this PC's IP for `--public-address` (lists every address when there are several; override with `ADRESSE_PUBLIQUE=`), and refuses to start a second server on the same port.
+
 **Export the dedicated server**: `tools/build_server.sh [windows|linux|all]`, using the presets "Serveur Windows" / "Serveur Linux" (Dedicated Server, resources kept). Output goes to `../server/` (`TPSArena_Jeu/server/`, outside this repo).
 
 **Regenerate generated assets** (only needed after touching the generator scripts themselves — outputs are committed, not built on every run):

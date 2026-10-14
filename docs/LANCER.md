@@ -274,7 +274,19 @@ ufw : `sudo ufw allow 8000/tcp && sudo ufw allow 8005/tcp`.
 
 ### 7.2 Lancer le serveur de jeu en mode Server List
 
-Le serveur s'enregistre auprès de la Server List avec le secret partagé
+**Le plus simple, sous Linux** : depuis le dépôt du jeu,
+
+```bash
+tools/lancer_serveur.sh
+```
+
+Le script prend le serveur exporté (`../server/linux/`), lit `GAME_SERVER_SECRET` dans
+`backend/.env` et annonce aux joueurs l'adresse IP actuelle du PC. Si le PC a plusieurs
+connexions (Ethernet et Wi-Fi), il les liste toutes : on en choisit une autre avec
+`ADRESSE_PUBLIQUE=172.16.8.169 tools/lancer_serveur.sh`. Les options en plus passent au
+serveur (`tools/lancer_serveur.sh --port 24568` pour un second serveur).
+
+À la main, le serveur s'enregistre auprès de la Server List avec le secret partagé
 `GAME_SERVER_SECRET` (le même que dans `backend/.env`) :
 
 ```bash
