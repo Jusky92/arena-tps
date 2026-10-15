@@ -22,8 +22,8 @@ const AUTH := "res://scenes/auth.tscn"
 ## Dernière adresse de connexion, gardée d'une partie à l'autre.
 const ADDRESS_PATH := "user://reseau.cfg"
 ## Joueurs (humains + bots) d'une partie lancée par un groupe : la limite du back
-## (groupe de 8, Server List max_players = 8, Social refuse plus de 7 bots).
-const PARTY_MATCH_PLAYERS := 8
+## (groupe de 16, Server List max_players = 16, Social refuse plus de 15 bots).
+const PARTY_MATCH_PLAYERS := 16
 const BOARDS := [["XP", "xp"], ["VICTOIRES", "wins"], ["ÉLIMINATIONS", "kills"]]
 
 var _page_holder: MarginContainer

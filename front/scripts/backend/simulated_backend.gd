@@ -229,8 +229,8 @@ func invite_to_party(friend_id: String) -> Dictionary:
 	var members: Array = b.party.members
 	if members.any(func(m): return m.user_id == friend_id):
 		return _err("Ce joueur est déjà dans le groupe.")
-	if members.size() >= 8:
-		return _err("Le groupe est complet (8 joueurs).")
+	if members.size() >= 16:
+		return _err("Le groupe est complet (16 joueurs).")
 	await get_tree().create_timer(_rng.randf_range(0.8, 1.6)).timeout
 	var cls: ClassData = GameState.CLASSES[_rng.randi() % GameState.CLASSES.size()]
 	members.append({"user_id": friend_id, "username": _name_of(friend_id), "class_id": GameState.class_id(cls)})

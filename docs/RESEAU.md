@@ -62,7 +62,7 @@ suivant arrive 50 ms plus tard. Les évènements importants (dégâts, morts, sc
 passent, eux, en mode fiable. Les jeux ne se parlent jamais directement.
 
 Le serveur tourne sans fin : salon → partie → écran de fin → salon. On peut
-**rejoindre une partie en cours** s'il reste de la place (8 joueurs au plus ; un bot
+**rejoindre une partie en cours** s'il reste de la place (16 joueurs au plus, ou la valeur de `--max-players` ; un bot
 cède sa place si besoin).
 
 Le code :
@@ -255,7 +255,7 @@ arguments `--headless -- --server`.
 |---|---|
 | « Aucune réponse de … » (après 6 s) | Le **serveur** ne reçoit rien. Dans l'ordre : `ArenaTPS_Server` est-il lancé ? l'adresse est-elle une de celles qu'il affiche ? le pare-feu du PC serveur autorise-t-il l'**UDP 24567** (§7) ? |
 | « Versions différentes : le serveur a la X, toi la Y » | Le serveur et le jeu ne viennent pas du même code. Réexporter **tout** en même temps. La version est affichée en bas du menu et au démarrage du serveur. |
-| « La partie est pleine (8 joueurs) » | 8 joueurs sont déjà connectés. Attendre qu'une place se libère. |
+| « La partie est pleine (16 joueurs) » | Le maximum du serveur (16, ou `--max-players`) est atteint. Attendre qu'une place se libère. |
 | « Ce compte est déjà connecté à ce serveur » | Le même compte est déjà dans la partie (deux jeux ouverts avec la même session ?). |
 | « La partie se termine… » | Le serveur affiche l'écran de fin : réessayer dans quelques secondes. |
 | « Le port 24567 est déjà utilisé » | Un autre serveur tourne déjà sur ce PC. Le fermer, ou lancer avec `--port 24568` (et `adresse:24568` côté joueur). |

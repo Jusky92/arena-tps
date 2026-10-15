@@ -20,8 +20,7 @@ extends Node
 ##                                     en mode Server List, le chef du groupe choisit les siens)
 ##   --map neo-edo                     map des parties : neo-edo ou hikari-mall (voir MapCatalog ;
 ##                                     en LAN, le chef peut en changer dans le salon)
-##   --max-players 16                  joueurs humains maximum par partie (1 à 16 ; par défaut 16
-##                                     en LAN, 8 en mode Server List, sa limite)
+##   --max-players 16                  joueurs humains maximum par partie (1 à 16)
 ##   --serverlist-url http://…:8002    active le mode Server List
 ##
 ## Le serveur tourne sans fin, d'une partie à l'autre :
@@ -54,10 +53,7 @@ func _ready() -> void:
 	Engine.max_fps = 60
 	var args := _parse_args()
 	var port := int(args.get("port", Net.DEFAULT_PORT))
-	# La Server List n'accepte pas plus de 8 joueurs (taille d'un groupe) : 8 par
-	# défaut dans ce mode, 16 en LAN.
-	var default_max := 16 if str(args.get("serverlist-url", "")).is_empty() else 8
-	Net.max_players = clampi(int(args.get("max-players", default_max)), 1, 16)
+	Net.max_players = clampi(int(args.get("max-players", 16)), 1, 16)
 
 	var map_id := str(args.get("map", MapCatalog.DEFAULT_ID))
 	if not MapCatalog.is_valid(map_id):

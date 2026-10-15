@@ -53,7 +53,7 @@ const ERROR_MESSAGES := {
 	"not_leader": "Seul le chef du groupe peut faire ça.",
 	"already_in_party": "Tu es déjà dans un groupe.",
 	"not_in_lobby": "Le groupe est en partie.",
-	"party_full": "Le groupe est complet (8 joueurs).",
+	"party_full": "Le groupe est complet (16 joueurs).",
 	"invite_not_found": "Cette invitation a expiré.",
 	"already_member": "Ce joueur est déjà dans le groupe.",
 	"cannot_invite_self": "Tu ne peux pas t'inviter toi-même.",

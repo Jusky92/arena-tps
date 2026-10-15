@@ -1,6 +1,6 @@
 # Arena TPS
 
-Jeu de tir multijoueur en 3D, en vue à la troisième personne, en mode chacun pour soi (8 joueurs par partie), dans un quartier japonais **« NEO-EDO »** mêlant temple traditionnel et néons de Tokyo. Le projet sert de support à la mise en œuvre d'une **architecture micro-services**.
+Jeu de tir multijoueur en 3D, en vue à la troisième personne, en mode chacun pour soi (jusqu'à 16 joueurs par partie), dans un quartier japonais **« NEO-EDO »** mêlant temple traditionnel et néons de Tokyo. Le projet sert de support à la mise en œuvre d'une **architecture micro-services**.
 
 Projet réalisé en binôme par **Julien** (client de jeu) et **Elian** (micro-services et bases de données) — Architecture SI, M2, CFA INSTA.
 
@@ -29,11 +29,12 @@ arena-tps/
 | Écran | Contenu |
 |---|---|
 | Connexion / inscription | Connexion, création de compte, vérification de l'e-mail par code à 6 chiffres, mot de passe oublié |
-| Menu principal | Profil (niveau, XP), groupe jusqu'à 8 joueurs (personnage de chaque membre affiché, exclusion et passation du rôle de chef) et invitations, lancement en ligne, rejoindre un serveur LAN par adresse (hors ligne seulement), partie solo et entraînement, amis (recherche, demandes, présence) |
+| Menu principal | Profil (niveau, XP), groupe jusqu'à 16 joueurs (personnage de chaque membre affiché, exclusion et passation du rôle de chef) et invitations, lancement en ligne, rejoindre un serveur LAN par adresse (hors ligne seulement), partie solo et entraînement, amis (recherche, demandes, présence) |
 | Serveurs publics | Parties en cours avec des places libres (région, map, joueurs) |
 | Statistiques | Statistiques du joueur, succès, classements (XP, victoires, éliminations : le haut ou autour de soi) |
-| Classes | Choix de la classe avec aperçu 3D animé |
-| Partie | Match à mort de 3 minutes contre d'autres joueurs et des bots, tableau des scores, écran de fin |
+| Spécialistes | Choix du personnage (apparence, vie, vitesse, capacité) avec aperçu 3D animé |
+| Classes | Jusqu'à 10 équipements (arme principale, arme secondaire, 2 grenades), enregistrés sur le compte |
+| Partie | Match à mort (3 minutes par défaut) contre d'autres joueurs et des bots, sur NEO-EDO ou Hikari Mall, tirs à la tête, bonus, tableau des scores, écran de fin |
 
 ### Jouer en ligne
 
@@ -114,18 +115,23 @@ Effets sonores générés par `tools/generate_sounds.py` (tirs des 3 armes, impa
 - se déplacent grâce à un maillage de navigation calculé au chargement à partir des collisions de la map ;
 - utilisent leur capacité (bouclier, dash, tir perforant).
 
-## Classes et armes
+## Spécialistes, classes et armes
 
-Les classes et les armes sont décrites par des fichiers de données modifiables dans l'inspecteur de Godot :
+Deux choix séparés, décrits par des fichiers de données modifiables dans l'inspecteur de Godot :
 
-- `front/data/classes/*.tres` : points de vie, vitesse, arme, capacité, apparence ;
-- `front/data/weapons/*.tres` : dégâts, cadence, chargeur, dispersion, zoom, modèle 3D.
+- le **spécialiste** est le personnage : apparence, points de vie, vitesse et capacité (`front/data/classes/*.tres`, écran SPÉCIALISTES) ;
+- la **classe** est l'équipement : une arme principale, une arme secondaire et 2 grenades. Chaque joueur crée jusqu'à 10 classes (onglet CLASSES), enregistrées sur son compte, et choisit la sienne sur la page JOUER. N'importe quel spécialiste peut prendre n'importe quelle classe.
 
-| Classe | PV | Arme | Capacité |
-|---|---|---|---|
-| Samouraï 侍 | 150 | Fusil à pompe (9 plombs) | Garde de fer : -70 % de dégâts pendant 3 s |
-| Shinobi 忍 | 80 | Mitraillette | Shunpo : bond rapide dans la direction du déplacement |
-| Archer 弓 | 100 | Fusil de précision (200 m) | Flèche perforante : les balles traversent les ennemis pendant 6 s |
+Les armes sont dans `front/data/weapons/*.tres` (dégâts, cadence, chargeur, dispersion, zoom, modèle 3D) et listées dans `front/scripts/data/weapon_catalog.gd`. Le serveur arbitre les tirs à la tête.
+
+| Spécialiste | PV | Capacité |
+|---|---|---|
+| Samouraï 侍 | 150 | Garde de fer : -70 % de dégâts pendant 3 s |
+| Shinobi 忍 | 80 | Shunpo : bond rapide dans la direction du déplacement |
+| Archer 弓 | 100 | Flèche perforante : les balles traversent les ennemis pendant 6 s |
+| Oni 鬼 | 130 | Charge : ruée de 0,35 s, les ennemis percutés prennent 30 dégâts et sont projetés |
+
+Armes des classes : mitraillette, fusil à pompe, fusil de précision, lance-roquettes, lance-flammes, pistolet laser, katana, lance-caca. D'autres armes (sulfateuse, fusil laser, poing puissant…) ne s'obtiennent qu'avec les bonus ramassés sur la map.
 
 ## Personnages
 
@@ -142,7 +148,11 @@ Personnages humains dans le thème « néo-Edo » (`front/scripts/character/`) :
 
 L'animation est pilotée par l'état du personnage (vitesse, au sol, accroupi, angle de visée) : en multijoueur, c'est cet état qui est transmis pour animer les autres joueurs.
 
-## La map « NEO-EDO »
+## Maps
+
+Deux maps, listées dans `front/scripts/maps/map_catalog.gd` : **NEO-EDO** (par défaut) et **Hikari Mall**, un centre commercial abandonné de 100 x 100 m sur 2 niveaux (`front/scripts/maps/mall_map.gd`, `front/scenes/maps/mall.tscn`). La map d'une partie est choisie par le serveur (`--map`), par le chef du salon en LAN, ou sur la page JOUER pour la partie solo et l'entraînement.
+
+### NEO-EDO
 
 Arène de 120 x 120 m définie dans `front/scripts/maps/arena_map.gd` et chargée par `front/scenes/maps/arena.tscn` (scène séparée du jeu, chargée aussi par le serveur dédié). Deux ambiances se répondent : un quartier traditionnel et un quartier néon.
 
@@ -209,13 +219,14 @@ docs: complète le README
 
 - [x] Écrans de connexion, inscription, vérification par code, mot de passe oublié
 - [x] Menu principal multijoueur (profil, groupe, amis, serveurs, statistiques)
-- [x] Personnages humains cyberpunk animés (3 classes) et mannequins-robots
+- [x] Personnages humains cyberpunk animés (4 spécialistes) et mannequins-robots
 - [x] Déplacement, course, saut, accroupissement, caméra à la troisième personne
-- [x] Tir, munitions, classes, armes et capacités
+- [x] Tir, munitions, tirs à la tête, spécialistes, classes (équipements) enregistrées sur le compte, armes, bonus et capacités
 - [x] Map « NEO-EDO » 120 x 120 m texturée (sanctuaire, marché, pagode, jardin, ruelles néon), décor CFA INSTA et IoT animé
+- [x] Map « Hikari Mall » (centre commercial sur 2 niveaux) et choix de la map
 - [x] Match à mort contre des bots, tableau des scores, écran de fin
 - [x] Menu pause local (changement de classe, son, sensibilité), protection d'apparition, effets sonores
-- [x] Multijoueur en ligne sur serveur dédié (Godot headless), rejoint par adresse, mode LAN
+- [x] Multijoueur en ligne sur serveur dédié (Godot headless), jusqu'à 16 joueurs, mode LAN
 - [x] Export du client lourd Windows / Linux / macOS (macOS non testé) et du serveur dédié Windows / Linux
 - [x] Connexion au vrai back-end (BFF + temps réel côté jeu, Server List côté serveur), mode hors ligne conservé
 - [x] Micro-services et bases de données (dépôt séparé `TPSArena_backend`), envoi des codes par e-mail (Gmail)

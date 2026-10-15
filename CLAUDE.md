@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**Arena TPS** — a 3D third-person multiplayer deathmatch shooter (8 players, free-for-all) set in a Japanese district "NEO-EDO" mixing a traditional temple area with Tokyo neon. The project is the practical support for a **micro-services architecture** course assignment.
+**Arena TPS** — a 3D third-person multiplayer deathmatch shooter (up to 16 players, free-for-all) set in a Japanese district "NEO-EDO" mixing a traditional temple area with Tokyo neon. The project is the practical support for a **micro-services architecture** course assignment.
 
 Built by two people on separate, independent tracks:
 - **`front/`** — the Godot 4.7.2 project. It holds **both the game client and the dedicated game server** (one project, two exports). Julien's responsibility for the client; the server side (`scripts/server/`) is where it meets Elian's backend.
@@ -17,7 +17,7 @@ There is no build system, package manager, or test runner in this repo — it's 
 
 **Run the game**: open `front/project.godot` in the Godot 4.7.2 editor and press F5. `front/` must stay on exactly this Godot version — opening it with another version converts the project files and causes conflicts for the other dev.
 
-**Run the dedicated server** locally (from `front/`): `godot --headless -- --server --bots 2 --duration 60`, then start clients with `godot`, log in with "Jouer hors ligne" and REJOINDRE `127.0.0.1` (the join-by-address box only shows in offline mode). In the editor: Debug → Customize Run Instances, first instance with `--headless -- --server`. With the real backend (stack from `backend/`: `docker compose up -d`), add `--serverlist-url http://localhost:8002 --public-address <IP>` and set `GAME_SERVER_SECRET` (same value as `backend/.env`). Test accounts: register in the game, and read the code in Mailpit (http://localhost:8025).
+**Run the dedicated server** locally (from `front/`): `godot --headless -- --server --bots 2 --duration 60` (also `--map neo-edo|hikari-mall`, `--max-players 1..16`, 16 by default), then start clients with `godot`, log in with "Jouer hors ligne" and REJOINDRE `127.0.0.1` (the join-by-address box only shows in offline mode). In the editor: Debug → Customize Run Instances, first instance with `--headless -- --server`. With the real backend (stack from `backend/`: `docker compose up -d`), add `--serverlist-url http://localhost:8002 --public-address <IP>` and set `GAME_SERVER_SECRET` (same value as `backend/.env`). Test accounts: register in the game, and read the code in Mailpit (http://localhost:8025).
 
 **Export the client** (Windows/Linux/macOS standalone builds, to hand out to players):
 ```bash
@@ -76,7 +76,7 @@ Online flow: the party leader opens the launch page from LANCER EN LIGNE (bots a
 
 - The **dedicated server** (`scripts/server/server_main.gd`) doesn't play. It runs forever: `idle` (lobby) → `in_progress` → `ending` → `idle`, the same states as the backend's Server List. `server_game.gd` is the match on the server: map, bots (`BotBrain` reads `game.players`, `roam_points`, `nav_map` by duck typing), damage, deaths, respawns, timer.
 - **Authority (first step)**: each client simulates its own player and sends its state to the server at `STATE_HZ`; the server rebroadcasts everyone's state (bots included). The shooter reports hits (`Net.hit`); only the server applies damage and broadcasts results with the reliable `push_health` / `push_death` / `push_respawn` / `push_match_over` RPCs. Clients never talk to each other (`server_relay` off). Moving to full server simulation from `PlayerCommands` is the planned next stage.
-- **Identity**: the handshake (`_hello`) carries the player's `user_id` (`Backend.user_id()`), a join ticket (empty in LAN) and `BUILD_VERSION`. The server refuses a different version, a 9th human player, or an account already connected. Players can join a match in progress (a bot gives up its slot if needed).
+- **Identity**: the handshake (`_hello`) carries the player's `user_id` (`Backend.user_id()`), a join ticket (empty in LAN) and `BUILD_VERSION`. The server refuses a different version, a human player beyond `Net.max_players` (`--max-players`, 16 by default), or an account already connected. Players can join a match in progress (a bot gives up its slot if needed).
 - **LAN lobby**: the first accepted player is the leader (`Net.leader_id`, reassigned when they leave). Only the leader can change bots/duration (`request_settings`) and start (`request_start`); the server checks it.
 - Bots have negative ids, are simulated only on the server, and are puppets on clients.
 
@@ -94,13 +94,16 @@ Keep the event payloads shaped like the backend's Pydantic models (`backend/libs
 
 **GDScript pitfall:** `start()`, `report()` and `verify()` are coroutines in the base class too (they contain an `await`). GDScript decides from the *static* type whether a call awaits a coroutine. Calling, through a `BackendLink`-typed variable, a method that is a coroutine only in the subclass crashes the engine after the await (corrupted stack, signal 11). Keep any method a subclass makes async async in the base class too.
 
-### Data-driven classes and weapons
+### Specialists, classes (loadouts) and weapons
 
-Classes and weapons are Godot `Resource` (`.tres`) files, editable in the Godot inspector, not code:
-- `front/data/classes/*.tres` (schema: `front/scripts/data/class_data.gd`) — HP, speed, weapon, ability, appearance.
-- `front/data/weapons/*.tres` (schema: `front/scripts/data/weapon_data.gd`) — damage, fire rate, magazine, spread, zoom, 3D model.
+Two separate choices, both data-driven:
+- **Specialist** = the character: appearance, HP, speed and ability. `ClassData` resources in `front/data/classes/*.tres` (schema `front/scripts/data/class_data.gd`), listed in `GameState.CLASSES` (tank, assassin, tireur, oni). Chosen on the SPÉCIALISTES screen (`class_select.tscn`), kept in `GameState.selected_class`. Its id for the backend is the `.tres` basename (`GameState.class_id()`), sent to the party with `Backend.sync_party_class()`.
+- **Class** = the equipment (loadout): `{name, primary, secondary}` weapon ids plus 2 grenades, any specialist can use any class. Up to 10 per player, edited in the CLASSES tab (`LoadoutEditor`, `front/scripts/ui/loadout_editor.gd`), chosen on the JOUER page. `GameState.loadouts` / `selected_loadout`, saved locally in `user://loadouts.cfg` and on the account through `Backend.get_loadouts()` / `save_loadouts()` (Social `GET/PUT /loadouts/me`, which checks the weapon ids).
+- **Weapons**: `WeaponData` resources in `front/data/weapons/*.tres` (schema `front/scripts/data/weapon_data.gd`: damage, fire rate, magazine, spread, zoom, 3D model). `WeaponCatalog` (`front/scripts/data/weapon_catalog.gd`) lists the class weapons (`WEAPONS`), the grenade and the pickup-only specials, and sanitizes loadouts. Add a weapon by creating its `.tres` and adding it to `WEAPONS` (and to Social's allowed weapon list).
 
-`GameState` (autoload, `front/scripts/game_state.gd`) is the single list of playable classes (`GameState.CLASSES`) and holds cross-screen state (selected class, match mode/duration/bot count). Add a new class/weapon by creating a `.tres` and, for classes, registering it in `GameState.CLASSES`.
+The server judges hits by zone (head or body, `MatchRules.is_headshot`), with the shooter's weapon and specialist.
+
+`GameState` (autoload) also holds the other cross-screen state: match mode/duration/bot count, offline map (`map_id`), online launch settings (`online_settings`).
 
 ### Character rig / animation
 
@@ -110,7 +113,9 @@ Two parallel character pipelines under `front/scripts/character/`:
 
 Animation state is driven entirely by observable character state (velocity, grounded, crouched, aim angle) — in multiplayer this state is exactly what gets broadcast (`player.net_state()`) so remote players animate correctly without extra sync logic.
 
-### The arena map
+### Maps
+
+`MapCatalog` (`front/scripts/maps/map_catalog.gd`) lists the playable maps: `neo-edo` (default) and `hikari-mall` (abandoned mall, 100×100 m, 2 levels, `mall_map.gd` + `scenes/maps/mall.tscn`). Each map scene's script extends `ArenaMap` and answers the same questions (spawn points, pickups, training targets, bot navigation). The map id travels in the lobby settings and goes to the backend (Server List, `match.finished`). Who picks it: the dedicated server's `--map` (default for its matches), the LAN lobby leader, the JOUER page's offline map list for solo and training, and the party's `match_settings.map` when it sends one. Add a map by creating its scene and adding it to `MapCatalog.MAPS`.
 
 `front/scripts/maps/arena_map.gd` procedurally builds the 120×120m "NEO-EDO" arena (sanctuary, market, "IoT 研究所" lab, pagoda, zen garden, neon alleys — zone breakdown is in the README) as code-driven lists of props, loaded by the standalone scene `front/scenes/maps/arena.tscn`. It's deliberately a separate scene from `game.tscn` so the dedicated server loads just the map. After editing `arena_map.gd`, use the **"Reconstruire la map"** button in the `arena.tscn` scene inspector to regenerate it in the editor — it doesn't rebuild automatically on script save.
 

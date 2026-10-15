@@ -28,7 +28,7 @@ Sommaire :
   code). Sinon le serveur refuse la connexion avec « Versions différentes ».
 - Le serveur écoute sur le port **UDP 24567**. C'est le pare-feu **du PC serveur** qui
   doit l'autoriser. Les PC des joueurs n'ont rien à ouvrir.
-- 8 joueurs au maximum par partie.
+- 16 joueurs au maximum par partie (`--max-players` pour en mettre moins).
 - **Deux façons de jouer** :
 
   | | **LAN** (sections 3 à 6) | **Avec le vrai back** (section 7) |
@@ -321,7 +321,7 @@ $env:GAME_SERVER_SECRET = "<la valeur du .env>"
    dans ses demandes reçues. La pastille montre qui est en ligne (vert) ou en partie (jaune).
 5. **Groupe** : **CRÉER UN GROUPE** (à gauche du bouton AMIS), ou directement le bouton **+**
    à côté d'un ami en ligne, qui l'invite ; il clique **REJOINDRE** sur le bandeau
-   d'invitation. 8 joueurs au plus, chacun affiché avec sa classe sur la page JOUER. Le chef
+   d'invitation. 16 joueurs au plus, chacun affiché avec sa classe sur la page JOUER. Le chef
    clique sur le personnage d'un membre pour l'exclure (**Kick**) ou lui **donner le lead** ;
    **QUITTER LE GROUPE** remplace CRÉER UN GROUPE.
 6. Le chef clique **LANCER EN LIGNE** (seul, c'est un groupe d'une personne), choisit le
@@ -376,7 +376,7 @@ variable d'environnement `GAME_SERVER_SECRET`.
 | « La Server List refuse GAME_SERVER_SECRET » | La variable ne correspond pas à `GAME_SERVER_SECRET` dans `backend/.env`. |
 | « Accès refusé : ticket invalide ou expiré » | On a rejoint un serveur Server List par son adresse IP : avec le vrai back, on passe par **LANCER EN LIGNE** ou **SERVEURS PUBLICS**. |
 | « Le port 24567 est déjà utilisé » (ou « Couldn't create an ENet host ») | Un serveur tourne déjà sur ce PC, souvent lancé d'un double-clic donc sans fenêtre. Linux : `pgrep -af ArenaTPS_Server` pour le voir, `pkill -f ArenaTPS_Server` pour l'arrêter. Windows : Gestionnaire des tâches. Ou lancer avec `--port 24568`. |
-| « La partie est pleine » | 8 joueurs sont déjà là. |
+| « La partie est pleine » | Le maximum du serveur (16, ou `--max-players`) est atteint. |
 | « Ce compte est déjà connecté » | Le même jeu est ouvert deux fois avec la même session : se reconnecter. |
 | Le serveur Linux ne démarre pas (« Permission non accordée ») | Oublié `chmod +x ArenaTPS_Server.x86_64`. |
 | Les options (`--port`, `--bots`…) semblent ignorées | Les placer après `--` : `./ArenaTPS_Server.x86_64 -- --port 24568`. Le serveur lit les deux formes. |
