@@ -10,7 +10,7 @@ extends CanvasLayer
 ##     Quitter la partie ;
 ##   - spécialistes : choix du personnage utilisé à la prochaine apparition ;
 ##   - classes : choix de l'équipement (armes) utilisé à la prochaine apparition ;
-##   - paramètres : volumes (général, effets, interface), sensibilité de la souris ;
+##   - paramètres : son, souris et touches (SettingsPanel, comme la page PARAMÈTRES du menu) ;
 ##   - confirmation avant de quitter.
 ## Échap : revient à la page principale, puis ferme le menu.
 
@@ -34,9 +34,7 @@ var _current_class: ClassData
 var _pending_class: ClassData
 var _pending_loadout := false
 var _loadouts_box: GridContainer
-var _setting_values := {}        # clé de réglage -> Label de la valeur
-var _setting_sliders := {}       # clé de réglage -> HSlider
-var _invert_button: Button
+var _settings_panel: SettingsPanel
 var _resume_button: Button
 var _open := false
 
@@ -207,7 +205,7 @@ func _show_page(page: String) -> void:
 		else:
 			b.remove_theme_stylebox_override("normal")
 	if page == "settings":
-		_refresh_settings()
+		_settings_panel.refresh()
 
 
 func _page_header(title: String, subtitle: String) -> VBoxContainer:
@@ -353,93 +351,9 @@ func _refresh_loadouts() -> void:
 
 func _build_settings_page() -> Control:
 	var page := _page_header("PARAMÈTRES", "Les réglages sont enregistrés sur ton ordinateur et s'appliquent tout de suite.")
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	page.add_child(scroll)
-	var list := VBoxContainer.new()
-	list.add_theme_constant_override("separation", 14)
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(list)
-
-	list.add_child(UiTheme.label("SON", 15, UiTheme.CYAN, true))
-	list.add_child(_slider_row("master_volume", "Volume général", 0.0, 1.0, 0.01, _percent))
-	list.add_child(_slider_row("sfx_volume", "Effets (tirs, impacts, capacités)", 0.0, 1.0, 0.01, _percent))
-	list.add_child(_slider_row("ui_volume", "Interface (menus)", 0.0, 1.0, 0.01, _percent))
-
-	list.add_child(UiTheme.spacer(Vector2(0, 4)))
-	list.add_child(UiTheme.label("SOURIS", 15, UiTheme.CYAN, true))
-	list.add_child(_slider_row("sensitivity", "Sensibilité de la caméra", 0.2, 3.0, 0.05, func(v: float) -> String: return "x%.2f" % v))
-
-	var invert_row := HBoxContainer.new()
-	var invert_label := UiTheme.label("Inverser l'axe vertical", 17, UiTheme.TEXT)
-	invert_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	invert_row.add_child(invert_label)
-	_invert_button = UiTheme.button("NON", false, UiTheme.CYAN, 38)
-	_invert_button.toggle_mode = true
-	_invert_button.custom_minimum_size.x = 110
-	_invert_button.toggled.connect(func(on: bool) -> void:
-		Settings.set_value("invert_y", on)
-		_invert_button.text = "OUI" if on else "NON"
-		Sfx.ui("ui_click"))
-	invert_row.add_child(_invert_button)
-	list.add_child(invert_row)
-
-	list.add_child(UiTheme.spacer(Vector2(0, 6)))
-	var reset := UiTheme.button("RÉTABLIR LES RÉGLAGES PAR DÉFAUT", false, UiTheme.CYAN, 40)
-	reset.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	reset.pressed.connect(func() -> void:
-		Settings.reset_defaults()
-		_refresh_settings()
-		Sfx.ui("ui_click"))
-	list.add_child(reset)
+	_settings_panel = SettingsPanel.new()
+	page.add_child(_settings_panel)
 	return page
-
-
-func _slider_row(key: String, title: String, min_value: float, max_value: float, step: float, format: Callable) -> Control:
-	var row := VBoxContainer.new()
-	row.add_theme_constant_override("separation", 4)
-	var top := HBoxContainer.new()
-	var t := UiTheme.label(title, 17, UiTheme.TEXT)
-	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(t)
-	var value_label := UiTheme.label("", 17, UiTheme.CYAN, true)
-	top.add_child(value_label)
-	row.add_child(top)
-
-	var slider := HSlider.new()
-	slider.min_value = min_value
-	slider.max_value = max_value
-	slider.step = step
-	slider.custom_minimum_size = Vector2(0, 24)
-	slider.value_changed.connect(func(v: float) -> void:
-		Settings.set_value(key, v)
-		value_label.text = format.call(v))
-	# Petit son de test quand on relâche le curseur d'un volume.
-	slider.drag_ended.connect(func(_changed: bool) -> void:
-		if key == "ui_volume":
-			Sfx.ui("ui_click")
-		elif key.ends_with("volume"):
-			Sfx.play("hit"))
-	row.add_child(slider)
-	_setting_sliders[key] = slider
-	_setting_values[key] = [value_label, format]
-	return row
-
-
-func _percent(v: float) -> String:
-	return "%d %%" % roundi(v * 100.0)
-
-
-func _refresh_settings() -> void:
-	for key in _setting_sliders:
-		var slider: HSlider = _setting_sliders[key]
-		var value: float = Settings.get(key)
-		slider.set_value_no_signal(value)
-		var entry: Array = _setting_values[key]
-		(entry[0] as Label).text = (entry[1] as Callable).call(value)
-	_invert_button.set_pressed_no_signal(Settings.invert_y)
-	_invert_button.text = "OUI" if Settings.invert_y else "NON"
 
 
 # ---------------------------------------------------------------- Page : quitter

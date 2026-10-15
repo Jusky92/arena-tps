@@ -708,7 +708,7 @@ func _on_bonus_picked(kind: int) -> void:
 			text = "ARMURE +%d" % Pickups.ARMOR_AMOUNT
 		Pickups.Kind.SUPER:
 			if player.super_power >= 0:
-				text = "%s  ·  [F]" % Pickups.SUPER_INFO[player.super_power].name.to_upper()
+				text = "%s  ·  %s" % [Pickups.SUPER_INFO[player.super_power].name.to_upper(), Inputs.hint("super")]
 	_ui.show_banner(text, Pickups.color_of(kind))
 	Sfx.play("powerup" if kind == Pickups.Kind.SUPER else "pickup", -4.0)
 

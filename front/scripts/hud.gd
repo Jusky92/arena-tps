@@ -125,10 +125,10 @@ func _process(delta: float) -> void:
 		_ability_label.text = "%s  ·  ACTIVE" % data.ability_name.to_upper()
 		_ability_icon.modulate = Color.WHITE
 	elif ratio >= 1.0:
-		_ability_label.text = "[E]  %s  ·  PRÊT" % data.ability_name.to_upper()
+		_ability_label.text = "%s  %s  ·  PRÊT" % [Inputs.hint("ability"), data.ability_name.to_upper()]
 		_ability_icon.modulate = data.color.lightened(0.3)
 	else:
-		_ability_label.text = "[E]  %s  ·  %.1f s" % [data.ability_name.to_upper(), (1.0 - ratio) * data.ability_cooldown]
+		_ability_label.text = "%s  %s  ·  %.1f s" % [Inputs.hint("ability"), data.ability_name.to_upper(), (1.0 - ratio) * data.ability_cooldown]
 		_ability_icon.modulate = Color(1, 1, 1, 0.35)
 	_ability_fill.bg_color = data.color if ratio >= 1.0 else data.color.darkened(0.45)
 
@@ -257,7 +257,7 @@ func _update_bonuses() -> void:
 	_super_chip.visible = p.alive and p.super_power >= 0
 	if _super_chip.visible:
 		var info: Dictionary = Pickups.SUPER_INFO[p.super_power]
-		_super_label.text = "[F] %s" % info.name.to_upper()
+		_super_label.text = "%s %s" % [Inputs.hint("super"), info.name.to_upper()]
 		_super_label.add_theme_color_override("font_color", info.color)
 
 

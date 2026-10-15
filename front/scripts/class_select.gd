@@ -137,7 +137,7 @@ func _make_card(data: ClassData, index: int) -> Control:
 	box.add_child(HSeparator.new())
 
 	# Capacité.
-	box.add_child(_label("CAPACITÉ [E]  ·  %s" % data.ability_name, 15, data.color.lightened(0.35)))
+	box.add_child(_label("CAPACITÉ %s  ·  %s" % [Inputs.hint("ability"), data.ability_name], 15, data.color.lightened(0.35)))
 	var ability_desc := _label("%s (recharge %d s)" % [data.ability_description, int(data.ability_cooldown)], 12, Color(1, 1, 1, 0.6))
 	ability_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(ability_desc)

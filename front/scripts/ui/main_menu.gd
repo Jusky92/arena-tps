@@ -5,6 +5,7 @@ extends Control
 ##   SPÉCIALISTES  ouvre l'écran de choix du spécialiste (personnage + capacité)
 ##   CLASSES       éditeur de classes (équipements : 2 armes + 2 grenades), LoadoutEditor
 ##   STATISTIQUES  stats et succès du joueur, classements (XP, victoires, éliminations)
+##   PARAMÈTRES    roue crantée de la barre du haut : son, souris, touches (SettingsPanel)
 ##   AMIS          tiroir à droite (bouton sous la barre de navigation) : présence,
 ##                 demandes d'ami, ajout, invitation dans le groupe
 ## Toutes les données viennent de l'autoload Backend (vrai back, ou simulé hors ligne).
@@ -20,6 +21,7 @@ const GAME := "res://scenes/game.tscn"
 const LOBBY := "res://scenes/lobby.tscn"
 const CLASS_SELECT := "res://scenes/class_select.tscn"
 const AUTH := "res://scenes/auth.tscn"
+const GEAR_ICON := preload("res://assets/ui/icons/gear.svg")
 ## Dernière adresse de connexion, gardée d'une partie à l'autre.
 const ADDRESS_PATH := "user://reseau.cfg"
 const BOARDS := [["XP", "xp"], ["VICTOIRES", "wins"], ["ÉLIMINATIONS", "kills"]]
@@ -35,7 +37,7 @@ var _overlay: Control
 var _address_field: LineEdit
 var _online_error: Label
 var _launch_button: Button
-## Page affichée : "play", "classes", "stats", "servers".
+## Page affichée : "play", "classes", "stats", "servers", "settings".
 var _page := ""
 var _friends_button: Button
 ## « CRÉER UN GROUPE » / « QUITTER LE GROUPE », à gauche du bouton AMIS (page JOUER).
@@ -158,6 +160,23 @@ func _build_top_bar() -> Control:
 	_profile_box = HBoxContainer.new()
 	_profile_box.add_theme_constant_override("separation", 12)
 	row.add_child(_profile_box)
+
+	var gear := Button.new()
+	gear.icon = GEAR_ICON
+	gear.flat = true
+	gear.add_theme_constant_override("icon_max_width", 28)
+	# Petites marges, comme les onglets (celles des boutons du thème écrasent l'icône).
+	var gear_style := StyleBoxEmpty.new()
+	gear_style.content_margin_left = 6
+	gear_style.content_margin_right = 6
+	for state in ["normal", "hover", "pressed", "focus", "hover_pressed"]:
+		gear.add_theme_stylebox_override(state, gear_style)
+	gear.tooltip_text = "Paramètres : son, souris, touches"
+	gear.add_theme_color_override("icon_normal_color", UiTheme.MUTED)
+	gear.add_theme_color_override("icon_hover_color", Color.WHITE)
+	gear.pressed.connect(_show_page.bind("settings"))
+	row.add_child(gear)
+	_nav_buttons["settings"] = gear
 
 	var logout := Button.new()
 	logout.text = "Déconnexion"
@@ -340,6 +359,7 @@ func _show_page(page: String) -> void:
 	for key in _nav_buttons:
 		var active: bool = key == page
 		_nav_buttons[key].add_theme_color_override("font_color", UiTheme.CYAN if active else UiTheme.MUTED)
+		_nav_buttons[key].add_theme_color_override("icon_normal_color", UiTheme.CYAN if active else UiTheme.MUTED)
 	for c in _page_holder.get_children():
 		c.queue_free()
 	match page:
@@ -351,6 +371,30 @@ func _show_page(page: String) -> void:
 			_page_holder.add_child(LoadoutEditor.new())
 		"servers":
 			_page_holder.add_child(_build_server_page())
+		"settings":
+			_page_holder.add_child(_build_settings_page())
+
+
+# --------------------------------------------------------------------------- PARAMÈTRES
+
+## Son, souris et touches (les mêmes réglages que dans le menu pause en partie).
+func _build_settings_page() -> Control:
+	var center := HBoxContainer.new()
+	center.alignment = BoxContainer.ALIGNMENT_CENTER
+	var col := VBoxContainer.new()
+	col.custom_minimum_size.x = 760
+	col.add_theme_constant_override("separation", 12)
+	center.add_child(col)
+	col.add_child(UiTheme.title("PARAMÈTRES", 30))
+	var sub := UiTheme.label("Enregistrés sur cet ordinateur, appliqués tout de suite (aussi réglables en partie depuis le menu pause).", 15, UiTheme.MUTED)
+	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(sub)
+	col.add_child(UiTheme.neon_line(UiTheme.CYAN, 1))
+	var panel := UiTheme.panel()
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	panel.add_child(SettingsPanel.new())
+	col.add_child(panel)
+	return center
 
 
 # --------------------------------------------------------------------------- JOUER
