@@ -1270,16 +1270,18 @@ func _friend_row(f: Dictionary) -> Control:
 	row.add_theme_constant_override("separation", 10)
 	panel.add_child(row)
 	var in_match: bool = f.status == "online" and f.activity == "in_match"
-	var color: Color = UiTheme.YELLOW if in_match else (UiTheme.GREEN if f.status == "online" else Color(UiTheme.MUTED, 0.5))
+	# Seulement l'app mobile ouverte (TPS Arena Companion) : en ligne, mais pas dans le jeu.
+	var on_mobile: bool = f.status == "online" and f.activity == "mobile"
+	var color: Color = UiTheme.YELLOW if in_match else (UiTheme.CYAN if on_mobile else (UiTheme.GREEN if f.status == "online" else Color(UiTheme.MUTED, 0.5)))
 	row.add_child(UiTheme.dot(color, 10))
 	var info := VBoxContainer.new()
 	info.add_theme_constant_override("separation", -2)
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.add_child(UiTheme.label(f.username, 17, Color.WHITE if f.status != "offline" else UiTheme.MUTED, true))
-	var activity := "En partie" if in_match else ("Dans le menu" if f.status == "online" else "Hors ligne")
+	var activity := "En partie" if in_match else ("Sur mobile" if on_mobile else ("Dans le menu" if f.status == "online" else "Hors ligne"))
 	info.add_child(UiTheme.label(activity, 14, UiTheme.MUTED))
 	row.add_child(info)
-	if f.status == "online" and not in_match and Backend.is_party_leader():
+	if f.status == "online" and not in_match and not on_mobile and Backend.is_party_leader():
 		var already: bool = Backend.party_members().any(func(m): return m.user_id == f.user_id)
 		if not already:
 			var invite := Button.new()
