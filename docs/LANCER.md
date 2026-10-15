@@ -225,9 +225,9 @@ seulement.
 3. **Se connecter.** Pour une partie LAN sans back, cliquer **« Jouer hors ligne »** sur
    l'écran de connexion : n'importe quel identifiant et mot de passe sont acceptés. Le
    pseudo affiché en jeu vient de l'identifiant (la partie avant `@`) : choisissez-en un
-   différent pour chaque joueur. (Avec un vrai compte, voir la section 7 ; on peut aussi
-   rejoindre un serveur LAN connecté au vrai back.)
-4. Dans la page **JOUER**, cadre **REJOINDRE PAR ADRESSE (LAN)** : taper l'adresse donnée par le
+   différent pour chaque joueur. (Avec un vrai compte, voir la section 7.)
+4. Dans la page **JOUER**, cadre **REJOINDRE PAR ADRESSE (LAN)** (affiché seulement hors
+   ligne) : taper l'adresse donnée par le
    serveur, par exemple `192.168.1.20` (ajouter `:port` seulement si le serveur a été
    lancé avec un autre port que 24567, ex. `192.168.1.20:24568`).
 5. Cliquer **REJOINDRE**. Après quelques secondes, le **salon** s'ouvre. Si une partie
@@ -347,7 +347,8 @@ godot --headless -- --server --bots 2 --duration 60
 godot
 ```
 
-Les clients rejoignent `127.0.0.1`. Sous Windows, remplacer `godot` par le chemin de
+Les clients se connectent avec « Jouer hors ligne », puis rejoignent `127.0.0.1` (cadre
+**REJOINDRE PAR ADRESSE**, affiché seulement hors ligne). Sous Windows, remplacer `godot` par le chemin de
 l'exécutable, par exemple `& "C:\Godot\Godot_v4.7.2-stable_win64.exe" --headless -- --server`.
 
 Dans l'éditeur, on peut tout lancer d'un coup : **Débogage → Personnaliser les

@@ -142,7 +142,8 @@ Au démarrage, le serveur affiche les **adresses à donner aux joueurs**, par ex
 Si tous les PC sont sur le même Wi-Fi ou le même câble (salle de cours, appartement) :
 
 1. Le PC serveur lance `ArenaTPS_Server` (§3) et note une des adresses affichées.
-2. Chaque joueur lance `ArenaTPS`, se connecte (« Jouer hors ligne » suffit), saisit
+2. Chaque joueur lance `ArenaTPS`, se connecte avec « Jouer hors ligne » (le cadre
+   n'apparaît pas avec un vrai compte), saisit
    l'adresse dans le cadre **REJOINDRE PAR ADRESSE (LAN)** de la page JOUER, puis
    **REJOINDRE**.
 3. Le premier arrivé est le **chef** : il règle les bots et la durée, puis
@@ -242,7 +243,7 @@ godot --headless -- --server --bots 2 --duration 60   # le serveur
 godot                                                  # un joueur (autant de fois que voulu)
 ```
 
-Les joueurs rejoignent `127.0.0.1`. Dans l'éditeur, **Débogage → Personnaliser les
+Les joueurs se connectent avec « Jouer hors ligne », puis rejoignent `127.0.0.1`. Dans l'éditeur, **Débogage → Personnaliser les
 instances de lancement** permet de lancer 3 instances d'un coup, la première avec les
 arguments `--headless -- --server`.
 

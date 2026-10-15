@@ -1,9 +1,10 @@
 extends Control
 ## Menu principal (après connexion).
-##   JOUER         classe, groupe, lancement en ligne, serveurs publics, LAN, hors ligne
+##   JOUER         classe, groupe, lancement en ligne, serveurs publics, LAN (hors ligne seulement), bots
 ##   CLASSES       ouvre l'écran de choix de classe
 ##   STATISTIQUES  stats et succès du joueur, classements (XP, victoires, éliminations)
-##   AMIS          panneau de droite : présence, demandes d'ami, ajout, invitation dans le groupe
+##   AMIS          tiroir à droite (bouton sous la barre de navigation) : présence,
+##                 demandes d'ami, ajout, invitation dans le groupe
 ## Toutes les données viennent de l'autoload Backend (vrai back, ou simulé hors ligne).
 ##
 ## Lancer une partie en ligne : le chef du groupe (ou un joueur seul) demande un
@@ -30,6 +31,15 @@ var _overlay: Control
 var _address_field: LineEdit
 var _online_error: Label
 var _launch_button: Button
+var _friends_button: Button
+var _drawer: PanelContainer
+var _drawer_tween: Tween
+
+const DRAWER_WIDTH := 340.0
+## Écart avec le bord droit de l'écran, le même que celui du bouton AMIS.
+const DRAWER_MARGIN := 24.0
+## Tiroir d'amis ouvert ou fermé, gardé d'un écran à l'autre (choix de classe, partie).
+static var _drawer_open := false
 
 
 func _ready() -> void:
@@ -49,16 +59,21 @@ func _ready() -> void:
 	add_child(root)
 	root.add_child(_build_top_bar())
 
-	var body := HBoxContainer.new()
+	root.add_child(_build_friends_toggle())
+
+	# La page occupe toute la largeur ; le tiroir d'amis glisse par-dessus, à droite.
+	var body := Control.new()
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", 0)
+	body.clip_contents = true
 	root.add_child(body)
 	_page_holder = MarginContainer.new()
-	_page_holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_page_holder.set_anchors_preset(Control.PRESET_FULL_RECT)
 	for side in ["left", "right", "top", "bottom"]:
-		_page_holder.add_theme_constant_override("margin_" + side, 24 if side != "top" else 18)
+		_page_holder.add_theme_constant_override("margin_" + side, 24 if side != "top" else 6)
 	body.add_child(_page_holder)
-	body.add_child(_build_social_panel())
+	_drawer = _build_social_panel()
+	body.add_child(_drawer)
+	_set_drawer(_drawer_open, false)
 	root.add_child(_build_bottom_bar())
 
 	Backend.party_changed.connect(_refresh_party)
@@ -127,6 +142,62 @@ func _build_top_bar() -> Control:
 	quit_button.pressed.connect(func() -> void: get_tree().quit())
 	row.add_child(quit_button)
 	return bar
+
+
+## Bouton rectangulaire en haut à droite, sous la barre de navigation : ouvre et ferme le tiroir d'amis.
+func _build_friends_toggle() -> Control:
+	var row := MarginContainer.new()
+	for side in ["left", "right", "top", "bottom"]:
+		row.add_theme_constant_override("margin_" + side, 24 if side in ["left", "right"] else 10 if side == "top" else 0)
+	_friends_button = UiTheme.button("AMIS", false, UiTheme.CYAN, 40)
+	_friends_button.toggle_mode = true
+	_friends_button.custom_minimum_size.x = 260
+	_friends_button.size_flags_horizontal = Control.SIZE_SHRINK_END
+	_friends_button.tooltip_text = "Afficher ou masquer la liste d'amis"
+	_friends_button.toggled.connect(func(on: bool) -> void: _set_drawer(on))
+	row.add_child(_friends_button)
+	return row
+
+
+## Ouvre ou ferme le tiroir d'amis (glissement depuis le bord droit).
+func _set_drawer(open: bool, animate := true) -> void:
+	_drawer_open = open
+	if is_instance_valid(_friends_button):
+		_friends_button.set_pressed_no_signal(open)
+		_update_friends_button()
+	if not is_instance_valid(_drawer):
+		return
+	if _drawer_tween:
+		_drawer_tween.kill()
+	var left := -DRAWER_WIDTH - DRAWER_MARGIN if open else 0.0
+	if open:
+		_drawer.visible = true
+	if not animate:
+		_drawer.offset_left = left
+		_drawer.offset_right = left + DRAWER_WIDTH
+		_drawer.visible = open
+		return
+	_drawer_tween = create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_drawer_tween.tween_property(_drawer, "offset_left", left, 0.22)
+	_drawer_tween.tween_property(_drawer, "offset_right", left + DRAWER_WIDTH, 0.22)
+	if not open:
+		_drawer_tween.chain().tween_callback(func() -> void: _drawer.visible = false)
+
+
+## Texte du bouton : amis en ligne, et demandes reçues en magenta.
+func _update_friends_button() -> void:
+	if not is_instance_valid(_friends_button):
+		return
+	var online: int = Backend.friends.filter(func(f): return f.status != "offline").size()
+	var text := "AMIS  ·  %d EN LIGNE" % online
+	var requests: int = Backend.incoming.size()
+	if requests > 0:
+		text += "  ·  %d DEMANDE%s" % [requests, "S" if requests > 1 else ""]
+	_friends_button.text = text + ("   ▸" if _drawer_open else "   ◂")
+	var accent := UiTheme.MAGENTA if requests > 0 else Color.WHITE
+	_friends_button.add_theme_color_override("font_color", accent)
+	_friends_button.add_theme_color_override("font_hover_color", accent)
+	_friends_button.add_theme_color_override("font_pressed_color", accent)
 
 
 func _build_bottom_bar() -> Control:
@@ -281,32 +352,33 @@ func _build_play_page() -> Control:
 	col.add_child(launch_row)
 	_update_launch_button()
 
-	# --- LAN : serveur rejoint par adresse ---
-	var online := UiTheme.panel(Color(UiTheme.CYAN, 0.07), Color(UiTheme.CYAN, 0.35))
-	var online_box := VBoxContainer.new()
-	online_box.add_theme_constant_override("separation", 10)
-	online.add_child(online_box)
-	online_box.add_child(UiTheme.label("REJOINDRE PAR ADRESSE (LAN)", 14, UiTheme.CYAN, true))
-	var online_help := UiTheme.label("Pour un serveur lancé en mode LAN : entre l'adresse qu'il affiche au démarrage.", 15, UiTheme.MUTED)
-	online_help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	online_box.add_child(online_help)
-	var join_row := HBoxContainer.new()
-	join_row.add_theme_constant_override("separation", 10)
-	_address_field = LineEdit.new()
-	_address_field.placeholder_text = "adresse du serveur, ex. 192.168.1.20"
-	_address_field.text = _saved_address()
-	_address_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_address_field.text_submitted.connect(func(_t: String) -> void: _join_online())
-	join_row.add_child(_address_field)
-	var join_button := UiTheme.button("REJOINDRE", true, UiTheme.MAGENTA, 46)
-	join_button.custom_minimum_size.x = 170
-	join_button.pressed.connect(_join_online)
-	join_row.add_child(join_button)
-	online_box.add_child(join_row)
-	_online_error = UiTheme.label("", 15, UiTheme.RED)
-	_online_error.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	online_box.add_child(_online_error)
-	col.add_child(online)
+	# --- LAN par adresse : seulement hors ligne (back simulé), avec le vrai back on passe par les tickets ---
+	if Backend.is_simulated():
+		var online := UiTheme.panel(Color(UiTheme.CYAN, 0.07), Color(UiTheme.CYAN, 0.35))
+		var online_box := VBoxContainer.new()
+		online_box.add_theme_constant_override("separation", 10)
+		online.add_child(online_box)
+		online_box.add_child(UiTheme.label("REJOINDRE PAR ADRESSE (LAN)", 14, UiTheme.CYAN, true))
+		var online_help := UiTheme.label("Pour un serveur lancé en mode LAN : entre l'adresse qu'il affiche au démarrage.", 15, UiTheme.MUTED)
+		online_help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		online_box.add_child(online_help)
+		var join_row := HBoxContainer.new()
+		join_row.add_theme_constant_override("separation", 10)
+		_address_field = LineEdit.new()
+		_address_field.placeholder_text = "adresse du serveur, ex. 192.168.1.20"
+		_address_field.text = _saved_address()
+		_address_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_address_field.text_submitted.connect(func(_t: String) -> void: _join_online())
+		join_row.add_child(_address_field)
+		var join_button := UiTheme.button("REJOINDRE", true, UiTheme.MAGENTA, 46)
+		join_button.custom_minimum_size.x = 170
+		join_button.pressed.connect(_join_online)
+		join_row.add_child(join_button)
+		online_box.add_child(join_row)
+		_online_error = UiTheme.label("", 15, UiTheme.RED)
+		_online_error.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		online_box.add_child(_online_error)
+		col.add_child(online)
 
 	# --- Hors ligne (ne compte pas dans les statistiques) ---
 	var buttons := HBoxContainer.new()
@@ -815,10 +887,16 @@ func _stat_card(title: String, value: String, color: Color) -> Control:
 
 # =========================================================================== AMIS
 
-func _build_social_panel() -> Control:
+## Tiroir d'amis, ancré au bord droit du corps de page (placé par _set_drawer).
+func _build_social_panel() -> PanelContainer:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(300, 0)
-	panel.add_theme_stylebox_override("panel", UiTheme.box(Color(0.03, 0.04, 0.07, 0.88), Color(UiTheme.CYAN, 0.12), 1, 0, 16, 16))
+	panel.anchor_left = 1.0
+	panel.anchor_right = 1.0
+	panel.anchor_top = 0.0
+	panel.anchor_bottom = 1.0
+	panel.offset_bottom = -10
+	panel.offset_top = 6
+	panel.add_theme_stylebox_override("panel", UiTheme.box(Color(0.03, 0.04, 0.07), Color(UiTheme.CYAN, 0.35), 1, 6, 16, 16))
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 10)
 	panel.add_child(col)
@@ -888,6 +966,7 @@ func _build_social_panel() -> Control:
 
 
 func _refresh_friends() -> void:
+	_update_friends_button()
 	if not is_instance_valid(_friends_box):
 		return
 	for c in _friends_box.get_children():

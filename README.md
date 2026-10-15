@@ -29,7 +29,7 @@ arena-tps/
 | Écran | Contenu |
 |---|---|
 | Connexion / inscription | Connexion, création de compte, vérification de l'e-mail par code à 6 chiffres, mot de passe oublié |
-| Menu principal | Profil (niveau, XP), groupe jusqu'à 8 joueurs et invitations, lancement en ligne, rejoindre un serveur LAN par adresse, partie solo et entraînement, amis (recherche, demandes, présence) |
+| Menu principal | Profil (niveau, XP), groupe jusqu'à 8 joueurs et invitations, lancement en ligne, rejoindre un serveur LAN par adresse (hors ligne seulement), partie solo et entraînement, amis (recherche, demandes, présence) |
 | Serveurs publics | Parties en cours avec des places libres (région, map, joueurs) |
 | Statistiques | Statistiques du joueur, succès, classements (XP, victoires, éliminations : le haut ou autour de soi) |
 | Classes | Choix de la classe avec aperçu 3D animé |
