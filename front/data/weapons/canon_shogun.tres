@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" uid="uid://c1eue6wr0lwki" path="res://scripts/data/weapon_data.gd" id="1_w"]
+
+[resource]
+script = ExtResource("1_w")
+id = "shogun_cannon"
+display_name = "Canon du Shōgun"
+model = 13
+slot = 3
+damage = 999
+max_range = 250.0
+headshot_multiplier = 1.0
+fire_rate = 1.2
+automatic = false
+mag_size = 6
+reload_time = 0.0
+spread_deg = 0.3
+aim_spread_deg = 0.1
+aim_fov = 45.0
+recoil_deg = 2.5
+pierce_always = true
+pierce_walls = 3
+aim_assist_deg = 6.0
+legendary = true
+tracer_color = Color(1, 0.8, 0.3, 1)

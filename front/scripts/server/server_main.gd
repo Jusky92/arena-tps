@@ -18,6 +18,7 @@ extends Node
 ##   --region eu                       région annoncée à la Server List
 ##   --bots 2 --duration 180           réglages des parties (modifiables par le chef en LAN ;
 ##                                     en mode Server List, le chef du groupe choisit les siens)
+##   --bot-level moyen                 niveau des bots : faible, moyen ou eleve (le chef peut changer)
 ##   --map neo-edo                     map des parties : neo-edo ou hikari-mall (voir MapCatalog ;
 ##                                     en LAN, le chef peut en changer dans le salon)
 ##   --max-players 16                  joueurs humains maximum par partie (1 à 16)
@@ -83,7 +84,8 @@ func _ready() -> void:
 		return
 
 	Net.lan_lobby = _link.is_lan()
-	_default_settings = _clamped_settings(int(args.get("bots", 2)), float(args.get("duration", 180.0)), map_id)
+	_default_settings = _clamped_settings(int(args.get("bots", 2)), float(args.get("duration", 180.0)), map_id,
+		str(args.get("bot-level", "moyen")))
 	Net.settings = _default_settings.duplicate()
 	Net.ticket_verifier = _link.verify
 	Net.start_requested.connect(Net.start_match)
@@ -144,7 +146,7 @@ func _on_reserved(_party_id: String) -> void:
 	var chosen := _link.match_settings
 	Net.settings = _clamped_settings(int(chosen.get("bots", _default_settings.bots)),
 		float(chosen.get("duration_seconds", _default_settings.duration)),
-		str(chosen.get("map", _default_settings.map)))
+		str(chosen.get("map", _default_settings.map)), str(chosen.get("bot_level", _default_settings.bot_level)))
 	Net.log_line("SERVEUR : réglages du groupe, %d bot(s), %d s, map %s" % [Net.settings.bots, int(Net.settings.duration), Net.settings.map])
 	Net.set_party_leader(_link.leader_user_id)
 	Net.set_status("reserved")
@@ -157,12 +159,13 @@ func _on_reservation_ended() -> void:
 		Net.set_status("idle")
 
 
-## Réglages valides ; une map inconnue devient la map par défaut.
-func _clamped_settings(bots: int, duration: float, map_id: String) -> Dictionary:
+## Réglages valides ; une map ou un niveau de bots inconnu devient celui par défaut.
+func _clamped_settings(bots: int, duration: float, map_id: String, bot_level: String) -> Dictionary:
 	return {
 		"bots": clampi(bots, 0, Net.max_players - 1),
 		"duration": clampf(duration, 60.0, 600.0),
 		"map": MapCatalog.valid_id(map_id),
+		"bot_level": BotBrain.valid_level(bot_level),
 	}
 
 

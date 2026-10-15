@@ -29,7 +29,7 @@ pour jouer, comme les autres.
                          PC serveur
                  ┌─────────────────────────┐
                  │  ArenaTPS_Server        │
-                 │  • arbitre la vie       │
+                 │  • arbitre tirs et vie  │
                  │  • compte les scores    │
                  │  • gère le chrono       │
                  │  • fait jouer les bots  │
@@ -50,11 +50,17 @@ Qui décide de quoi :
 | Élément | Qui décide | Pourquoi |
 |---|---|---|
 | Déplacement de mon personnage | mon jeu | aucune latence : le jeu reste nerveux |
-| Impacts de mes tirs | mon jeu (le tireur) | je tire sur ce que je vois à l'écran |
-| Points de vie, éliminations, score | **le serveur** | une seule version de la vérité |
+| Ce que je vise et touche | mon jeu le **signale** (cible, point d'impact, arme) | je tire sur ce que je vois à l'écran |
+| Validité du tir (arme de la classe, munitions, cadence, portée, ligne de vue) | **le serveur** | un tir impossible est refusé (et noté dans sa console) |
+| Zone touchée (tête ou corps), dégâts, armure | **le serveur** | une seule version de la vérité |
+| Points de vie, éliminations, score | **le serveur** | idem |
+| Roquettes, grenades, explosions | **le serveur** | il simule les projectiles, les jeux les affichent |
+| Bonus de la map et super-pouvoirs | **le serveur** | le jeu demande, le serveur applique |
+| Capacités (garde, balles perforantes) | le jeu annonce, **le serveur** vérifie | recharge respectée, dégâts et murs traversés décidés par le serveur |
+| Arme légendaire (moment, endroit, pause) | **le serveur** | tout le monde voit la même cinématique au même moment |
 | Chronomètre, réapparitions, fin de match | **le serveur** | tout le monde reste synchronisé |
 | Bots | **le serveur** | il les fait jouer et diffuse leur position |
-| Réglages et lancement de la partie | **le chef** (premier joueur connecté) en LAN ; le groupe avec le vrai back | voir [LANCER.md](LANCER.md) section 7 |
+| Map, bots (nombre et niveau), durée et lancement | **le chef** : premier joueur connecté en LAN, chef du groupe avec le vrai back | voir [LANCER.md](LANCER.md) section 7 |
 
 Chaque jeu envoie la position de son joueur au serveur **20 fois par seconde** en UDP
 non fiable, et le serveur rediffuse celle de tout le monde : si un paquet se perd, le
@@ -125,6 +131,9 @@ Options (toutes facultatives) :
 | `--port 24567` | 24567 | port UDP d'écoute |
 | `--bots 2` | 2 | bots pour compléter (le chef peut changer) |
 | `--duration 180` | 180 | durée du match en secondes (le chef peut changer) |
+| `--map neo-edo` | neo-edo | map : `neo-edo` ou `hikari-mall` (le chef peut changer) |
+| `--max-players 16` | 16 | joueurs humains au plus par partie (1 à 16) |
+| `--bot-level moyen` | moyen | niveau des bots : `faible`, `moyen` ou `eleve` (le chef peut changer) |
 | `--name "Arena TPS"` | Arena TPS | nom du serveur |
 | `--serverlist-url http://…:8002` | (aucun : mode LAN) | branche le serveur sur le vrai back, avec la variable `GAME_SERVER_SECRET` |
 | `--public-address 1.2.3.4` | première adresse locale | adresse que la Server List donne aux joueurs |
@@ -146,7 +155,7 @@ Si tous les PC sont sur le même Wi-Fi ou le même câble (salle de cours, appar
    n'apparaît pas avec un vrai compte), saisit
    l'adresse dans le cadre **REJOINDRE PAR ADRESSE (LAN)** de la page JOUER, puis
    **REJOINDRE**.
-3. Le premier arrivé est le **chef** : il règle les bots et la durée, puis
+3. Le premier arrivé est le **chef** : il choisit la map, les bots (nombre et niveau) et la durée, puis
    **LANCER LA PARTIE** démarre le jeu chez tout le monde. S'il part, le joueur
    suivant devient chef.
 
@@ -255,7 +264,7 @@ arguments `--headless -- --server`.
 |---|---|
 | « Aucune réponse de … » (après 6 s) | Le **serveur** ne reçoit rien. Dans l'ordre : `ArenaTPS_Server` est-il lancé ? l'adresse est-elle une de celles qu'il affiche ? le pare-feu du PC serveur autorise-t-il l'**UDP 24567** (§7) ? |
 | « Versions différentes : le serveur a la X, toi la Y » | Le serveur et le jeu ne viennent pas du même code. Réexporter **tout** en même temps. La version est affichée en bas du menu et au démarrage du serveur. |
-| « La partie est pleine (16 joueurs) » | Le maximum du serveur (16, ou `--max-players`) est atteint. Attendre qu'une place se libère. |
+| « La partie est pleine (16 joueurs) » | Le maximum de joueurs est atteint (16, ou la valeur de `--max-players`). Attendre qu'une place se libère. |
 | « Ce compte est déjà connecté à ce serveur » | Le même compte est déjà dans la partie (deux jeux ouverts avec la même session ?). |
 | « La partie se termine… » | Le serveur affiche l'écran de fin : réessayer dans quelques secondes. |
 | « Le port 24567 est déjà utilisé » | Un autre serveur tourne déjà sur ce PC. Le fermer, ou lancer avec `--port 24568` (et `adresse:24568` côté joueur). |
@@ -280,8 +289,9 @@ le réseau).
 
 Ce qui est volontairement simple pour l'instant :
 
-- **Pas d'anti-triche** : chaque jeu annonce ses propres déplacements et impacts.
-  Entre camarades ce n'est pas un problème.
+- **Anti-triche partiel** : le serveur vérifie chaque impact (arme, munitions, cadence,
+  portée, ligne de vue) et calcule lui-même les dégâts, mais chaque jeu annonce encore
+  ses propres déplacements. Entre camarades, ce n'est pas un problème.
 - **Pas de rembobinage (lag compensation)** : on touche ce qu'on voit à l'écran, avec
   le décalage de la latence. Acceptable en dessous de ~100 ms.
 - **Pas de reconnexion automatique** : si la connexion tombe, il faut revenir au menu

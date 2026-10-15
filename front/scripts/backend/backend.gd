@@ -28,7 +28,7 @@ signal toast(text: String)
 
 ## Doit être identique sur le jeu et le serveur dédié (vérifiée à la connexion),
 ## et sert à filtrer la liste des serveurs.
-const BUILD_VERSION := "0.13.0-alpha"
+const BUILD_VERSION := "0.14.0-alpha"
 const BFF_PORT := 8000
 const REALTIME_PORT := 8005
 const CONFIG_PATH := "user://reseau.cfg"

@@ -12,6 +12,9 @@ const LOW_HEALTH_RATIO := 0.35
 const HP_PER_TICK := 25            # un repère sur la barre de vie tous les 25 PV
 const KEY_HELP_TIME := 10.0        # l'aide des touches s'efface après ce délai
 const HEARTBEAT_INTERVAL := 0.9    # battement de cœur quand la vie est basse
+const INVISIBLE_TINT := Color(0.45, 0.78, 1.0)
+const REVEALED_TINT := Color(1.0, 0.55, 0.2)
+const InvisibilityShader := preload("res://shaders/invisibility_vignette.gdshader")
 
 @onready var _vignette: ColorRect = %Vignette
 @onready var _crosshair: Crosshair = %Crosshair
@@ -62,6 +65,14 @@ var _was_low_ammo := false
 var _key_help_started := false
 var _splat_tween: Tween
 var _heartbeat := 0.0
+# Invisibilité (super-pouvoir) : voile sur les bords de l'écran et étiquette sous le
+# réticule, construits ici (pas dans hud.tscn).
+var _invis_overlay: ColorRect
+var _invis_material: ShaderMaterial
+var _invis_box: VBoxContainer
+var _invis_label: Label
+var _invis_bar: ProgressBar
+var _was_invisible := false
 
 
 func _ready() -> void:
@@ -75,6 +86,44 @@ func _ready() -> void:
 	_health_ticks.draw.connect(_draw_health_ticks)
 	_ammo_label.resized.connect(func() -> void: _ammo_label.pivot_offset = _ammo_label.size / 2.0)
 	_death_title.resized.connect(func() -> void: _death_title.pivot_offset = _death_title.size / 2.0)
+	_build_invisibility_indicator()
+
+
+func _build_invisibility_indicator() -> void:
+	var root: Control = _protect_box.get_parent()
+	_invis_material = ShaderMaterial.new()
+	_invis_material.shader = InvisibilityShader
+	_invis_overlay = ColorRect.new()
+	_invis_overlay.name = "InvisibleVeil"
+	_invis_overlay.material = _invis_material
+	_invis_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_invis_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_invis_overlay.visible = false
+	root.add_child(_invis_overlay)
+	root.move_child(_invis_overlay, 0)        # sous le reste du HUD
+	_invis_box = VBoxContainer.new()
+	_invis_box.name = "Invisible"
+	_invis_box.set_anchors_preset(Control.PRESET_CENTER)
+	_invis_box.offset_left = -120.0
+	_invis_box.offset_right = 120.0
+	_invis_box.offset_top = 118.0
+	_invis_box.offset_bottom = 160.0
+	_invis_box.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_invis_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_invis_box.add_theme_constant_override("separation", 4)
+	_invis_box.visible = false
+	root.add_child(_invis_box)
+	_invis_label = Label.new()
+	_invis_label.theme_type_variation = &"HudLabel"
+	_invis_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_invis_box.add_child(_invis_label)
+	_invis_bar = ProgressBar.new()
+	_invis_bar.theme_type_variation = &"ProtectBar"
+	_invis_bar.custom_minimum_size = Vector2(0, 4)
+	_invis_bar.max_value = 1.0
+	_invis_bar.show_percentage = false
+	_invis_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_invis_box.add_child(_invis_bar)
 
 
 ## Relie le HUD à un joueur (appelé par la scène de jeu).
@@ -141,9 +190,16 @@ func _process(delta: float) -> void:
 	_crosshair.visible = _player.alive and not _player.is_sprinting()
 	if _crosshair.visible:
 		_crosshair.set_spread(_spread_pixels(data))
+		# Arme légendaire : réticule doré, qui grossit quand un ennemi est accroché.
+		var legendary: bool = weapon.data != null and weapon.data.legendary
+		var locked: bool = legendary and weapon.assist_target() != null
+		_crosshair.modulate = LegendaryEvent.GOLD if legendary else Color.WHITE
+		_crosshair.pivot_offset = _crosshair.size / 2.0
+		_crosshair.scale = Vector2.ONE * (1.45 if locked else 1.0)
 
 	_status.visible = _player.alive and _player.is_slowed()
 	_update_bonuses()
+	_update_invisibility()
 
 	# Vie basse : battement de cœur.
 	if _player.alive and float(_player.health) / data.max_health <= LOW_HEALTH_RATIO:
@@ -246,8 +302,6 @@ func _update_bonuses() -> void:
 		parts.append("VITESSE %d s" % ceili(p.speed_time))
 	if p.overload_time > 0.0:
 		parts.append("SURCHARGE %d s" % ceili(p.overload_time))
-	if p.invisible_time > 0.0:
-		parts.append("INVISIBLE %d s" % ceili(p.invisible_time))
 	if p.special and p.special_time_left() > 0.0:
 		parts.append("%s %d s" % [p.special.data.display_name.to_upper(), ceili(p.special_time_left())])
 	if p.armor > 0:
@@ -259,6 +313,28 @@ func _update_bonuses() -> void:
 		var info: Dictionary = Pickups.SUPER_INFO[p.super_power]
 		_super_label.text = "%s %s" % [Inputs.hint("super"), info.name.to_upper()]
 		_super_label.add_theme_color_override("font_color", info.color)
+
+
+## Invisibilité : voile bleuté et « INVISIBLE » ; en tirant, on est vu un instant
+## (orange, « DÉCOUVERT »). Un son au début et à la fin.
+func _update_invisibility() -> void:
+	var invisible: bool = _player.alive and _player.invisible_time > 0.0
+	if invisible != _was_invisible:
+		_was_invisible = invisible
+		Sfx.play("powerup", -8.0, 1.25 if invisible else 0.7)
+	_invis_overlay.visible = invisible
+	_invis_box.visible = invisible
+	if not invisible:
+		return
+	var revealed: bool = _player.is_revealed()
+	var tint := REVEALED_TINT if revealed else INVISIBLE_TINT
+	_invis_material.set_shader_parameter("tint", tint)
+	_invis_material.set_shader_parameter("strength", 1.3 if revealed else 1.0)
+	var left := ceili(_player.invisible_time)
+	_invis_label.text = ("DÉCOUVERT  ·  %d s" if revealed else "INVISIBLE  ·  %d s") % left
+	_invis_label.add_theme_color_override("font_color", tint)
+	_invis_bar.value = _player.invisible_time / Pickups.INVISIBILITY_TIME
+	_invis_bar.modulate = tint
 
 
 func _on_grenades_changed(count: int) -> void:

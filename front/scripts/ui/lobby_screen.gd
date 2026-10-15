@@ -29,6 +29,9 @@ var _bots_slider: HSlider
 var _duration_label: Label
 var _duration_slider: HSlider
 var _map_picker: OptionButton
+var _level_picker: OptionButton
+## Niveaux des bots dans l'ordre du menu (voir BotBrain.LEVELS).
+const LEVELS := ["faible", "moyen", "eleve"]
 var _map_label: Label
 var _server_label: Label
 ## Les curseurs étaient-ils à nous au dernier rafraîchissement ? Quand ils le
@@ -191,6 +194,18 @@ func _build_settings_panel() -> Control:
 	_bots_label = UiTheme.label("", 17, UiTheme.CYAN, true)
 	bots_row.add_child(_bots_label)
 	box.add_child(bots_row)
+	var level_row := HBoxContainer.new()
+	level_row.add_theme_constant_override("separation", 10)
+	var level_title := UiTheme.label("Niveau des bots", 17, UiTheme.TEXT)
+	level_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	level_row.add_child(level_title)
+	_level_picker = OptionButton.new()
+	_level_picker.custom_minimum_size.x = 200
+	for i in LEVELS.size():
+		_level_picker.add_item(BotBrain.LEVEL_NAMES[LEVELS[i]], i)
+	_level_picker.select(LEVELS.find(Net.settings.get("bot_level", "moyen")))
+	_level_picker.item_selected.connect(func(_i: int) -> void: _push_settings())
+	level_row.add_child(_level_picker)
 	_bots_slider = HSlider.new()
 	_bots_slider.min_value = 0
 	_bots_slider.max_value = Net.max_players - 1
@@ -200,6 +215,7 @@ func _build_settings_panel() -> Control:
 	_bots_slider.custom_minimum_size = Vector2(0, 24)
 	_bots_slider.value_changed.connect(func(_v: float) -> void: _push_settings())
 	box.add_child(_bots_slider)
+	box.add_child(level_row)
 
 	var duration_row := HBoxContainer.new()
 	var duration_title := UiTheme.label("Durée du match", 17, UiTheme.TEXT)
@@ -223,7 +239,7 @@ func _build_settings_panel() -> Control:
 func _push_settings() -> void:
 	var map_id := _picked_map()
 	_show_settings(int(_bots_slider.value), _duration_slider.value, map_id)
-	Net.request_settings(int(_bots_slider.value), _duration_slider.value, map_id)
+	Net.request_settings(int(_bots_slider.value), _duration_slider.value, map_id, LEVELS[maxi(_level_picker.selected, 0)])
 	if not Net.lan_lobby:
 		# Gardés pour le prochain lancement en ligne du groupe.
 		GameState.online_settings.bots = int(_bots_slider.value)
@@ -268,7 +284,9 @@ func _refresh() -> void:
 	_bots_slider.editable = editable
 	_duration_slider.editable = editable
 	_map_picker.disabled = not editable
+	_level_picker.disabled = not editable
 	if not editable or not _was_editable:
+		_level_picker.select(maxi(LEVELS.find(Net.settings.get("bot_level", "moyen")), 0))
 		_bots_slider.set_value_no_signal(bots)
 		_duration_slider.set_value_no_signal(duration)
 		_map_picker.select(_map_index(map_id))

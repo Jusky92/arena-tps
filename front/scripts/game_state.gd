@@ -46,20 +46,45 @@ static func class_from_id(id: Variant) -> ClassData:
 
 ## Mode de la prochaine partie : "deathmatch" (bots, chronomètre, scores) ou "training" (mannequins).
 var mode := "deathmatch"
-## Durée d'une partie (secondes). Partie solo : nombre de bots (1 à MAX_SOLO_BOTS) et
-## leur niveau (indice dans BotBrain.LEVELS), choisis avant de lancer, gardés pour la session.
+## Durée d'une partie (secondes) et nombre de bots ; pour la partie solo, gardés dans SOLO_PATH.
 var match_duration := 180.0
 var bot_count := 5
-var bot_level := BotBrain.NORMAL
-const MAX_SOLO_BOTS := 15
+## Niveau des bots hors ligne (voir BotBrain.LEVELS) ; en LAN, c'est le chef qui choisit.
+var bot_level := "moyen"
 ## Réglages de départ de la prochaine partie en ligne, envoyés avec la réservation :
 ## bots (0 à 15), durée en secondes (60 à 600). Le chef les change dans le salon du
 ## serveur (lobby_screen.gd), qui les garde ici pour le lancement suivant.
 var online_settings := {"bots": 2, "duration": 180}
 
+## Réglages de la partie solo, gardés d'une fois sur l'autre.
+const SOLO_PATH := "user://partie_solo.cfg"
+
 
 func _ready() -> void:
 	_load_local()
+	_load_solo()
+
+
+## Réglages de la partie solo (map, bots, niveau, durée).
+func save_solo() -> void:
+	if Effects.headless():
+		return
+	var cfg := ConfigFile.new()
+	cfg.set_value("solo", "map", map_id)
+	cfg.set_value("solo", "bots", bot_count)
+	cfg.set_value("solo", "level", bot_level)
+	cfg.set_value("solo", "duration", match_duration)
+	cfg.save(SOLO_PATH)
+
+
+func _load_solo() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(SOLO_PATH) != OK:
+		return
+	map_id = MapCatalog.valid_id(str(cfg.get_value("solo", "map", map_id)))
+	bot_count = clampi(int(cfg.get_value("solo", "bots", bot_count)), 1, 15)
+	bot_level = BotBrain.valid_level(str(cfg.get_value("solo", "level", bot_level)))
+	match_duration = clampf(float(cfg.get_value("solo", "duration", match_duration)), 60.0, 600.0)
 
 
 ## Classe choisie (toujours valide).

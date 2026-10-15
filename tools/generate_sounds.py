@@ -148,6 +148,32 @@ def shot_smg(v=1):
     return gunshot(v, 4200, 30, 190, 40, 0.18, crack=0.9, mech=0.35)
 
 
+def shot_rifle(v=1):
+    """Fusil d'assaut : entre la mitraillette et le fusil de précision, claquement plus grave."""
+    return gunshot(v, 3200, 18, 140, 22, 0.35, crack=1.1, mech=0.3)
+
+
+def shot_shogun(v=1):
+    """Canon du Shōgun : décharge électrique, coup très grave et longue résonance métallique."""
+    d = 1.6
+    zap = sine(2400, 0.25, 300) * env(0.25, 0.001, 12) * 0.7
+    boom = sine(70, d, 32) * env(d, 0.002, 3.0) * 1.4
+    ring = metallic([440, 660, 990, 1320], d, 2.5) * 0.35
+    crack = highpass(noise(0.05), 2500) * env(0.05, 0.0005, 90)
+    return mix(zap, boom, ring, crack)
+
+
+def legendary(v=1):
+    """Apparition de l'arme légendaire (6 s) : grand gong, accord qui monte, scintillement."""
+    d = 6.0
+    gong = metallic([82, 123, 185, 246, 330], d, 0.55) * 0.9
+    s = np.linspace(0, 1, int(RATE * d))
+    chord = sum(sine(f, d, f * 2) * (s ** 1.5) * 0.25 for f in [220, 277.2, 329.6, 440])
+    sparkle = highpass(noise(d), 7000) * (s ** 2) * 0.12
+    hit = place(sine(110, 1.5, 55) * env(1.5, 0.002, 3) * 1.2, 4.6, d)
+    return mix(gong, chord, sparkle, hit)
+
+
 def shot_shotgun(v=1):
     blast = gunshot(v, 2400, 9, 120, 12, 0.6, crack=1.2, mech=0.2)
     pump = place(mix(bandpass(noise(0.05), 900, 3000) * env(0.05, 0.001, 80),
@@ -495,6 +521,10 @@ SOUNDS = {
     "ui_open": (ui_open, 1),
     "ui_close": (ui_close, 1),
     "ambience": (ambience, 1),
+    # Ajoutés en fin de liste : les sons déjà générés restent identiques (même tirage).
+    "shot_rifle": (shot_rifle, 3),
+    "shot_shogun": (shot_shogun, 1),
+    "legendary": (legendary, 1),
 }
 
 if __name__ == "__main__":

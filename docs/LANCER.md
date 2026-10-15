@@ -28,7 +28,8 @@ Sommaire :
   code). Sinon le serveur refuse la connexion avec « Versions différentes ».
 - Le serveur écoute sur le port **UDP 24567**. C'est le pare-feu **du PC serveur** qui
   doit l'autoriser. Les PC des joueurs n'ont rien à ouvrir.
-- 16 joueurs au maximum par partie (`--max-players` pour en mettre moins).
+- 16 joueurs au maximum par partie (réglable avec `--max-players`), complétés par des bots.
+- Deux maps : **NEO-EDO** (`neo-edo`) et **Hikari Mall** (`hikari-mall`).
 - **Deux façons de jouer** :
 
   | | **LAN** (sections 3 à 6) | **Avec le vrai back** (section 7) |
@@ -49,7 +50,7 @@ Sinon, sur un PC qui a le code et **Godot 4.7.2** :
 
 1. Une seule fois, installer les modèles d'export : dans Godot,
    **Éditeur → Gérer les modèles d'exportation… → Télécharger et installer**.
-2. Exporter, depuis la racine du dépôt `client/` :
+2. Exporter, depuis la racine du dépôt :
 
    ```bash
    tools/build_server.sh all    # le serveur, Windows + Linux
@@ -65,11 +66,11 @@ Sinon, sur un PC qui a le code et **Godot 4.7.2** :
 
    | Fichier | Rôle | Pour qui |
    |---|---|---|
-   | `TPSArena_Jeu/server/linux/ArenaTPS_Server.x86_64` | serveur Linux | le PC serveur |
-   | `TPSArena_Jeu/server/windows/ArenaTPS_Server.exe` **et** `ArenaTPS_Server.console.exe` | serveur Windows (garder les deux fichiers ensemble) | le PC serveur |
-   | `client/build/linux/ArenaTPS.x86_64` | jeu Linux | chaque joueur |
-   | `client/build/windows/ArenaTPS.exe` | jeu Windows | chaque joueur |
-   | `client/build/macos/ArenaTPS.zip` | jeu macOS (contient `ArenaTPS.app`) | chaque joueur sur Mac |
+   | `../server/linux/ArenaTPS_Server.x86_64` (à côté du dépôt) | serveur Linux | le PC serveur |
+   | `../server/windows/ArenaTPS_Server.exe` **et** `ArenaTPS_Server.console.exe` | serveur Windows (garder les deux fichiers ensemble) | le PC serveur |
+   | `build/linux/ArenaTPS.x86_64` | jeu Linux | chaque joueur |
+   | `build/windows/ArenaTPS.exe` | jeu Windows | chaque joueur |
+   | `build/macos/ArenaTPS.zip` | jeu macOS (contient `ArenaTPS.app`) | chaque joueur sur Mac |
 
    Chaque fichier contient tout (ressources incluses) : rien d'autre à installer.
 
@@ -103,13 +104,24 @@ Sinon, sur un PC qui a le code et **Godot 4.7.2** :
    Avec des options (toutes facultatives) :
 
    ```bash
-   ./ArenaTPS_Server.x86_64 --port 24567 --bots 2 --duration 180 --name "Arena TPS"
+   ./ArenaTPS_Server.x86_64 --port 24567 --bots 2 --duration 180 --map hikari-mall --bot-level moyen --name "Arena TPS"
    ```
+
+   | Option | Défaut | Rôle |
+   |---|---|---|
+   | `--port` | 24567 | port UDP d'écoute |
+   | `--bots` | 2 | bots pour compléter la partie (le chef peut changer) |
+   | `--duration` | 180 | durée d'une partie en secondes, de 60 à 600 (le chef peut changer) |
+   | `--map` | `neo-edo` | map des parties : `neo-edo` ou `hikari-mall` (le chef peut changer) |
+   | `--bot-level` | `moyen` | niveau des bots : `faible`, `moyen` ou `eleve` (le chef peut changer) |
+   | `--max-players` | 16 | joueurs humains au plus par partie (1 à 16) |
+   | `--name` | Arena TPS | nom du serveur dans la liste des serveurs publics |
 
 5. **Noter les adresses affichées**, par exemple :
 
    ```
-   === Arena TPS — serveur dédié (version 0.8.0-alpha) ===
+   === Arena TPS — serveur dédié (version 0.14.0-alpha) ===
+   Map : NEO-EDO (neo-edo), 16 joueurs maximum.
    Mode LAN. Les joueurs se connectent avec REJOINDRE et une de ces adresses :
        192.168.1.20:24567
    ```
@@ -146,7 +158,7 @@ Sinon, sur un PC qui a le code et **Godot 4.7.2** :
      `powershell` dans la barre d'adresse puis Entrée, et lancer :
 
      ```powershell
-     .\ArenaTPS_Server.console.exe --port 24567 --bots 2 --duration 180
+     .\ArenaTPS_Server.console.exe --port 24567 --bots 2 --duration 180 --map hikari-mall
      ```
 
 3. **SmartScreen** (« Windows a protégé votre ordinateur ») peut apparaître au premier
@@ -240,7 +252,8 @@ L'adresse est retenue pour la prochaine fois.
 ## 6. Jouer une partie (LAN)
 
 1. Le **premier joueur arrivé dans le salon est le chef** (étiquette « chef »).
-2. Le chef règle **les bots** et **la durée**. Les autres voient les réglages changer.
+2. Le chef choisit **la map**, **le nombre et le niveau des bots** et **la durée**. Les autres voient les réglages
+   changer, sans pouvoir y toucher.
 3. Chacun peut **CHANGER DE CLASSE** avant le lancement.
 4. Le chef clique **LANCER LA PARTIE** (ou Entrée) : la partie démarre chez tout le monde.
 5. À la fin, l'écran de fin s'affiche. **REJOUER** ramène au salon, toujours connecté.
@@ -342,11 +355,11 @@ comptent pas dans les statistiques.
 ## 8. Sans exporter : depuis le code source
 
 Pour tester pendant le développement, avec **Godot 4.7.2** installé et `godot` dans le
-PATH, depuis le dossier `client/front/` :
+PATH, depuis le dossier `front/` du dépôt :
 
 ```bash
 # Le serveur (Linux ou Windows, même commande)
-godot --headless -- --server --bots 2 --duration 60
+godot --headless -- --server --bots 2 --duration 60 --map hikari-mall
 
 # Un client (dans un autre terminal ; répéter pour plusieurs joueurs)
 godot
@@ -377,7 +390,8 @@ variable d'environnement `GAME_SERVER_SECRET`.
 | « La Server List refuse GAME_SERVER_SECRET » | La variable ne correspond pas à `GAME_SERVER_SECRET` dans `backend/.env`. |
 | « Accès refusé : ticket invalide ou expiré » | On a rejoint un serveur Server List par son adresse IP : avec le vrai back, on passe par **LANCER EN LIGNE** ou **SERVEURS PUBLICS**. |
 | « Le port 24567 est déjà utilisé » (ou « Couldn't create an ENet host ») | Un serveur tourne déjà sur ce PC, souvent lancé d'un double-clic donc sans fenêtre. Linux : `pgrep -af ArenaTPS_Server` pour le voir, `pkill -f ArenaTPS_Server` pour l'arrêter. Windows : Gestionnaire des tâches. Ou lancer avec `--port 24568`. |
-| « La partie est pleine » | Le maximum du serveur (16, ou `--max-players`) est atteint. |
+| « La partie est pleine » | Le nombre maximum de joueurs (16 par défaut, `--max-players`) est atteint. |
+| « Map inconnue : … » (au lancement du serveur) | L'option `--map` attend `neo-edo` ou `hikari-mall`. |
 | « Ce compte est déjà connecté » | Le même jeu est ouvert deux fois avec la même session : se reconnecter. |
 | Le serveur Linux ne démarre pas (« Permission non accordée ») | Oublié `chmod +x ArenaTPS_Server.x86_64`. |
 | Les options (`--port`, `--bots`…) semblent ignorées | Les placer après `--` : `./ArenaTPS_Server.x86_64 -- --port 24568`. Le serveur lit les deux formes. |

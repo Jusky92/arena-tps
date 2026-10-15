@@ -184,6 +184,7 @@ var _special_time := 0.0
 var _reveal_time := 0.0              # invisible mais dévoilé (vient de tirer)
 var _transparency := 0.0             # transparence actuelle du corps (invisibilité)
 var _aura: Node3D                    # halo de la Surcharge néon
+var _legend_mark: Node3D             # porteur de l'arme légendaire : lumière dorée et 将軍
 
 
 func _ready() -> void:
@@ -538,6 +539,9 @@ func use_ability() -> bool:
 	_ability_cooldown = class_data.ability_cooldown
 	_ability_time = class_data.ability_duration
 	_play_sound(Sfx.ability_sound(class_data.ability), -4.0)
+	# En ligne, le serveur doit le savoir : garde (dégâts réduits), balles perforantes.
+	if Net.online and peer_id != 0 and is_local and not is_remote:
+		Net.use_ability()
 
 	match class_data.ability:
 		ClassData.Ability.SHIELD:
@@ -563,6 +567,20 @@ func use_ability() -> bool:
 			for w in weapons:
 				w.piercing = true      # ne joue que sur les armes à balles (voir weapon.gd)
 	return true
+
+
+## Serveur : capacité annoncée par le client (Net.use_ability). Refusée si elle n'est
+## pas rechargée (avec 20 % de tolérance pour les écarts du réseau).
+func start_ability_from_network() -> bool:
+	if not alive or _ability_cooldown > class_data.ability_cooldown * 0.2:
+		return false
+	_ability_cooldown = 0.0
+	return use_ability()
+
+
+## true pendant la Flèche perforante de l'Archer (balles qui traversent).
+func is_piercing() -> bool:
+	return class_data.ability == ClassData.Ability.PIERCE and _ability_time > 0.0
 
 
 func _update_ability(delta: float) -> void:
@@ -945,6 +963,11 @@ func damage_multiplier() -> float:
 
 
 ## true si les autres ne voient (presque) pas ce personnage.
+## Invisible mais visible un instant (vient de tirer).
+func is_revealed() -> bool:
+	return invisible_time > 0.0 and _reveal_time > 0.0
+
+
 func is_invisible() -> bool:
 	return invisible_time > 0.0 and _reveal_time <= 0.0
 
@@ -1031,6 +1054,38 @@ func _update_bonuses(delta: float) -> void:
 	_update_aura_visuals()
 
 
+## Porteur de l'arme légendaire : lumière dorée autour de lui et, pour les autres
+## joueurs, les kanji 将軍 au-dessus de sa tête, visibles à travers les murs.
+func _update_legendary_mark() -> void:
+	var carrying: bool = alive and special != null and is_instance_valid(special) and special.data.legendary
+	if carrying and _legend_mark == null:
+		_legend_mark = Node3D.new()
+		_legend_mark.name = "LegendMark"
+		add_child(_legend_mark)
+		var light := OmniLight3D.new()
+		light.light_color = LegendaryEvent.GOLD
+		light.light_energy = 2.2
+		light.omni_range = 4.5
+		light.position.y = 1.2
+		_legend_mark.add_child(light)
+		if not (is_local and not is_remote):
+			var tag := Label3D.new()
+			tag.text = "将軍"
+			tag.font = JapaneseFont.font()
+			tag.font_size = 64
+			tag.outline_size = 12
+			tag.pixel_size = 0.004
+			tag.fixed_size = true
+			tag.modulate = LegendaryEvent.GOLD
+			tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+			tag.no_depth_test = true
+			tag.position.y = 2.7
+			_legend_mark.add_child(tag)
+	elif not carrying and _legend_mark:
+		_legend_mark.queue_free()
+		_legend_mark = null
+
+
 ## Temps restant de l'arme spéciale (0 = sans limite de temps).
 func special_time_left() -> float:
 	return _special_time if special else 0.0
@@ -1061,6 +1116,7 @@ func _update_aura_visuals() -> void:
 			(g as GeometryInstance3D).transparency = target
 		if has_node("NameTag"):
 			get_node("NameTag").visible = target < 0.5 and alive
+	_update_legendary_mark()
 	if overload_time > 0.0 and _aura == null:
 		_aura = Effects.overload_aura()
 		add_child(_aura)

@@ -21,8 +21,9 @@ signal class_selected(class_data: ClassData)
 signal loadout_selected(index: int)
 
 const PANEL_BG := Color(0.03, 0.04, 0.075, 0.94)
-const LEFT_WIDTH := 400.0
-const PREVIEW_SIZE := Vector2i(220, 250)
+const LEFT_WIDTH := 340.0
+## Aperçus des spécialistes : 4 cartes doivent tenir côte à côte dès 1280 x 720.
+const PREVIEW_SIZE := Vector2i(150, 180)
 
 var _root: Control
 var _content: PanelContainer
@@ -224,10 +225,16 @@ func _page_header(title: String, subtitle: String) -> VBoxContainer:
 func _build_classes_page() -> Control:
 	var page := _page_header("CHANGER DE SPÉCIALISTE",
 		"Le nouveau spécialiste sera utilisé à ta prochaine apparition. Ton score dans la partie est conservé.")
+	# Défile à l'horizontale si l'écran est vraiment étroit (sinon tout tient).
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	page.add_child(scroll)
 	var cards := HBoxContainer.new()
-	cards.add_theme_constant_override("separation", 14)
+	cards.add_theme_constant_override("separation", 12)
+	cards.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cards.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	page.add_child(cards)
+	scroll.add_child(cards)
 	for i in GameState.CLASSES.size():
 		cards.add_child(_class_card(GameState.CLASSES[i]))
 	return page
@@ -252,15 +259,22 @@ func _class_card(data: ClassData) -> Control:
 	preview.setup(data.character_design, data.weapon.model, PREVIEW_SIZE, 3.7, 1.0)
 	box.add_child(holder)
 
-	box.add_child(UiTheme.title(data.display_name.to_upper(), 20, data.color.lightened(0.35)))
-	box.add_child(_info_row("Points de vie", str(data.max_health)))
+	var title := UiTheme.title(data.display_name.to_upper(), 18, data.color.lightened(0.35))
+	title.clip_text = true
+	box.add_child(title)
+	box.add_child(_info_row("PV", str(data.max_health)))
 	box.add_child(_info_row("Vitesse", "%.1f m/s" % data.sprint_speed))
-	box.add_child(_info_row("Capacité", data.ability_name))
+	# Capacité sur sa propre ligne (retour à la ligne) : la carte reste étroite.
+	var ability := UiTheme.label(data.ability_name, 13, data.color.lightened(0.35), true)
+	ability.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	ability.custom_minimum_size.x = 100
+	box.add_child(ability)
 	box.add_child(UiTheme.spacer(Vector2.ZERO, false, true))
 
 	var button := UiTheme.button("CHOISIR", false, data.color, 42)
 	button.add_theme_font_override("font", UiTheme.title_font())
-	button.add_theme_font_size_override("font_size", 13)
+	button.add_theme_font_size_override("font_size", 11)
+	button.clip_text = true                 # « ✓ PROCHAINE APPARITION » ne doit pas élargir la carte
 	button.pressed.connect(_choose_class.bind(data))
 	box.add_child(button)
 	_class_cards.append([data, button, style, card])
@@ -269,10 +283,10 @@ func _class_card(data: ClassData) -> Control:
 
 func _info_row(title: String, value: String) -> Control:
 	var row := HBoxContainer.new()
-	var t := UiTheme.label(title, 14, UiTheme.MUTED)
+	var t := UiTheme.label(title, 13, UiTheme.MUTED)
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(t)
-	row.add_child(UiTheme.label(value, 14, UiTheme.TEXT, true))
+	row.add_child(UiTheme.label(value, 13, UiTheme.TEXT, true))
 	return row
 
 
@@ -292,11 +306,11 @@ func _refresh_class_cards() -> void:
 		var is_next := data == _pending_class
 		var was_current := data == _current_class and _pending_class != null
 		if is_next:
-			button.text = "✓ PROCHAINE APPARITION"
+			button.text = "✓ AU RETOUR"          # prochaine apparition
 		elif is_current:
-			button.text = "✓ CLASSE ACTUELLE"
+			button.text = "✓ ACTUEL"
 		elif was_current:
-			button.text = "GARDER CETTE CLASSE"
+			button.text = "GARDER"
 		else:
 			button.text = "CHOISIR"
 		button.disabled = is_current
@@ -337,9 +351,11 @@ func _refresh_loadouts() -> void:
 		var secondary := WeaponCatalog.find(l.secondary)
 		var b := UiTheme.button("", selected, UiTheme.CYAN, 74)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.text = "%s%s\n%s  ·  %s  ·  2 grenades" % ["✓ " if selected else "", l.name.to_upper(),
+		b.text = "%s%s\n%s  ·  %s" % ["✓ " if selected else "", l.name.to_upper(),
 			primary.display_name if primary else "?", secondary.display_name if secondary else "?"]
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.clip_text = true                  # un nom long ne doit pas élargir la grille
+		b.custom_minimum_size.x = 120
 		b.pressed.connect(func() -> void:
 			Sfx.ui("ui_click")
 			loadout_selected.emit(i)

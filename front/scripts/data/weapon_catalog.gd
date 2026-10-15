@@ -8,6 +8,7 @@ extends RefCounted
 
 const WEAPONS: Array[WeaponData] = [
 	preload("res://data/weapons/mitraillette.tres"),
+	preload("res://data/weapons/fusil_assaut.tres"),
 	preload("res://data/weapons/pompe.tres"),
 	preload("res://data/weapons/sniper.tres"),
 	preload("res://data/weapons/roquettes.tres"),
@@ -23,6 +24,7 @@ const SPECIALS: Array[WeaponData] = [
 	preload("res://data/weapons/fusil_laser.tres"),
 	preload("res://data/weapons/poing_puissant.tres"),
 	preload("res://data/weapons/onde_de_choc.tres"),
+	preload("res://data/weapons/canon_shogun.tres"),
 ]
 const GRENADES_PER_LIFE := 2
 const MAX_LOADOUTS := 10
@@ -30,7 +32,7 @@ const NAME_MAX_LENGTH := 24
 
 ## Classes proposées au premier lancement (modifiables dans l'accueil).
 const DEFAULT_LOADOUTS := [
-	{"name": "Assaut", "primary": "smg", "secondary": "laser"},
+	{"name": "Assaut", "primary": "assault", "secondary": "laser"},
 	{"name": "Corps à corps", "primary": "shotgun", "secondary": "katana"},
 	{"name": "Précision", "primary": "sniper", "secondary": "laser"},
 	{"name": "Démolition", "primary": "rocket", "secondary": "poop"},

@@ -66,7 +66,13 @@ var _projectiles := {}                  # identifiant -> Projectile (qui fait fo
 ## Bonus de la map (socles, ramassages, réapparitions) : version qui fait foi.
 var pickups: PickupDirector
 var _charges := {}                      # tireur -> {start: début de sa dernière charge (s), hits: cibles touchées}
+var _pierce_until := {}                 # tireur -> fin (s, avec marge) de sa Flèche perforante
 var _next_projectile_id := 1
+## Arme légendaire : moment de l'apparition (secondes de jeu, < 0 = passée), position
+## choisie, et true pendant la cinématique (partie figée).
+var _legendary_at := -1.0
+var _legendary_pos := Vector3.INF
+var _legendary_frozen := false
 
 
 func _ready() -> void:
@@ -79,6 +85,7 @@ func _ready() -> void:
 	_match_id = Uuid.v4()
 	_started_at = _now_iso()
 	_running = true
+	_legendary_at = LegendaryEvent.trigger_time(float(Net.settings.get("duration", 180.0)))
 
 	Net.arbiter = self
 	add_to_group("projectile_host")
@@ -103,6 +110,8 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	Net.arbiter = null
+	Net.frozen = false
+	Engine.time_scale = 1.0
 
 
 func _process(delta: float) -> void:
@@ -116,6 +125,10 @@ func _process(delta: float) -> void:
 			_respawns.erase(id)
 			_respawn(id)
 	Net.match_time_left -= delta
+	var elapsed := float(Net.settings.get("duration", 180.0)) - Net.match_time_left
+	if _legendary_at >= 0.0 and elapsed >= _legendary_at:
+		_legendary_at = -1.0
+		_start_legendary()
 	if Net.match_time_left <= 0.0:
 		_end_match()
 
@@ -135,14 +148,14 @@ func _spawn(id: int) -> CharacterBody3D:
 	if bot:
 		var brain := BotBrain.new()
 		brain.game = self
-		brain.skill = BotBrain.random_skill(BotBrain.NORMAL)
+		brain.skill = BotBrain.skill_for(Net.settings.get("bot_level", "moyen"))
 		p.brain = brain
 	p.name = "Net_%d" % id
 	add_child(p)
 	# Un humain choisit son point d'apparition et le pantin s'y replace dès le
 	# premier état reçu ; un bot apparaît loin des autres.
 	p.global_transform = MatchRules.best_spawn(map, players, p)
-	p.add_to_group("players")       # utilisé par les caméras et capteurs de la map
+	p.add_to_group("players")       # utilisé par les caméras de la map et l'écran du laboratoire
 	p.start_spawn_protection()
 	players.append(p)
 	_nodes[id] = p
@@ -174,6 +187,9 @@ func _on_joined(id: int, _info: Dictionary) -> void:
 		return
 	_spawn(id)
 	if not Net.is_bot(id):
+		# Arme légendaire déjà posée (ou cinématique en cours) : le nouveau la voit aussi.
+		if _legendary_pos != Vector3.INF:
+			Net.push_legendary.rpc_id(id, 0 if _legendary_frozen else 1, _legendary_pos, 1.0)
 		Net.push_pickups.rpc_id(id, pickups.snapshot())     # état des bonus pour le nouveau
 	if _nodes.size() > Net.max_players:
 		var bots := _nodes.keys().filter(func(i): return Net.is_bot(i))
@@ -240,7 +256,7 @@ func on_fire(shooter_id: int, slot: int) -> bool:
 	var hits := data.pellets
 	if data.kind in [WeaponData.Kind.MELEE, WeaponData.Kind.FLAME]:
 		hits = AREA_HITS
-	elif shooter.class_data.ability == ClassData.Ability.PIERCE and data.is_hitscan():
+	elif (shooter.class_data.ability == ClassData.Ability.PIERCE and data.is_hitscan()) or data.pierce_always:
 		hits *= PIERCE_BURST
 	for i in hits:
 		w.tokens.append(now + HIT_WINDOW)
@@ -445,22 +461,60 @@ func _reject_reason(node: Node3D, shooter: Node3D, hit_offset: Vector3, weapon_d
 			return "cible derrière le tireur"
 	var height := MatchRules.body_height(node)
 	var radius: float = (node.collision.shape as CapsuleShape3D).radius
-	if Vector2(hit_offset.x, hit_offset.z).length() > radius + HITBOX_MARGIN \
-			or hit_offset.y < -HITBOX_MARGIN or hit_offset.y > height + HITBOX_MARGIN:
+	# Visée facilitée (arme légendaire) : marge plus large.
+	var hitbox_margin := HITBOX_MARGIN + (0.6 if weapon_data.aim_assist_deg > 0.0 else 0.0)
+	if Vector2(hit_offset.x, hit_offset.z).length() > radius + hitbox_margin \
+			or hit_offset.y < -hitbox_margin or hit_offset.y > height + hitbox_margin:
 		return "point d'impact hors de la cible"
 	# Ligne de vue : des yeux du tireur au point touché, seul le décor peut bloquer.
+	# Une balle perforante (Archer, certaines armes) traverse quelques murs.
 	var eye := shooter.global_position + Vector3.UP * (MatchRules.body_height(shooter) - 0.2)
 	var impact := node.global_position + hit_offset
-	var query := PhysicsRayQueryParameters3D.create(eye, impact)
+	var walls := _walls_between(eye, impact)
+	var allowed := _walls_allowed(shooter, weapon_data)
+	if walls > allowed:
+		return "mur entre le tireur et la cible" if allowed == 0 else "%d murs entre le tireur et la cible (%d traversables)" % [walls, allowed]
+	return ""
+
+
+## Nombre de murs ou d'obstacles du décor entre deux points (les personnages ne
+## comptent pas ; un obstacle collé au point touché non plus).
+func _walls_between(from: Vector3, to: Vector3) -> int:
 	var exclude: Array[RID] = []
 	for p in players:
 		if is_instance_valid(p):
 			exclude.append(p.get_rid())
-	query.exclude = exclude
-	var wall := get_world_3d().direct_space_state.intersect_ray(query)
-	if not wall.is_empty() and (wall.position as Vector3).distance_to(impact) > LOS_MARGIN:
-		return "mur entre le tireur et la cible"
-	return ""
+	var space := get_world_3d().direct_space_state
+	var count := 0
+	for i in 8:
+		var query := PhysicsRayQueryParameters3D.create(from, to)
+		query.exclude = exclude
+		var wall := space.intersect_ray(query)
+		if wall.is_empty() or (wall.position as Vector3).distance_to(to) <= LOS_MARGIN:
+			break
+		count += 1
+		exclude.append(wall.rid)
+	return count
+
+
+## Murs qu'un tir du tireur peut traverser : ceux de l'arme, plus ceux de la Flèche
+## perforante si elle est active (annoncée par Net.use_ability, avec une petite marge).
+func _walls_allowed(shooter: Node, weapon_data: WeaponData) -> int:
+	var allowed := weapon_data.pierce_walls
+	if weapon_data.is_hitscan() and (shooter.is_piercing() or _now() < float(_pierce_until.get(shooter.peer_id, 0.0))):
+		allowed += MatchRules.PIERCE_WALLS
+	return allowed
+
+
+## Client : il active la capacité de son spécialiste. Elle démarre aussi ici, sur
+## son personnage : la garde réduit les dégâts, la Flèche perforante autorise les tirs
+## à travers les murs.
+func on_use_ability(id: int) -> void:
+	var node = _nodes.get(id)
+	if not is_instance_valid(node) or not node.start_ability_from_network():
+		return
+	if node.class_data.ability == ClassData.Ability.PIERCE:
+		_pierce_until[id] = _now() + node.class_data.ability_duration + 0.5
 
 
 ## Armes d'un personnage remises à neuf (apparition, réapparition, changement de classe).
@@ -671,3 +725,30 @@ func activate_super(node: Node) -> void:
 			var center: Vector3 = node.chest_position()
 			_explode(center, Pickups.SHOCKWAVE, node, id, null)
 			Net.push_explosion.rpc(0, center, Pickups.SHOCKWAVE.id)
+
+
+# ---------------------------------------------------------------- Arme légendaire
+
+## L'arme légendaire va apparaître : partie figée (Engine.time_scale = 0, chronomètre
+## compris) pendant que tous les joueurs regardent la cinématique. Les actions reçues
+## pendant ce temps sont ignorées (Net.frozen). La fin est minutée en temps réel.
+func _start_legendary() -> void:
+	_legendary_pos = LegendaryEvent.pick_point(map.target_points(), players)
+	_legendary_frozen = true
+	Net.frozen = true
+	Engine.time_scale = 0.0
+	Net.log_line("SERVEUR : arme légendaire en %s, partie figée %.0f s" % [str(_legendary_pos.snapped(Vector3.ONE * 0.1)), LegendaryEvent.CINEMATIC_TIME])
+	Net.push_legendary.rpc(0, _legendary_pos, LegendaryEvent.CINEMATIC_TIME)
+	get_tree().create_timer(LegendaryEvent.CINEMATIC_TIME, true, false, true).timeout.connect(_end_legendary)
+
+
+## Fin de la cinématique : la partie reprend et l'arme est posée sur son socle.
+func _end_legendary() -> void:
+	if not is_inside_tree():
+		return
+	_legendary_frozen = false
+	Net.frozen = false
+	Engine.time_scale = 1.0
+	pickups.add_pad(Pickups.Kind.LEGENDARY, _legendary_pos)
+	Net.push_legendary.rpc(1, _legendary_pos, 0.0)
+

@@ -55,6 +55,10 @@ var _net_projectiles := {}              # en ligne : identifiant -> projectile a
 var pickups: PickupDirector
 var _online := false                    # partie sur le serveur dédié (voir Net)
 var _net_nodes := {}                    # identifiant réseau -> personnage
+## Arme légendaire (LegendaryEvent) : moment de l'apparition hors ligne (temps de jeu,
+## < 0 = déjà passée ou aucune), cinématique en cours.
+var _legendary_at := -1.0
+var _cinematic: LegendaryCinematic
 
 
 func _ready() -> void:
@@ -104,8 +108,14 @@ func _ready() -> void:
 				var cls: ClassData = GameState.CLASSES[randi() % GameState.CLASSES.size()]
 				_spawn_player(cls, BOT_NAMES[i % BOT_NAMES.size()], false, WeaponCatalog.random_loadout())
 			_time_left = GameState.match_duration
+			_legendary_at = LegendaryEvent.trigger_time(GameState.match_duration)
 			_running = true
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+## La partie peut être quittée pendant la cinématique (figée) : le temps reprend.
+func _exit_tree() -> void:
+	Engine.time_scale = 1.0
 
 
 func _process(delta: float) -> void:
@@ -128,6 +138,9 @@ func _process(delta: float) -> void:
 			# qui annonce la fin de la partie.
 			_time_left = maxf(_time_left - delta, 0.0)
 			_match_time += delta
+			if not _online and _legendary_at >= 0.0 and _match_time >= _legendary_at:
+				_legendary_at = -1.0
+				_offline_legendary()
 			var rows := _scoreboard_rows()
 			if not rows.is_empty():           # vide un instant après une déconnexion
 				_ui.set_time(_time_left, rows[0].name, rows[0].kills)
@@ -141,6 +154,8 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if is_instance_valid(_cinematic):
+		return          # pendant la cinématique de l'arme légendaire, on regarde
 	if event.is_action_pressed("pause"):
 		if _pause.is_open():
 			_pause.back()
@@ -284,6 +299,7 @@ func _start_online_match() -> void:
 	Net.remote_spawned.connect(_on_net_joined)
 	Net.remote_left.connect(_on_net_left)
 	Net.disconnected.connect(_on_net_disconnected)
+	Net.legendary.connect(_on_net_legendary)
 
 
 ## Crée le personnage d'un joueur (ou d'un bot) de la partie en réseau.
@@ -472,12 +488,12 @@ func _spawn_player(cls: ClassData, display_name: String, local: bool, loadout :=
 	if not local:
 		var brain := BotBrain.new()
 		brain.game = self
-		brain.skill = BotBrain.random_skill(GameState.bot_level)
+		brain.skill = BotBrain.skill_for(GameState.bot_level)
 		p.brain = brain
 	add_child(p)
 	p.global_transform = MatchRules.best_spawn(map, players, p)
 	p.died.connect(_on_player_died.bind(p))
-	p.add_to_group("players")   # utilisé par les caméras et capteurs de la map
+	p.add_to_group("players")   # utilisé par les caméras de la map et l'écran du laboratoire
 	p.start_spawn_protection()
 	if not local:
 		_add_name_tag(p)
@@ -700,6 +716,8 @@ func _bind_player(p: CharacterBody3D) -> void:
 
 
 func _on_bonus_picked(kind: int) -> void:
+	if kind == Pickups.Kind.LEGENDARY:
+		return          # annoncé à tout le monde par _announce_legendary_holder
 	var text := Pickups.name_of(kind).to_upper()
 	match kind:
 		Pickups.Kind.HEAL:
@@ -731,6 +749,8 @@ func _on_pickup_offline(_pad_id: int, kind: int, node: Node) -> void:
 			var data := WeaponCatalog.find(Pickups.weapon_of(kind))
 			if data:
 				node.give_special(data)
+				if data.legendary:
+					_announce_legendary_holder(node)
 	node.apply_effect("picked", kind, 0.0)
 
 
@@ -755,6 +775,8 @@ func _on_net_special(peer_id: int, weapon_id: String) -> void:
 	var data := WeaponCatalog.find(weapon_id)
 	if is_instance_valid(node) and data:
 		node.give_special(data)
+		if data.legendary:
+			_announce_legendary_holder(node)
 
 
 ## En ligne : effet de super-pouvoir d'un joueur (Surcharge, invisibilité).
@@ -762,3 +784,64 @@ func _on_net_aura(peer_id: int, kind: int, duration: float) -> void:
 	var node = _net_nodes.get(peer_id)
 	if is_instance_valid(node):
 		node.apply_aura(kind, duration)
+
+
+# ---------------------------------------------------------------- Arme légendaire
+
+## Hors ligne : c'est le moment, l'arme apparaît sur un socle loin des joueurs.
+func _offline_legendary() -> void:
+	var pos := LegendaryEvent.pick_point(map.target_points(), players)
+	_start_cinematic(pos, LegendaryEvent.CINEMATIC_TIME)
+	_cinematic.finished.connect(func() -> void:
+		_end_cinematic()
+		pickups.add_pad(Pickups.Kind.LEGENDARY, pos))
+
+
+## En ligne : le serveur fige la partie (phase 0) puis pose l'arme (phase 1).
+func _on_net_legendary(phase: int, position: Vector3, time_left: float) -> void:
+	if phase == 0:
+		_start_cinematic(position, time_left)
+		_cinematic.finished.connect(_end_cinematic.bind(false))
+	else:
+		_end_cinematic()
+		pickups.add_pad(Pickups.Kind.LEGENDARY, position)
+
+
+## Fige la partie (personnages, bots, projectiles, chronomètre) et lance la cinématique.
+func _start_cinematic(position: Vector3, duration: float) -> void:
+	if is_instance_valid(_cinematic):
+		return
+	if _pause.is_open():
+		_pause.close()
+	hud.visible = false
+	_ui.visible = false
+	if is_instance_valid(player):
+		player.input_enabled = false
+	Engine.time_scale = 0.0
+	_cinematic = LegendaryCinematic.new()
+	add_child(_cinematic)
+	_cinematic.play(position, duration)
+
+
+## Fin de la cinématique : on retrouve sa caméra et ses commandes. `resume` = false en
+## ligne quand l'animation se termine avant l'annonce du serveur (la partie reste figée
+## jusqu'à elle).
+func _end_cinematic(resume := true) -> void:
+	if is_instance_valid(_cinematic):
+		_cinematic.queue_free()
+	_cinematic = null
+	if is_instance_valid(player):
+		player.camera.make_current()
+		player.input_enabled = not _pause.is_open()
+	hud.visible = true
+	_ui.visible = true
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	if resume:
+		Engine.time_scale = 1.0
+
+
+## Bannière pour tout le monde : qui a pris l'arme légendaire.
+func _announce_legendary_holder(node: Node) -> void:
+	var who: String = "TU AS" if node == player else "%s A" % str(node.player_name).to_upper()
+	_ui.show_banner("%s PRIS LE CANON DU SHOGUN" % who, LegendaryEvent.GOLD)
+	Sfx.play("powerup", -2.0, 0.8)

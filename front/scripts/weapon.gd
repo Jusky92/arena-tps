@@ -163,6 +163,8 @@ func _fire_pellet(spread_deg: float) -> Dictionary:
 	var exclude: Array[RID] = []
 	var end_point := to
 	var pierce_left := MAX_PIERCE if (piercing and data.is_hitscan()) or data.pierce_always else 1
+	# Murs traversés : ceux de l'arme, plus ceux de la capacité de l'Archer.
+	var walls_left := data.pierce_walls + (MatchRules.PIERCE_WALLS if piercing and data.is_hitscan() else 0)
 
 	while pierce_left > 0:
 		var hit := _raycast(space, from, to, exclude)
@@ -192,7 +194,10 @@ func _fire_pellet(spread_deg: float) -> Dictionary:
 			Effects.impact(_world(), hit.position, data.tracer_color)
 			if _hears_impacts():
 				Sfx.play_at("impact_world", hit.position, -10.0, 1.0, 40.0)
-			break  # un mur arrête toujours la balle
+			if walls_left <= 0:
+				break  # un mur arrête la balle…
+			walls_left -= 1  # … sauf une balle qui peut encore traverser
+			exclude.append(hit.rid)
 
 	if data.model == WeaponData.Model.LASER:
 		Effects.laser_beam(_world(), from, end_point, data.tracer_color)
@@ -317,12 +322,41 @@ func _push(target: Object, direction: Vector3, strength: float) -> void:
 ## rayon limité à la portée d'une arme courte (katana) s'arrêterait derrière lui.
 ## La portée de l'arme s'applique ensuite depuis le canon.
 func _aim_point(spread_deg: float) -> Vector3:
+	var assisted := assist_target()
+	if assisted:
+		return _assist_point(assisted)       # arme légendaire : le tir se colle sur l'ennemi
 	var space := get_world_3d().direct_space_state
 	var cam_from := _camera.global_position
 	var cam_dir := _spread_direction(-_camera.global_basis.z, spread_deg)
 	var cam_to := cam_from + cam_dir * maxf(data.max_range, AIM_RAY)
 	var aim_hit := _raycast(space, cam_from, cam_to, [])
 	return aim_hit.position if aim_hit else cam_to
+
+
+## Visée facilitée (arme légendaire) : l'ennemi vivant le plus proche du réticule, à
+## moins de data.aim_assist_deg degrés et à portée ; null s'il n'y en a pas.
+func assist_target() -> Node3D:
+	if data == null or data.aim_assist_deg <= 0.0 or _camera == null or not is_inside_tree():
+		return null
+	var from := _camera.global_position
+	var forward := -_camera.global_basis.z
+	var best: Node3D = null
+	var best_angle := data.aim_assist_deg
+	for p in get_tree().get_nodes_in_group("players"):
+		if p == _shooter or not p.alive or (p.has_method("is_protected") and p.is_protected()):
+			continue
+		var point := _assist_point(p)
+		if muzzle.global_position.distance_to(point) > data.max_range:
+			continue
+		var angle := rad_to_deg(forward.angle_to(point - from))
+		if angle < best_angle:
+			best_angle = angle
+			best = p
+	return best
+
+
+func _assist_point(target: Node3D) -> Vector3:
+	return target.global_position + Vector3.UP * MatchRules.body_height(target) * 0.6
 
 
 ## Direction de visée : vers le point visé (`flat` = à l'horizontale, pour le katana).

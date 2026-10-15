@@ -32,7 +32,7 @@ extends Node
 ##
 ## Protocole (toutes les fonctions marquées @rpc) :
 ##   client -> serveur  hello, set_loadout, request_settings, request_start, state,
-##                      fire, reload, hit, fire_projectile, use_super
+##                      fire, reload, hit, fire_projectile, use_super, use_ability
 ##   (serveur -> clients aussi : projectile, explosion, effect, pickup, pickups,
 ##    special, aura)
 ##   serveur -> clients refuse, lobby, start_match, player_joined, player_left,
@@ -74,6 +74,9 @@ signal special_given(peer_id: int, weapon_id: String)
 signal aura_started(peer_id: int, kind: int, duration: float)
 signal player_respawned(peer_id: int, position: Vector3, yaw: float, class_id: String, loadout: Dictionary)
 signal match_over(rows: Array)
+## Arme légendaire : phase 0 = cinématique (partie figée, `time_left` s restantes),
+## phase 1 = fin de la pause, l'arme est sur son socle à `position`.
+signal legendary(phase: int, position: Vector3, time_left: float)
 ## Serveur : un joueur a passé la vérification d'accès / est parti.
 signal player_accepted(peer_id: int)
 ## Serveur : le chef demande le lancement.
@@ -100,7 +103,7 @@ var pseudo := "Joueur"
 ## Le serveur (pair 1) n'y figure pas : il ne joue pas. Les bots ont un id négatif.
 var players := {}
 ## Réglages de la partie, choisis par le chef.
-var settings := {"bots": 2, "duration": 180.0, "map": MapCatalog.DEFAULT_ID}
+var settings := {"bots": 2, "duration": 180.0, "map": MapCatalog.DEFAULT_ID, "bot_level": "moyen"}
 ## true en LAN : le chef (premier joueur) règle et lance la partie. false avec
 ## la Server List : le chef du groupe règle et lance la partie, une fois le serveur
 ## réservé (réglages de départ : ceux envoyés au lancement).
@@ -123,6 +126,9 @@ var pickup_states := {}
 ## Serveur : vérifie le ticket d'un joueur. Reçoit (ticket, user_id annoncé) et
 ## renvoie le user_id vérifié, ou "" si l'accès est refusé. Peut être une coroutine.
 var ticket_verifier: Callable = Callable()
+## true pendant la cinématique de l'arme légendaire : partie figée, le serveur ignore
+## les tirs, impacts, capacités et super-pouvoirs.
+var frozen := false
 ## Serveur : la partie en cours (server_game.gd), qui arbitre tirs, munitions et
 ## impacts : resolve_hit(cible, tireur, point relatif, arme), on_fire(tireur,
 ## emplacement) -> bool, on_reload(tireur, emplacement).
@@ -288,6 +294,7 @@ func leave() -> void:
 	online = false
 	_serving = false
 	in_match = false
+	frozen = false
 	server_status = "idle"
 	leader_id = 0
 	players = {}
@@ -354,12 +361,13 @@ func controls(id: int) -> bool:
 
 func _lobby_info() -> Dictionary:
 	return {"bots": settings.bots, "duration": settings.duration, "map": settings.get("map", MapCatalog.DEFAULT_ID),
-		"leader_id": leader_id, "status": server_status, "lan": lan_lobby}
+		"bot_level": settings.get("bot_level", "moyen"), "leader_id": leader_id, "status": server_status, "lan": lan_lobby}
 
 
 func _apply_lobby_info(info: Dictionary) -> void:
 	settings = {"bots": info.get("bots", 2), "duration": info.get("duration", 180.0),
-		"map": MapCatalog.valid_id(str(info.get("map", MapCatalog.DEFAULT_ID)))}
+		"map": MapCatalog.valid_id(str(info.get("map", MapCatalog.DEFAULT_ID))),
+		"bot_level": BotBrain.valid_level(str(info.get("bot_level", "moyen")))}
 	leader_id = info.get("leader_id", 0)
 	server_status = info.get("status", "idle")
 	lan_lobby = info.get("lan", true)
@@ -556,18 +564,19 @@ func _valid_class(class_id: String) -> String:
 	return GameState.CLASSES[0].resource_path
 
 
-## Chef : règle le nombre de bots, la durée et la map (identifiant de MapCatalog).
-func request_settings(bots: int, duration: float, map_id: String) -> void:
+## Chef : règle le nombre de bots, la durée, la map (identifiant de MapCatalog) et le
+## niveau des bots (BotBrain.LEVELS).
+func request_settings(bots: int, duration: float, map_id: String, bot_level: String) -> void:
 	if can_edit_settings():
-		_request_settings.rpc_id(1, bots, duration, map_id)
+		_request_settings.rpc_id(1, bots, duration, map_id, bot_level)
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _request_settings(bots: int, duration: float, map_id: String) -> void:
+func _request_settings(bots: int, duration: float, map_id: String, bot_level: String) -> void:
 	if not _serving or multiplayer.get_remote_sender_id() != leader_id or server_status != lobby_status():
 		return
 	settings = {"bots": clampi(bots, 0, max_players - 1), "duration": clampf(duration, 60.0, 600.0),
-		"map": MapCatalog.valid_id(map_id)}
+		"map": MapCatalog.valid_id(map_id), "bot_level": BotBrain.valid_level(bot_level)}
 	lobby_changed.emit()
 	_send_lobby()
 
@@ -780,7 +789,7 @@ func _hit(target_id: int, hit_offset: Vector3, weapon: String) -> void:
 
 
 func _resolve_hit(target_id: int, shooter_id: int, hit_offset: Vector3, weapon: String) -> void:
-	if _serving and in_match and arbiter:
+	if _serving and in_match and arbiter and not frozen:
 		arbiter.resolve_hit(target_id, shooter_id, hit_offset, weapon)
 
 
@@ -799,7 +808,7 @@ func fire(shooter_id: int, slot: int) -> void:
 @rpc("any_peer", "call_remote", "reliable")
 func _fire(slot: int) -> void:
 	var shooter := multiplayer.get_remote_sender_id()
-	if _serving and in_match and arbiter and players.has(shooter):
+	if _serving and in_match and arbiter and players.has(shooter) and not frozen:
 		arbiter.on_fire(shooter, slot)
 
 
@@ -849,7 +858,7 @@ func fire_projectile(shooter_id: int, slot: int, origin: Vector3, velocity: Vect
 @rpc("any_peer", "call_remote", "reliable")
 func _fire_projectile(slot: int, origin: Vector3, velocity: Vector3) -> void:
 	var shooter := multiplayer.get_remote_sender_id()
-	if _serving and in_match and arbiter and players.has(shooter):
+	if _serving and in_match and arbiter and players.has(shooter) and not frozen:
 		arbiter.on_fire_projectile(shooter, slot, origin, velocity)
 
 
@@ -863,6 +872,20 @@ func push_explosion(projectile_id: int, position: Vector3, weapon_id: String) ->
 	projectile_exploded.emit(projectile_id, position, weapon_id)
 
 
+## Client -> serveur : j'active la capacité de mon spécialiste (touche E). Le serveur la
+## démarre sur son personnage : garde du Samouraï, balles perforantes de l'Archer.
+func use_ability() -> void:
+	if online and not _serving and in_match:
+		_use_ability.rpc_id(1)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _use_ability() -> void:
+	var id := multiplayer.get_remote_sender_id()
+	if _serving and in_match and arbiter and players.has(id) and not frozen:
+		arbiter.on_use_ability(id)
+
+
 ## Client -> serveur : déclencher le super-pouvoir en réserve.
 func use_super() -> void:
 	if online and not _serving:
@@ -872,7 +895,7 @@ func use_super() -> void:
 @rpc("any_peer", "call_remote", "reliable")
 func _use_super() -> void:
 	var id := multiplayer.get_remote_sender_id()
-	if _serving and in_match and arbiter and players.has(id):
+	if _serving and in_match and arbiter and players.has(id) and not frozen:
 		arbiter.activate_super_of(id)
 
 
@@ -944,6 +967,16 @@ func push_match_over(rows: Array) -> void:
 	if _serving:
 		server_status = "ending"
 	match_over.emit(rows)
+
+
+# =========================================================================== arme légendaire
+
+## Serveur -> clients : début (phase 0) ou fin (phase 1) de la cinématique de l'arme
+## légendaire (voir LegendaryEvent).
+@rpc("authority", "call_remote", "reliable")
+func push_legendary(phase: int, position: Vector3, time_left: float) -> void:
+	frozen = phase == 0
+	legendary.emit(phase, position, time_left)
 
 
 # =========================================================================== adresses
