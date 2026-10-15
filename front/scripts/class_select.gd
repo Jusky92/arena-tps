@@ -4,7 +4,8 @@ extends Control
 ## (équipement) choisie dans l'accueil : n'importe quel spécialiste peut les porter.
 ## Les cartes sont générées depuis GameState.CLASSES : ajouter une classe
 ## l'ajoute automatiquement ici.
-## Souris ou touches 1, 2, 3 pour choisir (retour au menu principal). Échap pour revenir.
+## Clic sur une carte ou touches 1, 2, 3… pour choisir : on reste sur la page, la carte
+## du spécialiste actuel est mise en avant. RETOUR ou Échap pour revenir.
 
 const CARD_WIDTH := 270.0
 const PREVIEW_SIZE := Vector2i(224, 200)
@@ -18,6 +19,9 @@ const MAX_COOLDOWN_REF := 14.0
 
 @onready var cards_box: HBoxContainer = %Cards
 @onready var back_button: Button = %BackButton
+
+## Une entrée par carte : {data, card, status}, pour remettre en avant le spécialiste choisi.
+var _cards: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -43,10 +47,26 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _choose(class_data: ClassData) -> void:
+	if class_data == GameState.selected_class:
+		return
+	Sfx.ui("ui_click")
 	GameState.select_specialist(class_data)
 	var loadout := GameState.current_loadout()
 	Net.set_loadout(class_data.resource_path, loadout.primary, loadout.secondary)
-	_go_back()
+	Backend.sync_party_class()     # les membres du groupe le voient tout de suite
+	_refresh_cards()
+
+
+## Met en avant la carte du spécialiste actuel (bordure, mention en bas).
+func _refresh_cards(hovered: Control = null) -> void:
+	for entry in _cards:
+		var data: ClassData = entry.data
+		var card: PanelContainer = entry.card
+		var status: Label = entry.status
+		var selected := data == GameState.selected_class
+		card.add_theme_stylebox_override("panel", _card_style(data.color, card == hovered, selected))
+		status.text = "✓ SPÉCIALISTE ACTUEL" if selected else "CLIQUER POUR CHOISIR"
+		status.add_theme_color_override("font_color", data.color.lightened(0.35) if selected else Color(1, 1, 1, 0.4))
 
 
 ## Ouvert depuis le salon d'une partie en ligne : on y retourne, toujours connecté.
@@ -62,15 +82,17 @@ func _go_back() -> void:
 func _make_card(data: ClassData, index: int) -> Control:
 	var card := PanelContainer.new()
 	card.custom_minimum_size = Vector2(CARD_WIDTH, 0)
-	var normal_style := _card_style(data.color, false)
-	var hover_style := _card_style(data.color, true)
-	card.add_theme_stylebox_override("panel", normal_style)
+	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	card.mouse_entered.connect(func() -> void:
-		card.add_theme_stylebox_override("panel", hover_style)
+		_refresh_cards(card)
 		_animate_scale(card, 1.03))
 	card.mouse_exited.connect(func() -> void:
-		card.add_theme_stylebox_override("panel", normal_style)
+		_refresh_cards()
 		_animate_scale(card, 1.0))
+	# Toute la carte est cliquable.
+	card.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			_choose(data))
 	card.resized.connect(func() -> void: card.pivot_offset = card.size / 2.0)
 
 	var box := VBoxContainer.new()
@@ -120,23 +142,28 @@ func _make_card(data: ClassData, index: int) -> Control:
 	ability_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(ability_desc)
 
-	# Bouton.
+	# Spécialiste actuel ou non (texte mis à jour par _refresh_cards).
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_child(spacer)
-	var button := Button.new()
-	button.text = "%s %s" % ["SPÉCIALISTE ACTUEL ·" if data == GameState.selected_class else "CHOISIR", data.display_name.to_upper()]
-	button.add_theme_font_override("font", UiTheme.title_font())
-	button.add_theme_font_size_override("font_size", 14)
-	button.custom_minimum_size = Vector2(0, 42)
-	button.add_theme_stylebox_override("normal", _button_style(data.color.darkened(0.35)))
-	button.add_theme_stylebox_override("hover", _button_style(data.color))
-	button.add_theme_stylebox_override("pressed", _button_style(data.color.lightened(0.2)))
-	button.add_theme_stylebox_override("focus", _button_style(data.color))
-	button.pressed.connect(_choose.bind(data))
-	UiTheme.add_hover_feedback(button)
-	box.add_child(button)
+	var status := _label("", 14, Color.WHITE)
+	status.add_theme_font_override("font", UiTheme.title_font())
+	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	status.custom_minimum_size = Vector2(0, 30)
+	box.add_child(status)
+
+	# Les clics sur le contenu (barres, séparateur…) reviennent à la carte.
+	_ignore_mouse(box)
+	_cards.append({"data": data, "card": card, "status": status})
+	_refresh_cards()
 	return card
+
+
+func _ignore_mouse(node: Node) -> void:
+	for child in node.get_children():
+		if child is Control:
+			(child as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_ignore_mouse(child)
 
 
 func _stat_bar(title: String, ratio: float, value_text: String, color: Color) -> Control:
@@ -164,18 +191,19 @@ func _label(text: String, size: int, color: Color) -> Label:
 	return UiTheme.label(text, size, color)
 
 
-## Carte biseautée comme le reste de l'interface ; bordure et halo à la couleur de la classe au survol.
-func _card_style(color: Color, hovered: bool) -> StyleBoxFlat:
-	var style := UiTheme.box(BG_CARD, color if hovered else Color(1, 1, 1, 0.08), 2 if hovered else 1, 8, 22, 14)
-	if hovered:
+## Carte biseautée comme le reste de l'interface ; bordure à la couleur du spécialiste
+## quand il est choisi, halo en plus au survol.
+func _card_style(color: Color, hovered: bool, selected: bool) -> StyleBoxFlat:
+	var lit := hovered or selected
+	var style := UiTheme.box(BG_CARD, color if lit else Color(1, 1, 1, 0.08), 2 if lit else 1, 8, 22, 14)
+	if lit:
 		style.border_width_left = 4
+	if selected:
+		style.bg_color = BG_CARD.lerp(color, 0.12)
+	if hovered:
 		style.shadow_color = Color(color, 0.35)
 		style.shadow_size = 18
 	return style
-
-
-func _button_style(color: Color) -> StyleBoxFlat:
-	return UiTheme.box(color, Color(1, 1, 1, 0.12), 1, 5, 16, 8)
 
 
 func _flat(color: Color, radius: int) -> StyleBoxFlat:
