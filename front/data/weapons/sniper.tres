@@ -4,6 +4,7 @@
 
 [resource]
 script = ExtResource("1_w")
+id = "sniper"
 model = 2
 display_name = "Fusil de précision"
 damage = 70

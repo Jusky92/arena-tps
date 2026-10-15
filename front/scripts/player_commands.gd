@@ -16,6 +16,8 @@ var fire_pressed := false       ## appui (armes coup par coup)
 var aim := false                ## maintenu (clic droit)
 var reload := false             ## appui
 var ability := false            ## appui
+var switch_to := -1             ## arme demandée (0 = principale, 1 = secondaire, -1 = aucune)
+var grenade := false            ## appui : lancer une grenade
 
 
 func clear() -> void:
@@ -29,3 +31,5 @@ func clear() -> void:
 	aim = false
 	reload = false
 	ability = false
+	switch_to = -1
+	grenade = false

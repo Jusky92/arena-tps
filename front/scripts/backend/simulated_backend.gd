@@ -120,6 +120,18 @@ func _open_session(pseudo: String, email: String) -> void:
 # =========================================================================== profil et classement
 
 ## Hors ligne, rien n'est compté : un profil tout neuf.
+## Hors ligne, les classes ne vivent que dans la copie locale (GameState) :
+## liste vide = « garde celles du PC ».
+func get_loadouts() -> Dictionary:
+	await _latency()
+	return _ok({"loadouts": []})
+
+
+func save_loadouts(_list: Array) -> Dictionary:
+	await _latency()
+	return _ok()
+
+
 func get_profile() -> Dictionary:
 	await _latency()
 	var achievements := []

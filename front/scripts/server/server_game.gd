@@ -5,9 +5,11 @@ extends Node3D
 ## Le serveur ne joue pas : il arbitre.
 ##   - les joueurs humains sont des pantins qui suivent l'état envoyé par leur client ;
 ##   - les bots sont simulés ici (BotBrain) et diffusés comme les joueurs ;
-##   - il arbitre les tirs : un client signale seulement « j'ai touché telle cible à
-##     tel endroit avec mon arme » ; le serveur vérifie (arme, portée, ligne de vue,
-##     cadence), choisit la zone (tête / corps) et calcule les dégâts ;
+##   - il arbitre les tirs : il tient le chargeur de chaque arme (le client annonce
+##     ses tirs et ses rechargements), puis un client signale seulement « j'ai touché
+##     telle cible à tel endroit avec mon arme » ; le serveur vérifie (arme de la
+##     classe, tir annoncé, portée, ligne de vue), choisit la zone (tête / corps) et
+##     calcule les dégâts ;
 ##   - il annonce les éliminations, décide des réapparitions et tient le chronomètre ;
 ##   - à la fin, il envoie les résultats au back (match.finished) via BackendLink.
 
@@ -34,16 +36,35 @@ var _result_keys := {}                  # identifiant réseau -> clé dans _resu
 var _match_id := ""
 var _started_at := ""
 var _running := false
-## Cadence : touches encore autorisées par tireur -> [jetons, instant de la dernière recharge (ms)].
-var _hit_budget := {}
+## Armes de chaque personnage, tenues par le serveur : identifiant -> [principale,
+## secondaire], chacune {data, ammo, reload_end, next_shot, tokens}. `tokens` = fins de
+## validité (s) des impacts autorisés par les derniers tirs annoncés.
+var _arsenal := {}
 
 ## Tolérances de l'arbitrage des tirs (les positions vues par le tireur ont un peu
 ## de retard sur celles du serveur).
 const RANGE_MARGIN := 3.0               # mètres au-delà de la portée de l'arme
 const HITBOX_MARGIN := 0.3              # mètres autour de la capsule de la cible
 const LOS_MARGIN := 0.6                 # un mur à moins de ça du point touché ne bloque pas
-const FIRE_RATE_MARGIN := 1.25          # cadence tolérée par rapport à celle de l'arme
+const FIRE_INTERVAL_TOLERANCE := 0.7   # un tir peut arriver 30 % plus tôt (gigue réseau)
+const RELOAD_TOLERANCE := 0.8           # un rechargement peut finir 20 % plus tôt
+const HIT_WINDOW := 1.0                 # secondes pour signaler l'impact d'un tir annoncé
 const PIERCE_BURST := 5                 # touches d'un seul tir (balles perforantes)
+const AREA_HITS := 4                    # touches d'un coup de katana ou d'un tick de flammes
+const CLOSE_RANGE_MARGIN := 1.0         # marge de portée du katana et des flammes (m)
+const CLOSE_ARC_MARGIN := 25.0          # marge d'angle du katana et des flammes (degrés)
+const MUZZLE_MARGIN := 3.0              # distance max entre le tireur et le départ d'un projectile
+const BURN_TICK := 0.5                  # secondes entre deux dégâts de brûlure
+const GRENADE_SLOT := 2                 # emplacement de la grenade dans l'arsenal
+const CHARGE_WINDOW := 0.8              # une charge de l'Oni touche pendant au plus ça (s)
+const CHARGE_REACH := 3.5               # distance max d'un ennemi percuté (m)
+
+## Brûlures en cours : identifiant -> {dps, until, shooter_id, weapon, pending}.
+var _burns := {}
+var _burn_timer := 0.0
+var _projectiles := {}                  # identifiant -> Projectile (qui fait foi)
+var _charges := {}                      # tireur -> {start: début de sa dernière charge (s), hits: cibles touchées}
+var _next_projectile_id := 1
 
 
 func _ready() -> void:
@@ -57,7 +78,8 @@ func _ready() -> void:
 	_started_at = _now_iso()
 	_running = true
 
-	Net.hit_resolver = _resolve_hit
+	Net.arbiter = self
+	add_to_group("projectile_host")
 	Net.remote_states.connect(_on_remote_states)
 	Net.player_died.connect(_on_death)
 	Net.player_respawned.connect(_on_respawn)
@@ -66,13 +88,14 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	Net.hit_resolver = Callable()
+	Net.arbiter = null
 
 
 func _process(delta: float) -> void:
 	if not _running:
 		return
 	_publish_states()
+	_update_burns(delta)
 	for id in _respawns.keys():
 		_respawns[id] -= delta
 		if _respawns[id] <= 0.0:
@@ -90,6 +113,7 @@ func _spawn(id: int) -> CharacterBody3D:
 	var bot := Net.is_bot(id)
 	var p: CharacterBody3D = PlayerScene.instantiate()
 	p.class_data = load(info.class_id)
+	p.loadout = Net.loadout_of(id)
 	p.player_name = info.name
 	p.is_local = false
 	p.is_remote = not bot           # un humain suit l'état envoyé par son client
@@ -108,6 +132,7 @@ func _spawn(id: int) -> CharacterBody3D:
 	p.start_spawn_protection()
 	players.append(p)
 	_nodes[id] = p
+	_reset_arsenal(id)
 	var user_id: String = "" if bot else info.get("user_id", "")
 	var key := ("bot:%d" % id) if bot else (user_id if not user_id.is_empty() else "pair:%d" % id)
 	_result_keys[id] = key
@@ -125,6 +150,8 @@ func _remove_node(id: int) -> void:
 	_nodes.erase(id)
 	_human_states.erase(id)
 	_respawns.erase(id)
+	_arsenal.erase(id)
+	_burns.erase(id)
 
 
 ## Un joueur arrive en cours de partie. S'il n'y a plus de place, un bot lui cède la sienne.
@@ -172,44 +199,227 @@ func _on_remote_states(_sender_id: int, states: Dictionary) -> void:
 			_human_states[id] = states[id]
 
 
-## Un tireur signale un impact. Le serveur vérifie qu'il est plausible, choisit la
-## zone touchée et calcule lui-même les dégâts à partir de la fiche de l'arme.
-## `hit_offset` = point touché - position de la cible, vu par le tireur.
-func _resolve_hit(target_id: int, shooter_id: int, hit_offset: Vector3, weapon: String) -> void:
+# ---------------------------------------------------------------- Arbitrage des tirs
+# Appelé par Net (Net.arbiter = self) pour les tirs des clients et ceux des bots.
+
+## Un tir annoncé (balle, coup de katana, tick de flammes) avec l'arme `slot`.
+## Refusé si le chargeur est vide ou si le tir arrive plus vite que la cadence.
+## Accepté : décompte une munition et autorise les impacts qui suivent.
+func on_fire(shooter_id: int, slot: int) -> bool:
+	var w := _weapon_state(shooter_id, slot)
+	var shooter = _nodes.get(shooter_id)
+	if w.is_empty() or not is_instance_valid(shooter) or not shooter.alive:
+		return false
+	var data: WeaponData = w.data
+	var now := _now()
+	if w.reload_end > 0.0:
+		w.reload_end = 0.0      # le client a annulé son rechargement (changement d'arme)
+	if not data.unlimited() and w.ammo <= 0:
+		return false
+	if now < w.next_shot:
+		return false
+	w.next_shot = now + FIRE_INTERVAL_TOLERANCE / data.fire_rate
+	if not data.unlimited():
+		w.ammo -= 1
+	var hits := data.pellets
+	if data.kind in [WeaponData.Kind.MELEE, WeaponData.Kind.FLAME]:
+		hits = AREA_HITS
+	elif shooter.class_data.ability == ClassData.Ability.PIERCE and data.is_hitscan():
+		hits *= PIERCE_BURST
+	for i in hits:
+		w.tokens.append(now + HIT_WINDOW)
+	return true
+
+
+## Début d'un rechargement : le chargeur sera plein au bout du temps de l'arme.
+func on_reload(shooter_id: int, slot: int) -> void:
+	var w := _weapon_state(shooter_id, slot)
+	if w.is_empty() or w.data.unlimited() or w.ammo >= w.data.mag_size or w.reload_end > 0.0:
+		return
+	w.reload_end = _now() + w.data.reload_time * RELOAD_TOLERANCE
+
+
+## Un tireur signale un impact. Le serveur vérifie qu'il est plausible et qu'il suit
+## un tir annoncé, choisit la zone touchée et calcule lui-même les dégâts à partir
+## de la fiche de l'arme. `hit_offset` = point touché - position de la cible.
+func resolve_hit(target_id: int, shooter_id: int, hit_offset: Vector3, weapon: String) -> void:
 	var node = _nodes.get(target_id)
 	var shooter = _nodes.get(shooter_id)
 	if not is_instance_valid(node) or not is_instance_valid(shooter):
 		return
 	if not node.alive or node.is_protected() or not shooter.alive or node == shooter:
 		return
-	var reason := _reject_reason(node, shooter, hit_offset, weapon)
+	if weapon == shooter.CHARGE_NAME:
+		_resolve_charge(node, shooter, target_id, shooter_id)
+		return
+	var slot := _slot_named(shooter_id, weapon)
+	if slot < 0:
+		Net.log_line("SERVEUR : tir de %d sur %d refusé (%s n'est pas dans sa classe)" % [shooter_id, target_id, weapon])
+		return
+	var weapon_data: WeaponData = _arsenal[shooter_id][slot].data
+	var reason := _reject_reason(node, shooter, hit_offset, weapon_data)
 	if not reason.is_empty():
 		Net.log_line("SERVEUR : tir de %d sur %d refusé (%s)" % [shooter_id, target_id, reason])
 		return
-	if not _spend_hit(shooter_id, shooter.class_data.weapon):
-		return   # plus de touches que l'arme ne peut en faire : ignorée sans bruit
+	if not _consume_hit(shooter_id, slot):
+		return   # aucun tir annoncé pour cet impact : ignoré sans bruit
 
-	var headshot := MatchRules.is_headshot(node, hit_offset)
-	var damage := MatchRules.damage_taken(node, MatchRules.hit_damage(shooter.class_data.weapon, headshot))
+	var headshot := weapon_data.is_hitscan() and MatchRules.is_headshot(node, hit_offset)
+	_damage(target_id, shooter_id, MatchRules.hit_damage(weapon_data, headshot), weapon, headshot)
+	if weapon_data.kind == WeaponData.Kind.MELEE and weapon_data.knockback > 0.0:
+		var away: Vector3 = (node.global_position - shooter.global_position).normalized()
+		_effect(target_id, "knockback", weapon_data.knockback, 0.0, away)
+	if weapon_data.burn_time > 0.0 and node.alive:
+		_burns[target_id] = {"dps": weapon_data.burn_dps, "until": _now() + weapon_data.burn_time,
+			"shooter_id": shooter_id, "weapon": weapon, "pending": 0.0}
+
+
+## Applique des dégâts (bouclier compris) et annonce vie, provenance et élimination.
+func _damage(target_id: int, shooter_id: int, amount: int, weapon: String, headshot := false) -> void:
+	var node = _nodes.get(target_id)
+	if not is_instance_valid(node) or not node.alive or node.is_protected():
+		return
+	var damage := MatchRules.damage_taken(node, amount)
 	node.health = maxi(node.health - damage, 0)
-	if node.brain:
+	var shooter = _nodes.get(shooter_id)
+	if node.brain and is_instance_valid(shooter) and shooter != node:
 		node.brain.on_damaged(node, shooter)
 	Net.push_health.rpc(target_id, node.health, node.class_data.max_health)
 	Net.send_hit(target_id, shooter_id, damage, headshot)
 	if node.health == 0:
+		_burns.erase(target_id)
 		Net.push_death.rpc(target_id, shooter_id, weapon, headshot)
 
 
+## Effet subi : appliqué ici pour un bot (simulé par le serveur), envoyé au client
+## pour un humain (il simule lui-même son déplacement).
+func _effect(target_id: int, kind: String, value: float, duration: float, direction := Vector3.ZERO) -> void:
+	var node = _nodes.get(target_id)
+	if not is_instance_valid(node):
+		return
+	if Net.is_bot(target_id):
+		node.apply_effect(kind, value, duration, direction, null)
+	else:
+		Net.send_effect(target_id, kind, value, duration, direction)
+
+
+## Brûlures : dégâts réguliers tant qu'elles durent.
+func _update_burns(delta: float) -> void:
+	_burn_timer -= delta
+	if _burn_timer > 0.0 or _burns.is_empty():
+		return
+	_burn_timer = BURN_TICK
+	var now := _now()
+	for id in _burns.keys():
+		var burn: Dictionary = _burns[id]
+		if now > burn.until:
+			_burns.erase(id)
+			continue
+		burn.pending += burn.dps * BURN_TICK
+		var amount := int(burn.pending)
+		if amount > 0:
+			burn.pending -= amount
+			_damage(id, burn.shooter_id, amount, burn.weapon)
+
+
+# ---------------------------------------------------------------- Projectiles
+
+## Tir d'un projectile (roquette, lance-caca) ou lancer de grenade (slot 2) : le
+## serveur vérifie munitions, cadence et point de départ, puis simule le projectile.
+func on_fire_projectile(shooter_id: int, slot: int, origin: Vector3, velocity: Vector3) -> void:
+	var shooter = _nodes.get(shooter_id)
+	var w := _weapon_state(shooter_id, slot)
+	if not is_instance_valid(shooter) or w.is_empty():
+		return
+	var data: WeaponData = w.data
+	if not data.kind in [WeaponData.Kind.PROJECTILE, WeaponData.Kind.THROWN]:
+		return
+	if origin.distance_to(shooter.chest_position()) > MUZZLE_MARGIN:
+		Net.log_line("SERVEUR : projectile de %d refusé (départ trop loin du tireur)" % shooter_id)
+		return
+	if not on_fire(shooter_id, slot):
+		return
+	var speed := minf(velocity.length(), data.projectile_speed * 1.1)
+	launch_projectile(data, shooter, origin, velocity.normalized() * speed)
+
+
+## Crée le projectile qui fait foi et l'annonce aux clients (qui l'affichent).
+func launch_projectile(data: WeaponData, shooter: Node, origin: Vector3, velocity: Vector3) -> void:
+	var projectile := Projectile.new()
+	projectile.id = _next_projectile_id
+	_next_projectile_id += 1
+	projectile.setup(data, shooter, origin, velocity, true)
+	projectile.exploded.connect(_on_projectile_exploded)
+	add_child(projectile)
+	_projectiles[projectile.id] = projectile
+	Net.push_projectile.rpc(projectile.id, data.id, origin, velocity, projectile.shooter_id)
+
+
+func _on_projectile_exploded(projectile: Projectile, position: Vector3, direct_target: Node) -> void:
+	_projectiles.erase(projectile.id)
+	var data := projectile.data
+	var shooter_id := projectile.shooter_id
+	var shooter: Node = projectile.shooter if is_instance_valid(projectile.shooter) else null
+	for victim in MatchRules.explosion_victims(get_world_3d(), position, data, shooter, direct_target):
+		var node: Node = victim.node
+		var target_id: int = node.peer_id if "peer_id" in node else 0
+		if target_id == 0 or not _nodes.has(target_id):
+			continue
+		_damage(target_id, shooter_id, victim.damage, data.display_name)
+		if data.knockback > 0.0:
+			_effect(target_id, "knockback", data.knockback, 0.0, victim.direction)
+		if data.slow_time > 0.0:
+			_effect(target_id, "slow", data.slow_factor, data.slow_time)
+		if data.splat_time > 0.0:
+			_effect(target_id, "splat", 1.0, data.splat_time)
+	Net.push_explosion.rpc(projectile.id, position, data.id)
+
+
+
+## Charge de l'Oni : seulement pour un Oni, à courte distance, dans une fenêtre de
+## CHARGE_WINDOW secondes, et pas plus souvent que sa capacité ne se recharge.
+func _resolve_charge(node: Node3D, shooter: Node3D, target_id: int, shooter_id: int) -> void:
+	if shooter.class_data.ability != ClassData.Ability.CHARGE:
+		return
+	if shooter.global_position.distance_to(node.global_position) > CHARGE_REACH:
+		return
+	var now := _now()
+	var charge: Dictionary = _charges.get(shooter_id, {"start": -1000.0, "hits": []})
+	if now - charge.start > CHARGE_WINDOW:
+		if now - charge.start < shooter.class_data.ability_cooldown * 0.7:
+			Net.log_line("SERVEUR : charge de %d refusée (capacité pas encore rechargée)" % shooter_id)
+			return
+		charge = {"start": now, "hits": []}
+		_charges[shooter_id] = charge
+	if target_id in charge.hits:
+		return      # une seule fois par cible et par charge
+	charge.hits.append(target_id)
+	_damage(target_id, shooter_id, shooter.CHARGE_DAMAGE, shooter.CHARGE_NAME)
+	var push: Vector3 = (node.global_position - shooter.global_position)
+	push.y = 0.0
+	_effect(target_id, "knockback", shooter.CHARGE_KNOCKBACK, 0.0, (push.normalized() + Vector3.UP * 0.4).normalized())
+
+
 ## Raison du refus d'un impact, ou "" s'il est accepté.
-func _reject_reason(node: Node3D, shooter: Node3D, hit_offset: Vector3, weapon: String) -> String:
-	var weapon_data: WeaponData = shooter.class_data.weapon
-	if weapon_data.display_name != weapon:
-		return "arme %s au lieu de %s" % [weapon, weapon_data.display_name]
-	if shooter.global_position.distance_to(node.global_position) > weapon_data.max_range + RANGE_MARGIN:
+func _reject_reason(node: Node3D, shooter: Node3D, hit_offset: Vector3, weapon_data: WeaponData) -> String:
+	if not weapon_data.kind in [WeaponData.Kind.HITSCAN, WeaponData.Kind.MELEE, WeaponData.Kind.FLAME]:
+		return "arme sans impact direct"     # projectiles : le serveur les simule lui-même
+	var close := weapon_data.kind in [WeaponData.Kind.MELEE, WeaponData.Kind.FLAME]
+	var margin := CLOSE_RANGE_MARGIN if close else RANGE_MARGIN
+	if shooter.global_position.distance_to(node.global_position) > weapon_data.max_range + margin:
 		return "hors de portée"
+	if close:
+		# Katana et flammes : la cible doit être devant le tireur.
+		var to_target := node.global_position - shooter.global_position
+		to_target.y = 0.0
+		var forward := -shooter.global_basis.z
+		forward.y = 0.0
+		if to_target.length() > 0.5 and rad_to_deg(to_target.angle_to(forward)) > weapon_data.arc_deg / 2.0 + CLOSE_ARC_MARGIN:
+			return "cible derrière le tireur"
 	var height := MatchRules.body_height(node)
 	var radius: float = (node.collision.shape as CapsuleShape3D).radius
-	if Vector2(hit_offset.x, hit_offset.z).length() > radius + HITBOX_MARGIN 			or hit_offset.y < -HITBOX_MARGIN or hit_offset.y > height + HITBOX_MARGIN:
+	if Vector2(hit_offset.x, hit_offset.z).length() > radius + HITBOX_MARGIN \
+			or hit_offset.y < -HITBOX_MARGIN or hit_offset.y > height + HITBOX_MARGIN:
 		return "point d'impact hors de la cible"
 	# Ligne de vue : des yeux du tireur au point touché, seul le décor peut bloquer.
 	var eye := shooter.global_position + Vector3.UP * (MatchRules.body_height(shooter) - 0.2)
@@ -226,20 +436,59 @@ func _reject_reason(node: Node3D, shooter: Node3D, hit_offset: Vector3, weapon: 
 	return ""
 
 
-## Cadence : chaque tireur a une réserve de touches qui se recharge au rythme de
-## son arme (plombs par tir x tirs par seconde, avec une marge). Renvoie false si
-## la réserve est vide.
-func _spend_hit(shooter_id: int, weapon: WeaponData) -> bool:
-	var now := Time.get_ticks_msec()
-	var capacity := float(weapon.pellets * PIERCE_BURST)
-	var rate := weapon.fire_rate * weapon.pellets * FIRE_RATE_MARGIN
-	var budget: Array = _hit_budget.get(shooter_id, [capacity, now])
-	var tokens := minf(float(budget[0]) + (now - int(budget[1])) / 1000.0 * rate, capacity)
-	if tokens < 1.0:
-		_hit_budget[shooter_id] = [tokens, now]
+## Armes d'un personnage remises à neuf (apparition, réapparition, changement de classe).
+func _reset_arsenal(id: int) -> void:
+	var node = _nodes.get(id)
+	if not is_instance_valid(node):
+		return
+	var list := []
+	for w in node.weapons:
+		var data: WeaponData = w.data
+		list.append({"data": data, "ammo": data.mag_size, "reload_end": 0.0, "next_shot": 0.0, "tokens": []})
+	# Emplacement 2 : les grenades de la vie en cours.
+	list.append({"data": WeaponCatalog.GRENADE, "ammo": WeaponCatalog.GRENADES_PER_LIFE,
+		"reload_end": 0.0, "next_shot": 0.0, "tokens": []})
+	_arsenal[id] = list
+
+
+## État serveur de l'arme `slot` d'un personnage ({} si inconnue). Termine au passage
+## un rechargement arrivé à son terme.
+func _weapon_state(id: int, slot: int) -> Dictionary:
+	var list: Array = _arsenal.get(id, [])
+	if slot < 0 or slot >= list.size():
+		return {}
+	var w: Dictionary = list[slot]
+	if w.reload_end > 0.0 and _now() >= w.reload_end:
+		w.ammo = w.data.mag_size
+		w.reload_end = 0.0
+	return w
+
+
+## Emplacement de l'arme `weapon` (nom affiché) dans la classe du tireur, -1 si absente.
+func _slot_named(id: int, weapon: String) -> int:
+	var list: Array = _arsenal.get(id, [])
+	for i in list.size():
+		if list[i].data.display_name == weapon:
+			return i
+	return -1
+
+
+## Utilise une touche autorisée par un tir récent de l'arme `slot`.
+func _consume_hit(id: int, slot: int) -> bool:
+	var w := _weapon_state(id, slot)
+	if w.is_empty():
 		return false
-	_hit_budget[shooter_id] = [tokens - 1.0, now]
+	var now := _now()
+	var tokens: Array = w.tokens.filter(func(t): return t >= now)
+	w.tokens = tokens
+	if tokens.is_empty():
+		return false
+	tokens.pop_front()
 	return true
+
+
+static func _now() -> float:
+	return Time.get_ticks_msec() / 1000.0
 
 
 ## Élimination (annoncée par push_death, qui s'exécute aussi ici).
@@ -256,23 +505,26 @@ func _on_death(victim_id: int, killer_id: int, _weapon: String, _headshot: bool)
 	_respawns[victim_id] = MatchRules.RESPAWN_DELAY
 
 
-## Réapparition décidée ici, avec la classe choisie par le joueur (Net.set_class).
+## Réapparition décidée ici, avec le spécialiste et la classe choisis par le joueur
+## (Net.set_loadout).
 func _respawn(id: int) -> void:
 	var node = _nodes.get(id)
 	if not is_instance_valid(node):
 		return
 	var t := MatchRules.best_spawn(map, players, node)
-	Net.push_respawn.rpc(id, t.origin, t.basis.get_euler().y, Net.class_path_of(id))
+	Net.push_respawn.rpc(id, t.origin, t.basis.get_euler().y, Net.class_path_of(id), Net.loadout_of(id))
 
 
 ## Réapparition (annoncée par push_respawn, qui s'exécute aussi ici).
-func _on_respawn(id: int, position: Vector3, yaw: float, class_id: String) -> void:
+func _on_respawn(id: int, position: Vector3, yaw: float, class_id: String, loadout: Dictionary) -> void:
 	var node = _nodes.get(id)
 	if not is_instance_valid(node):
 		return
-	if node.class_data.resource_path != class_id:
+	if MatchRules.needs_rebuild(node, class_id, loadout):
 		_remove_node(id)
 		node = _spawn(id)
+	else:
+		_reset_arsenal(id)
 	node.respawn(position, yaw)
 	node.teleport(position, yaw)
 	if node.brain:

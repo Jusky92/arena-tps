@@ -4,6 +4,7 @@
 
 [resource]
 script = ExtResource("1_w")
+id = "smg"
 model = 1
 display_name = "Mitraillette"
 damage = 9

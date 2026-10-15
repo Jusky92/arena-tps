@@ -42,6 +42,7 @@ var _ik: AimIKModifier
 var _parts: Array[MeshInstance3D] = []
 var _flash_targets: Array[GeometryInstance3D] = []
 var _attachments := {}
+var _weapon_grips := {}            # nœud d'arme -> distance de la main gauche
 var _crouch := 0.0
 var _air := 0.0
 var _speed := 0.0
@@ -89,6 +90,7 @@ func build(id: String, weapon_kind: int, weapon_node: Node3D = null) -> void:
 	var weapon_info := CharacterDesigns.build_weapon(self, weapon_kind, id, weapon_node)
 	foregrip = weapon_info.foregrip
 	if weapon_node:
+		_weapon_grips[weapon_node] = foregrip
 		weapon_node.reparent(gun_mount, false)
 		weapon_node.transform = Transform3D.IDENTITY
 	_merge_parts()
@@ -156,9 +158,15 @@ func add_part(bone: Node3D, size: Vector3, roundness: float, offset: Vector3, ma
 
 
 ## Fusionne les pièces d'un même parent et d'un même matériau (moins d'appels de rendu).
-func _merge_parts() -> void:
+## Seules les pièces à partir de `from_index` sont traitées (arme ajoutée après coup).
+func _merge_parts(from_index := 0) -> void:
 	var groups := {}
-	for part in _parts:
+	var kept: Array[MeshInstance3D] = []
+	for i in _parts.size():
+		var part := _parts[i]
+		if i < from_index:
+			kept.append(part)
+			continue
 		var key := "%d|%d" % [part.get_parent().get_instance_id(), part.material_override.get_instance_id()]
 		if not groups.has(key):
 			groups[key] = []
@@ -180,9 +188,29 @@ func _merge_parts() -> void:
 		for part in group:
 			part.free()
 		merged.append(combined)
-	_parts = merged
-	for part in _parts:
+	for part in merged:
 		_flash_targets.append(part)
+	kept.append_array(merged)
+	_parts = kept
+
+
+## Ajoute une arme de plus (classes : principale + secondaire). Son modèle est
+## construit dans `weapon_node`, accroché à la main ; show_weapon() choisit celle en main.
+func add_weapon(weapon_kind: int, weapon_node: Node3D) -> void:
+	var first_new := _parts.size()
+	var weapon_info := CharacterDesigns.build_weapon(self, weapon_kind, design_id, weapon_node)
+	_weapon_grips[weapon_node] = weapon_info.foregrip
+	_merge_parts(first_new)
+	weapon_node.reparent(gun_mount, false)
+	weapon_node.transform = Transform3D.IDENTITY
+
+
+## Affiche l'arme en main et cache les autres ; la main gauche se place sur elle.
+func show_weapon(weapon_node: Node3D) -> void:
+	for node in _weapon_grips:
+		if is_instance_valid(node):
+			node.visible = node == weapon_node
+	foregrip = _weapon_grips.get(weapon_node, foregrip)
 
 
 ## Arbre d'animation : locomotion (repos -> marche -> jogging -> sprint), accroupi,

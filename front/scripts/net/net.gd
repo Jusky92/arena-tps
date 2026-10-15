@@ -30,13 +30,17 @@ extends Node
 ## à la fin, le serveur renvoie tout le monde au menu et redevient libre.
 ##
 ## Protocole (toutes les fonctions marquées @rpc) :
-##   client -> serveur  hello, set_class, request_settings, request_start, state, hit
+##   client -> serveur  hello, set_loadout, request_settings, request_start, state,
+##                      fire, reload, hit, fire_projectile
+##   (serveur -> clients aussi : projectile, explosion, effect)
 ##   serveur -> clients refuse, lobby, start_match, player_joined, player_left,
 ##                      states, health, hit, death, respawn, match_over
 ##
-## Tirs : le client envoie seulement « j'ai touché telle cible, à tel endroit, avec
-## telle arme ». Le serveur vérifie (arme, portée, ligne de vue, cadence), choisit
-## la zone (tête ou corps) et calcule lui-même les dégâts (voir server_game.gd).
+## Tirs : le client annonce chaque tir (fire) et chaque rechargement (reload), puis
+## seulement « j'ai touché telle cible, à tel endroit, avec telle arme » (hit). Le
+## serveur tient les chargeurs, vérifie (arme de la classe, munitions, cadence,
+## portée, ligne de vue), choisit la zone (tête ou corps) et calcule lui-même les
+## dégâts (voir server_game.gd).
 ##
 ## Port par défaut : 24567 (UDP). Voir docs/RESEAU.md pour l'ouverture du port.
 
@@ -52,7 +56,13 @@ signal health_updated(peer_id: int, health: int, max_health: int)
 signal player_died(victim_id: int, killer_id: int, weapon: String, headshot: bool)
 ## Un tir validé par le serveur (reçu seulement par la cible et le tireur).
 signal hit_landed(target_id: int, shooter_id: int, damage: int, headshot: bool)
-signal player_respawned(peer_id: int, position: Vector3, yaw: float, class_id: String)
+## Projectile lancé par le serveur (roquette, lance-caca, grenade) : à afficher.
+signal projectile_spawned(projectile_id: int, weapon_id: String, origin: Vector3, velocity: Vector3, shooter_id: int)
+## Fin d'un projectile : explosion à `position` (fait foi).
+signal projectile_exploded(projectile_id: int, position: Vector3, weapon_id: String)
+## Effet reçu par MON joueur : "slow", "splat", "knockback".
+signal effect_received(kind: String, value: float, duration: float, direction: Vector3)
+signal player_respawned(peer_id: int, position: Vector3, yaw: float, class_id: String, loadout: Dictionary)
 signal match_over(rows: Array)
 ## Serveur : un joueur a passé la vérification d'accès / est parti.
 signal player_accepted(peer_id: int)
@@ -75,7 +85,8 @@ const LOG_PATH := "user://reseau.log"
 var online := false
 ## Pseudo local (client).
 var pseudo := "Joueur"
-## Joueurs de la partie : id de pair -> {name, class_id, kills, deaths, bot, user_id}.
+## Joueurs de la partie : id de pair -> {name, class_id, primary, secondary, kills,
+## deaths, bot, user_id}. class_id = spécialiste ; primary / secondary = sa classe.
 ## Le serveur (pair 1) n'y figure pas : il ne joue pas. Les bots ont un id négatif.
 var players := {}
 ## Réglages de la partie, choisis par le chef.
@@ -95,9 +106,10 @@ var match_time_left := 0.0
 ## Serveur : vérifie le ticket d'un joueur. Reçoit (ticket, user_id annoncé) et
 ## renvoie le user_id vérifié, ou "" si l'accès est refusé. Peut être une coroutine.
 var ticket_verifier: Callable = Callable()
-## Serveur : arbitre un impact signalé par un tireur (rempli par server_game.gd).
-## Reçoit (cible, tireur, point d'impact relatif à la cible, nom de l'arme).
-var hit_resolver: Callable = Callable()
+## Serveur : la partie en cours (server_game.gd), qui arbitre tirs, munitions et
+## impacts : resolve_hit(cible, tireur, point relatif, arme), on_fire(tireur,
+## emplacement) -> bool, on_reload(tireur, emplacement).
+var arbiter: Object = null
 
 var _peer: ENetMultiplayerPeer
 var _serving := false
@@ -243,6 +255,13 @@ func class_path_of(peer_id: int) -> String:
 	return players.get(peer_id, {}).get("class_id", GameState.CLASSES[0].resource_path)
 
 
+## Classe (équipement) d'un joueur : {primary, secondary}.
+func loadout_of(peer_id: int) -> Dictionary:
+	var info: Dictionary = players.get(peer_id, {})
+	var fallback: Dictionary = WeaponCatalog.DEFAULT_LOADOUTS[0]
+	return {"primary": info.get("primary", fallback.primary), "secondary": info.get("secondary", fallback.secondary)}
+
+
 func sorted_players() -> Array:
 	var rows := []
 	for id in players:
@@ -252,8 +271,15 @@ func sorted_players() -> Array:
 	return rows
 
 
-func _new_player(name: String, class_id: String, user_id := "") -> Dictionary:
-	return {"name": name, "class_id": class_id, "kills": 0, "deaths": 0, "bot": false, "user_id": user_id}
+func _new_player(name: String, class_id: String, user_id := "", loadout := {}) -> Dictionary:
+	var l: Dictionary = WeaponCatalog.DEFAULT_LOADOUTS[0]
+	var primary := str(loadout.get("primary", ""))
+	var secondary := str(loadout.get("secondary", ""))
+	if not WeaponCatalog.is_valid_loadout(primary, secondary):
+		primary = l.primary
+		secondary = l.secondary
+	return {"name": name, "class_id": class_id, "primary": primary, "secondary": secondary,
+		"kills": 0, "deaths": 0, "bot": false, "user_id": user_id}
 
 
 ## true si cet identifiant est un bot (joué par le serveur).
@@ -325,7 +351,9 @@ func _first_human() -> int:
 func _on_connected() -> void:
 	# Le réseau passe : on se présente au serveur (compte, pseudo, classe, version).
 	log_line("CLIENT : connexion ENet établie avec %s, présentation au serveur" % _target)
-	_hello.rpc_id(1, Backend.user_id(), pseudo, GameState.selected_class.resource_path, _ticket, Backend.BUILD_VERSION)
+	var loadout := GameState.current_loadout()
+	_hello.rpc_id(1, Backend.user_id(), pseudo, GameState.selected_class.resource_path, _ticket, Backend.BUILD_VERSION,
+		{"primary": loadout.primary, "secondary": loadout.secondary})
 
 
 func _on_connection_failed() -> void:
@@ -360,7 +388,9 @@ func _fail_connection() -> void:
 
 ## Client -> serveur : je me présente.
 @rpc("any_peer", "call_remote", "reliable")
-func _hello(user_id: String, name: String, class_id: String, ticket: String, version: String) -> void:
+## `loadout` est le dernier paramètre et facultatif : un client d'une ancienne version
+## arrive quand même jusqu'au contrôle de version et reçoit un message clair.
+func _hello(user_id: String, name: String, class_id: String, ticket: String, version: String, loadout := {}) -> void:
 	if not _serving:
 		return
 	var id := multiplayer.get_remote_sender_id()
@@ -393,7 +423,7 @@ func _hello(user_id: String, name: String, class_id: String, ticket: String, ver
 	if human_count() >= max_players:
 		_kick(id, "La partie est pleine (%d joueurs)." % max_players)
 		return
-	players[id] = _new_player(name.left(16), class_id, verified)
+	players[id] = _new_player(name.left(16), _valid_class(class_id), verified, loadout)
 	if lan_lobby and leader_id == 0:
 		leader_id = id
 	player_accepted.emit(id)
@@ -444,21 +474,34 @@ func _refuse(reason: String) -> void:
 
 ## Changement de classe depuis le salon ou le menu pause (appliqué à la
 ## prochaine apparition si la partie est en cours).
-func set_class(class_id: String) -> void:
+## Client : change de spécialiste et de classe (appliqués à la prochaine apparition).
+func set_loadout(class_id: String, primary: String, secondary: String) -> void:
 	if online and not _serving:
-		_set_class.rpc_id(1, class_id)
+		_set_loadout.rpc_id(1, class_id, primary, secondary)
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _set_class(class_id: String) -> void:
+func _set_loadout(class_id: String, primary: String, secondary: String) -> void:
 	if not _serving:
 		return
 	var id := multiplayer.get_remote_sender_id()
-	if players.has(id):
-		players[id].class_id = class_id
-		if not in_match:
-			lobby_changed.emit()
-			_send_lobby()
+	if not players.has(id):
+		return
+	players[id].class_id = _valid_class(class_id)
+	if WeaponCatalog.is_valid_loadout(primary, secondary):
+		players[id].primary = primary
+		players[id].secondary = secondary
+	if not in_match:
+		lobby_changed.emit()
+		_send_lobby()
+
+
+## Spécialiste connu, sinon le premier (un client ne peut pas inventer un chemin).
+func _valid_class(class_id: String) -> String:
+	for c in GameState.CLASSES:
+		if c.resource_path == class_id:
+			return class_id
+	return GameState.CLASSES[0].resource_path
 
 
 ## Chef : règle le nombre de bots et la durée.
@@ -508,7 +551,7 @@ func start_match() -> void:
 	var bots: int = clampi(settings.get("bots", 0), 0, max_players - players.size())
 	for i in bots:
 		var cls: ClassData = GameState.CLASSES[i % GameState.CLASSES.size()]
-		players[-(i + 1)] = _new_player(BOT_NAMES[i % BOT_NAMES.size()], cls.resource_path)
+		players[-(i + 1)] = _new_player(BOT_NAMES[i % BOT_NAMES.size()], cls.resource_path, "", WeaponCatalog.random_loadout())
 		players[-(i + 1)]["bot"] = true
 	in_match = true
 	server_status = "in_progress"
@@ -680,8 +723,45 @@ func _hit(target_id: int, hit_offset: Vector3, weapon: String) -> void:
 
 
 func _resolve_hit(target_id: int, shooter_id: int, hit_offset: Vector3, weapon: String) -> void:
-	if _serving and in_match and hit_resolver.is_valid():
-		hit_resolver.call(target_id, shooter_id, hit_offset, weapon)
+	if _serving and in_match and arbiter:
+		arbiter.resolve_hit(target_id, shooter_id, hit_offset, weapon)
+
+
+## Un tir (une balle, un coup de katana, un tick de flammes) de l'arme `slot` du
+## tireur : le serveur décompte le chargeur et autorise les impacts qui suivent.
+func fire(shooter_id: int, slot: int) -> void:
+	if not online or not in_match:
+		return
+	if _serving:
+		if arbiter:
+			arbiter.on_fire(shooter_id, slot)
+	else:
+		_fire.rpc_id(1, slot)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _fire(slot: int) -> void:
+	var shooter := multiplayer.get_remote_sender_id()
+	if _serving and in_match and arbiter and players.has(shooter):
+		arbiter.on_fire(shooter, slot)
+
+
+## Début d'un rechargement de l'arme `slot` du tireur.
+func reload(shooter_id: int, slot: int) -> void:
+	if not online or not in_match:
+		return
+	if _serving:
+		if arbiter:
+			arbiter.on_reload(shooter_id, slot)
+	else:
+		_reload.rpc_id(1, slot)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _reload(slot: int) -> void:
+	var shooter := multiplayer.get_remote_sender_id()
+	if _serving and in_match and arbiter and players.has(shooter):
+		arbiter.on_reload(shooter, slot)
 
 
 ## Serveur -> cible et tireur : un tir validé (indicateur de provenance pour la
@@ -695,6 +775,47 @@ func send_hit(target_id: int, shooter_id: int, damage: int, headshot: bool) -> v
 @rpc("authority", "call_remote", "reliable")
 func push_hit(target_id: int, shooter_id: int, damage: int, headshot: bool) -> void:
 	hit_landed.emit(target_id, shooter_id, damage, headshot)
+
+
+## Tir d'un projectile (roquette, lance-caca) ou lancer de grenade (slot 2). Le
+## serveur vérifie les munitions et l'origine, puis simule le projectile lui-même.
+func fire_projectile(shooter_id: int, slot: int, origin: Vector3, velocity: Vector3) -> void:
+	if not online or not in_match:
+		return
+	if _serving:
+		if arbiter:
+			arbiter.on_fire_projectile(shooter_id, slot, origin, velocity)
+	else:
+		_fire_projectile.rpc_id(1, slot, origin, velocity)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _fire_projectile(slot: int, origin: Vector3, velocity: Vector3) -> void:
+	var shooter := multiplayer.get_remote_sender_id()
+	if _serving and in_match and arbiter and players.has(shooter):
+		arbiter.on_fire_projectile(shooter, slot, origin, velocity)
+
+
+@rpc("authority", "call_remote", "reliable")
+func push_projectile(projectile_id: int, weapon_id: String, origin: Vector3, velocity: Vector3, shooter_id: int) -> void:
+	projectile_spawned.emit(projectile_id, weapon_id, origin, velocity, shooter_id)
+
+
+@rpc("authority", "call_remote", "reliable")
+func push_explosion(projectile_id: int, position: Vector3, weapon_id: String) -> void:
+	projectile_exploded.emit(projectile_id, position, weapon_id)
+
+
+## Serveur -> un joueur : effet subi (ralentissement, tache à l'écran, recul).
+## Le client simule son propre déplacement : c'est lui qui l'applique.
+func send_effect(target_id: int, kind: String, value: float, duration: float, direction := Vector3.ZERO) -> void:
+	if target_id > 1 and players.has(target_id):
+		push_effect.rpc_id(target_id, kind, value, duration, direction)
+
+
+@rpc("authority", "call_remote", "reliable")
+func push_effect(kind: String, value: float, duration: float, direction: Vector3) -> void:
+	effect_received.emit(kind, value, duration, direction)
 
 
 ## Serveur -> tous : nouvelle valeur de vie d'un joueur.
@@ -716,10 +837,12 @@ func push_death(victim_id: int, killer_id: int, weapon: String, headshot: bool) 
 
 ## Serveur -> tous : réapparition (position et classe décidées par le serveur).
 @rpc("authority", "call_local", "reliable")
-func push_respawn(peer_id: int, position: Vector3, yaw: float, class_id: String) -> void:
+func push_respawn(peer_id: int, position: Vector3, yaw: float, class_id: String, loadout: Dictionary) -> void:
 	if players.has(peer_id):
 		players[peer_id].class_id = class_id
-	player_respawned.emit(peer_id, position, yaw, class_id)
+		players[peer_id].primary = loadout.get("primary", players[peer_id].get("primary", ""))
+		players[peer_id].secondary = loadout.get("secondary", players[peer_id].get("secondary", ""))
+	player_respawned.emit(peer_id, position, yaw, class_id, loadout)
 
 
 ## Serveur -> tous : fin de partie avec le classement.

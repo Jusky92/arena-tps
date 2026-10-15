@@ -1,19 +1,20 @@
 extends Control
-## Écran de choix de classe : une carte par classe avec le personnage en 3D animé,
-## ses statistiques, son arme et sa capacité.
+## Écran de choix du spécialiste : une carte par spécialiste avec le personnage en
+## 3D animé, ses statistiques et sa capacité. Les armes viennent de la classe
+## (équipement) choisie dans l'accueil : n'importe quel spécialiste peut les porter.
 ## Les cartes sont générées depuis GameState.CLASSES : ajouter une classe
 ## l'ajoute automatiquement ici.
 ## Souris ou touches 1, 2, 3 pour choisir (retour au menu principal). Échap pour revenir.
 
-const CARD_WIDTH := 340.0
-const PREVIEW_SIZE := Vector2i(296, 230)
+const CARD_WIDTH := 270.0
+const PREVIEW_SIZE := Vector2i(224, 200)
 const BG_CARD := Color(0.05, 0.065, 0.1, 0.92)
 
 # Valeurs de référence pour remplir les barres de stats.
 const MAX_HEALTH_REF := 150.0
 const MAX_SPEED_REF := 9.5
-const MAX_DPS_REF := 120.0
-const MAX_RANGE_REF := 200.0
+const MAX_JUMP_REF := 6.0
+const MAX_COOLDOWN_REF := 14.0
 
 @onready var cards_box: HBoxContainer = %Cards
 @onready var back_button: Button = %BackButton
@@ -42,8 +43,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _choose(class_data: ClassData) -> void:
-	GameState.selected_class = class_data
-	Net.set_class(class_data.resource_path)
+	GameState.select_specialist(class_data)
+	var loadout := GameState.current_loadout()
+	Net.set_loadout(class_data.resource_path, loadout.primary, loadout.secondary)
 	_go_back()
 
 
@@ -86,7 +88,8 @@ func _make_card(data: ClassData, index: int) -> Control:
 	preview_holder.add_child(glow)
 	var preview := CharacterPreview.new()
 	preview_holder.add_child(preview)
-	preview.setup(data.character_design, data.weapon.model, PREVIEW_SIZE)
+	var primary := WeaponCatalog.find(GameState.current_loadout().primary)
+	preview.setup(data.character_design, primary.model if primary else data.weapon.model, PREVIEW_SIZE)
 	var name_label := _label(data.display_name.to_upper(), 26, Color.WHITE)
 	name_label.add_theme_font_override("font", UiTheme.title_font())
 	name_label.position = Vector2(10, 4)
@@ -102,21 +105,14 @@ func _make_card(data: ClassData, index: int) -> Control:
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(desc)
 
-	# Statistiques.
-	var w := data.weapon
-	var dps := w.damage * w.pellets * w.fire_rate
+	# Statistiques du spécialiste (les armes viennent de la classe choisie dans l'accueil).
 	box.add_child(_stat_bar("Points de vie", data.max_health / MAX_HEALTH_REF, str(data.max_health), data.color))
 	box.add_child(_stat_bar("Vitesse", data.sprint_speed / MAX_SPEED_REF, "%.1f m/s" % data.sprint_speed, data.color))
-	box.add_child(_stat_bar("Dégâts / s", dps / MAX_DPS_REF, str(int(dps)), data.color))
-	box.add_child(_stat_bar("Portée", w.max_range / MAX_RANGE_REF, "%d m" % int(w.max_range), data.color))
+	box.add_child(_stat_bar("Saut", data.jump_velocity / MAX_JUMP_REF, "%.1f m/s" % data.jump_velocity, data.color))
+	box.add_child(_stat_bar("Recharge de la capacité", 1.0 - data.ability_cooldown / MAX_COOLDOWN_REF,
+		"%d s" % int(data.ability_cooldown), data.color))
 
 	box.add_child(HSeparator.new())
-
-	# Arme.
-	var pellets_text := " x%d" % w.pellets if w.pellets > 1 else ""
-	box.add_child(_label("ARME  ·  %s" % w.display_name, 15, Color.WHITE))
-	box.add_child(_label("%d dégâts%s · chargeur %d · %s" % [w.damage, pellets_text, w.mag_size,
-		"automatique" if w.automatic else "coup par coup"], 12, Color(1, 1, 1, 0.6)))
 
 	# Capacité.
 	box.add_child(_label("CAPACITÉ [E]  ·  %s" % data.ability_name, 15, data.color.lightened(0.35)))
@@ -129,7 +125,7 @@ func _make_card(data: ClassData, index: int) -> Control:
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_child(spacer)
 	var button := Button.new()
-	button.text = "%s %s" % ["CLASSE ACTUELLE ·" if data == GameState.selected_class else "CHOISIR", data.display_name.to_upper()]
+	button.text = "%s %s" % ["SPÉCIALISTE ACTUEL ·" if data == GameState.selected_class else "CHOISIR", data.display_name.to_upper()]
 	button.add_theme_font_override("font", UiTheme.title_font())
 	button.add_theme_font_size_override("font_size", 14)
 	button.custom_minimum_size = Vector2(0, 42)

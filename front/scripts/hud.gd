@@ -32,6 +32,11 @@ const KEY_HELP_TIME := 10.0        # l'aide des touches s'efface après ce déla
 @onready var _weapon_icon: TextureRect = %WeaponIcon
 @onready var _weapon_label: Label = %WeaponName
 @onready var _ammo_label: Label = %Ammo
+@onready var _other_icon: TextureRect = %OtherIcon
+@onready var _other_key: Label = %OtherKey
+@onready var _grenade_icons: Array[TextureRect] = [%Grenade1, %Grenade2]
+@onready var _splat: ColorRect = %Splat
+@onready var _status: Label = %Status
 @onready var _ammo_max: Label = %AmmoMax
 @onready var _reload_bar: ProgressBar = %ReloadBar
 @onready var _key_help: Label = %KeyHelp
@@ -50,6 +55,7 @@ var _vignette_tween: Tween
 var _ammo_tween: Tween
 var _was_low_ammo := false
 var _key_help_started := false
+var _splat_tween: Tween
 
 
 func _ready() -> void:
@@ -69,11 +75,14 @@ func _ready() -> void:
 func bind(player: Node) -> void:
 	if _player and is_instance_valid(_player):
 		for pair in [["health_changed", _on_health_changed], ["damaged", _on_damaged],
-				["ammo_changed", _on_ammo_changed], ["hit_confirmed", _on_hit_confirmed]]:
+				["ammo_changed", _on_ammo_changed], ["hit_confirmed", _on_hit_confirmed],
+				["weapon_switched", _on_weapon_switched], ["grenades_changed", _on_grenades_changed],
+				["splatted", _on_splatted]]:
 			if _player.is_connected(pair[0], pair[1]):
 				_player.disconnect(pair[0], pair[1])
-		if is_instance_valid(_player.weapon) and _player.weapon.fired.is_connected(_on_fired):
-			_player.weapon.fired.disconnect(_on_fired)
+		for w in _player.weapons:
+			if is_instance_valid(w) and w.fired.is_connected(_on_fired):
+				w.fired.disconnect(_on_fired)
 	_player = player
 	_damage_indicator.player = player
 	var data: ClassData = player.class_data
@@ -82,16 +91,20 @@ func bind(player: Node) -> void:
 	_vital_style.border_color = Color(data.color, 0.6)
 	_ability_fill.bg_color = data.color
 	_ability_icon.texture = UiIcons.ability(data)
-	_weapon_icon.texture = UiIcons.weapon(data.weapon)
-	_weapon_label.text = data.weapon.display_name
 	player.health_changed.connect(_on_health_changed)
 	player.damaged.connect(_on_damaged)
 	player.ammo_changed.connect(_on_ammo_changed)
 	player.hit_confirmed.connect(_on_hit_confirmed)
-	player.weapon.fired.connect(_on_fired)
+	player.weapon_switched.connect(_on_weapon_switched)
+	player.grenades_changed.connect(_on_grenades_changed)
+	player.splatted.connect(_on_splatted)
+	for w in player.weapons:
+		w.fired.connect(_on_fired)
 	# Affiche tout de suite l'état actuel (les signaux du joueur ont pu partir avant le branchement).
 	_on_health_changed(player.health, data.max_health, false)
-	_on_ammo_changed(player.weapon.ammo, data.weapon.mag_size, player.weapon.is_reloading())
+	_on_weapon_switched(player.weapon_slot)
+	_on_grenades_changed(player.grenades)
+	_splat.visible = false
 	_start_key_help_fade()
 
 
@@ -123,6 +136,8 @@ func _process(_delta: float) -> void:
 	if _crosshair.visible:
 		_crosshair.set_spread(_spread_pixels(data))
 
+	_status.visible = _player.alive and _player.is_slowed()
+
 	# Protection d'apparition.
 	var protect: float = _player.spawn_protection
 	_protect_box.visible = _player.alive and protect > 0.0
@@ -134,7 +149,7 @@ func _process(_delta: float) -> void:
 ## Dispersion de l'arme (degrés) convertie en pixels à l'écran, plus un écart
 ## quand on se déplace ou qu'on est en l'air.
 func _spread_pixels(data: ClassData) -> float:
-	var w := data.weapon
+	var w: WeaponData = _player.weapon.data
 	var deg: float = w.aim_spread_deg if _player.is_aiming() else w.spread_deg
 	if _player.crouching:
 		deg *= _player.CROUCH_SPREAD_FACTOR
@@ -189,7 +204,44 @@ func _on_damaged(_amount: int, source: Vector3) -> void:
 	_vignette_tween.tween_method(func(v: float) -> void: mat.set_shader_parameter("intensity", v), 0.7, 0.0, 0.45)
 
 
+## Arme en main : grande icône et munitions ; l'autre arme en petit, avec sa touche.
+func _on_weapon_switched(slot: int) -> void:
+	var current: WeaponData = _player.weapon.data
+	_weapon_icon.texture = UiIcons.weapon(current)
+	_weapon_label.text = current.display_name
+	var other: WeaponData = _player.weapons[1 - slot].data if _player.weapons.size() > 1 else null
+	_other_icon.texture = UiIcons.weapon(other)
+	_other_key.text = "[%d]" % (2 - slot)
+	_on_ammo_changed(_player.weapon.ammo, current.mag_size, _player.weapon.is_reloading())
+
+
+func _on_grenades_changed(count: int) -> void:
+	for i in _grenade_icons.size():
+		_grenade_icons[i].modulate.a = 1.0 if i < count else 0.18
+
+
+## Touché par le lance-caca : tache cartoon qui s'estompe.
+func _on_splatted(duration: float) -> void:
+	var mat := _splat.material as ShaderMaterial
+	mat.set_shader_parameter("seed", randf() * 100.0)
+	mat.set_shader_parameter("amount", 1.0)
+	_splat.visible = true
+	if _splat_tween:
+		_splat_tween.kill()
+	_splat_tween = create_tween()
+	_splat_tween.tween_interval(duration * 0.6)
+	_splat_tween.tween_method(func(v: float) -> void: mat.set_shader_parameter("amount", v), 1.0, 0.0, duration * 0.4)
+	_splat_tween.tween_callback(func() -> void: _splat.visible = false)
+
+
 func _on_ammo_changed(ammo: int, mag_size: int, reloading: bool) -> void:
+	if mag_size <= 0:
+		_ammo_label.text = "∞"      # katana : pas de chargeur
+		_ammo_max.text = ""
+		_ammo_label.modulate.a = 1.0
+		_ammo_label.add_theme_color_override("font_color", Color.WHITE)
+		_was_low_ammo = false
+		return
 	_ammo_label.text = str(ammo)
 	_ammo_max.text = "/ %d" % mag_size
 	_ammo_label.modulate.a = 0.4 if reloading else 1.0
@@ -240,6 +292,7 @@ func set_respawn_countdown(seconds: float) -> void:
 func hide_death() -> void:
 	_death_overlay.visible = false
 	_damage_indicator.clear()
+	_splat.visible = false
 	_countdown.text = ""
 
 

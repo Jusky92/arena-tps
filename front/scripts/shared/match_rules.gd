@@ -92,3 +92,65 @@ static func rank(rows: Array) -> Array:
 		var tied: bool = i > 0 and rows[i].kills == rows[i - 1].kills and rows[i].deaths == rows[i - 1].deaths
 		rows[i]["placement"] = rows[i - 1].placement if tied else i + 1
 	return rows
+
+
+## true si le personnage doit être recréé pour la réapparition : autre spécialiste
+## ou autre classe (armes différentes).
+static func needs_rebuild(node: Node, class_id: String, loadout: Dictionary) -> bool:
+	if node.class_data.resource_path != class_id or node.weapons.size() < 2:
+		return true
+	return node.weapons[0].data.id != loadout.get("primary", node.weapons[0].data.id) \
+		or node.weapons[1].data.id != loadout.get("secondary", node.weapons[1].data.id)
+
+
+# ---------------------------------------------------------------- Explosions
+
+## Victimes d'une explosion (roquette, grenade, lance-caca) :
+## [{node, damage, direction}]. La cible touchée en plein (`direct`) prend les dégâts
+## de l'arme, les autres des dégâts de zone qui baissent avec la distance (de
+## splash_damage au centre à splash_min_damage au bord). Un mur entre le centre et la
+## cible la protège. Le tireur prend self_damage_factor de ses propres dégâts de zone.
+## `direction` : sens du recul (depuis le centre, un peu vers le haut).
+static func explosion_victims(world: World3D, center: Vector3, weapon: WeaponData, shooter: Node, direct: Node) -> Array:
+	var radius := maxf(weapon.splash_radius, 0.1)
+	var shape := SphereShape3D.new()
+	shape.radius = radius + 0.5
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = shape
+	query.transform = Transform3D(Basis(), center)
+	var space := world.direct_space_state
+	var found := []
+	var victims := []
+	for hit in space.intersect_shape(query, 32):
+		found.append(hit.collider)
+	if direct != null and not direct in found:
+		found.append(direct)
+	for node in found:
+		if not is_instance_valid(node) or not node.has_method("take_damage") or node in victims.map(func(v): return v.node):
+			continue
+		if node.get("alive") == false or (node.has_method("is_protected") and node.is_protected()):
+			continue
+		var point: Vector3 = (node as Node3D).global_position + Vector3.UP * body_height(node) * 0.5
+		var distance := 0.0 if node == direct else center.distance_to(point)
+		if distance > radius:
+			continue
+		if node != direct:
+			var los := PhysicsRayQueryParameters3D.create(center, point)
+			var exclude: Array[RID] = []
+			for other in found:
+				if other is CollisionObject3D:
+					exclude.append((other as CollisionObject3D).get_rid())
+			los.exclude = exclude
+			if not space.intersect_ray(los).is_empty():
+				continue       # un mur protège la cible
+		var damage := float(weapon.damage) if node == direct and weapon.damage > 0 \
+			else lerpf(weapon.splash_damage, weapon.splash_min_damage, clampf(distance / radius, 0.0, 1.0))
+		if node == shooter:
+			if weapon.self_damage_factor <= 0.0:
+				continue
+			damage *= weapon.self_damage_factor
+		var away := point - center
+		away.y = maxf(away.y, 0.0)
+		var direction := (away.normalized() if away.length() > 0.05 else Vector3.ZERO) + Vector3.UP * 0.5
+		victims.append({"node": node, "damage": int(round(damage)), "direction": direction.normalized()})
+	return victims

@@ -9,12 +9,19 @@
 [ext_resource type="Texture2D" path="res://assets/ui/icons/shield.svg" id="7_ability"]
 [ext_resource type="Texture2D" path="res://assets/ui/icons/smg.svg" id="8_weapon"]
 [ext_resource type="Script" path="res://scripts/ui/damage_indicator.gd" id="9_indicator"]
+[ext_resource type="Shader" path="res://shaders/splat_overlay.gdshader" id="10_splat"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/grenade.svg" id="11_grenade"]
 
 [sub_resource type="ShaderMaterial" id="vignette_mat"]
 shader = ExtResource("3_vignette")
 shader_parameter/intensity = 0.0
 shader_parameter/low_health = 0.0
 shader_parameter/tint = Color(0.9, 0.04, 0.12, 1)
+
+[sub_resource type="ShaderMaterial" id="splat_mat"]
+shader = ExtResource("10_splat")
+shader_parameter/amount = 0.0
+shader_parameter/seed = 0.0
 
 [sub_resource type="ShaderMaterial" id="death_mat"]
 shader = ExtResource("5_death")
@@ -37,6 +44,18 @@ theme = ExtResource("2_theme")
 [node name="Vignette" type="ColorRect" parent="Root"]
 unique_name_in_owner = true
 material = SubResource("vignette_mat")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Splat" type="ColorRect" parent="Root"]
+unique_name_in_owner = true
+visible = false
+material = SubResource("splat_mat")
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -113,6 +132,27 @@ layout_mode = 2
 theme_type_variation = &"HudHint"
 theme_override_font_sizes/font_size = 13
 text = "Tirer annule la protection"
+horizontal_alignment = 1
+
+[node name="Status" type="Label" parent="Root"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = 118.0
+offset_right = 150.0
+offset_bottom = 142.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_type_variation = &"HudLabel"
+theme_override_colors/font_color = Color(0.85, 0.6, 0.3, 1)
+theme_override_font_sizes/font_size = 17
+text = "RALENTI"
 horizontal_alignment = 1
 
 [node name="BottomLeft" type="VBoxContainer" parent="Root"]
@@ -274,7 +314,7 @@ anchor_left = 1.0
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -304.0
+offset_left = -324.0
 offset_top = -24.0
 offset_right = -24.0
 offset_bottom = -24.0
@@ -282,6 +322,78 @@ grow_horizontal = 0
 grow_vertical = 0
 mouse_filter = 2
 alignment = 2
+
+[node name="Extras" type="HBoxContainer" parent="Root/BottomRight"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+alignment = 2
+
+[node name="OtherWeapon" type="PanelContainer" parent="Root/BottomRight/Extras"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"HudChip"
+
+[node name="Row" type="HBoxContainer" parent="Root/BottomRight/Extras/OtherWeapon"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="OtherKey" type="Label" parent="Root/BottomRight/Extras/OtherWeapon/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudHint"
+theme_override_font_sizes/font_size = 13
+text = "[2]"
+
+[node name="OtherIcon" type="TextureRect" parent="Root/BottomRight/Extras/OtherWeapon/Row"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0.55)
+custom_minimum_size = Vector2(44, 22)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="GrenadeChip" type="PanelContainer" parent="Root/BottomRight/Extras"]
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"HudChip"
+
+[node name="Row" type="HBoxContainer" parent="Root/BottomRight/Extras/GrenadeChip"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 2
+
+[node name="GrenadeKey" type="Label" parent="Root/BottomRight/Extras/GrenadeChip/Row"]
+layout_mode = 2
+theme_type_variation = &"HudHint"
+theme_override_font_sizes/font_size = 13
+text = "[G]"
+
+[node name="Grenade1" type="TextureRect" parent="Root/BottomRight/Extras/GrenadeChip/Row"]
+unique_name_in_owner = true
+modulate = Color(0.35, 1, 0.4, 1)
+custom_minimum_size = Vector2(22, 22)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+texture = ExtResource("11_grenade")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Grenade2" type="TextureRect" parent="Root/BottomRight/Extras/GrenadeChip/Row"]
+unique_name_in_owner = true
+modulate = Color(0.35, 1, 0.4, 1)
+custom_minimum_size = Vector2(22, 22)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+texture = ExtResource("11_grenade")
+expand_mode = 1
+stretch_mode = 5
 
 [node name="WeaponPanel" type="PanelContainer" parent="Root/BottomRight"]
 unique_name_in_owner = true
@@ -364,7 +476,7 @@ offset_bottom = -10.0
 grow_horizontal = 2
 grow_vertical = 0
 theme_type_variation = &"HudHint"
-text = "R : recharger · E : capacité · Ctrl/C : accroupi · Tab : scores · Échap : pause"
+text = "R : recharger · E : capacité · 1/2 : armes · G : grenade · Tab : scores · Échap : pause"
 horizontal_alignment = 1
 
 [node name="DeathOverlay" type="ColorRect" parent="Root"]

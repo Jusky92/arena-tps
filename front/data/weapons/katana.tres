@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_w"]
+
+[resource]
+script = ExtResource("1_w")
+id = "katana"
+display_name = "Katana"
+model = 6
+slot = 1
+kind = 2
+damage = 55
+pellets = 1
+max_range = 2.5
+headshot_multiplier = 1.0
+fire_rate = 1.6
+automatic = true
+mag_size = 0
+reload_time = 0.0
+spread_deg = 0.0
+aim_spread_deg = 0.0
+aim_fov = 66.0
+recoil_deg = 0.0
+arc_deg = 70.0
+knockback = 2.0
+tracer_color = Color(0.95, 0.35, 1, 1)

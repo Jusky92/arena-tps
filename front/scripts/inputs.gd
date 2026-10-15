@@ -13,6 +13,9 @@ const KEY_ACTIONS := {
 	"crouch":       [KEY_CTRL, KEY_C],
 	"reload":       [KEY_R],
 	"ability":      [KEY_E],
+	"weapon_1":     [KEY_1],
+	"weapon_2":     [KEY_2],
+	"grenade":      [KEY_G],
 	"pause":        [KEY_ESCAPE],
 	"scoreboard":   [KEY_TAB],
 	"debug_hurt":   [KEY_F9],   # test : s'infliger 25 dégâts (à retirer plus tard)
@@ -21,6 +24,8 @@ const KEY_ACTIONS := {
 const MOUSE_ACTIONS := {
 	"fire": [MOUSE_BUTTON_LEFT],
 	"aim":  [MOUSE_BUTTON_RIGHT],
+	"weapon_next": [MOUSE_BUTTON_WHEEL_DOWN],
+	"weapon_prev": [MOUSE_BUTTON_WHEEL_UP],
 }
 
 ## La sensibilité de la souris est dans les réglages (autoload Settings).

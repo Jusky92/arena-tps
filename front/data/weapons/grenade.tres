@@ -1,0 +1,33 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_w"]
+
+[resource]
+script = ExtResource("1_w")
+id = "grenade"
+display_name = "Grenade"
+model = 8
+slot = 2
+kind = 4
+damage = 0
+pellets = 1
+max_range = 25.0
+headshot_multiplier = 1.0
+fire_rate = 1.0
+automatic = false
+mag_size = 2
+reload_time = 0.0
+spread_deg = 0.0
+aim_spread_deg = 0.0
+aim_fov = 70.0
+recoil_deg = 0.0
+projectile_speed = 16.0
+projectile_gravity = 14.0
+fuse_time = 2.5
+bounce = 0.45
+splash_radius = 5.0
+splash_damage = 90
+splash_min_damage = 20
+self_damage_factor = 1.0
+knockback = 8.0
+tracer_color = Color(0.35, 1, 0.4, 1)

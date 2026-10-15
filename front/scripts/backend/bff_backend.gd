@@ -9,6 +9,7 @@ extends Node
 
 const GET := HTTPClient.METHOD_GET
 const POST := HTTPClient.METHOD_POST
+const PUT := HTTPClient.METHOD_PUT
 const DELETE := HTTPClient.METHOD_DELETE
 const TOKEN_ERRORS := ["invalid_token", "token_expired", "not_authenticated"]
 const PSEUDO_REGEX := "^[A-Za-z0-9_]{3,20}$"
@@ -190,6 +191,28 @@ func _on_token_rejected() -> void:
 
 
 # =========================================================================== profil et classement
+
+# --------------------------------------------------------------------------- classes (équipements)
+# Service Social, table loadouts : une ligne par emplacement (0 à 9).
+
+func get_loadouts() -> Dictionary:
+	var r := await _call(GET, "/loadouts/me")
+	if not r.ok:
+		return r
+	var list := []
+	var rows: Array = r.data.get("loadouts", [])
+	rows.sort_custom(func(x, y): return int(x.slot) < int(y.slot))
+	for row in rows:
+		list.append({"name": row.name, "primary": row.primary_weapon, "secondary": row.secondary_weapon})
+	return {"ok": true, "loadouts": list}
+
+
+func save_loadouts(list: Array) -> Dictionary:
+	var rows := []
+	for i in list.size():
+		rows.append({"slot": i, "name": list[i].name, "primary_weapon": list[i].primary, "secondary_weapon": list[i].secondary})
+	return await _call(PUT, "/loadouts/me", {"loadouts": rows})
+
 
 func get_profile() -> Dictionary:
 	var id: String = b.user_id()

@@ -115,10 +115,19 @@ func _can_see(p: CharacterBody3D, other: Node) -> bool:
 
 # --------------------------------------------------------------------------- combat
 
+## Distance de combat préférée selon l'arme en main (m). Par défaut : 28 m.
+const PREFERRED_DISTANCE := {
+	WeaponData.Model.SHOTGUN: 7.0, WeaponData.Model.SMG: 13.0, WeaponData.Model.ROCKET: 18.0,
+	WeaponData.Model.FLAMER: 5.0, WeaponData.Model.LASER: 18.0, WeaponData.Model.KATANA: 1.6,
+	WeaponData.Model.POOP: 12.0,
+}
+
+
 func _combat(p: CharacterBody3D, cmd: PlayerCommands, delta: float) -> void:
-	var data: WeaponData = p.class_data.weapon
 	var distance: float = p.global_position.distance_to(target.global_position)
-	var preferred: float = {WeaponData.Model.SHOTGUN: 7.0, WeaponData.Model.SMG: 13.0}.get(data.model, 28.0)
+	cmd.switch_to = _best_weapon(p, distance)
+	var data: WeaponData = p.weapon.data
+	var preferred: float = PREFERRED_DISTANCE.get(data.model, 28.0)
 
 	# Visée : l'erreur diminue avec le temps passé sur la cible.
 	_aim_error = _aim_error.lerp(Vector3.ZERO, minf(delta * lerpf(0.8, 2.6, skill), 1.0))
@@ -175,6 +184,27 @@ func _combat(p: CharacterBody3D, cmd: PlayerCommands, delta: float) -> void:
 				cmd.move = Vector2(0, -1)
 		ClassData.Ability.PIERCE:
 			cmd.ability = distance > 18.0 and randf() < 0.05
+		ClassData.Ability.CHARGE:
+			# Fonce sur la cible quand elle est proche et bien en face.
+			if aimed and distance > 2.5 and distance < 9.0 and randf() < 0.06:
+				cmd.ability = true
+
+
+## Arme à prendre : la secondaire de corps à corps ou à flammes quand la cible est
+## tout près, la secondaire quand la principale est vide, sinon la principale.
+func _best_weapon(p: CharacterBody3D, distance: float) -> int:
+	if p.weapons.size() < 2:
+		return -1
+	var primary: Node3D = p.weapons[0]
+	var secondary: Node3D = p.weapons[1]
+	var close_range: bool = secondary.data.kind in [WeaponData.Kind.MELEE, WeaponData.Kind.FLAME]
+	if close_range:
+		return 1 if distance < secondary.data.max_range * 0.9 else 0
+	if primary.data.max_range * 0.9 < distance and secondary.data.max_range * 0.9 >= distance:
+		return 1
+	if primary.is_reloading() and not secondary.is_reloading():
+		return 1
+	return 0
 
 
 # --------------------------------------------------------------------------- patrouille
@@ -195,7 +225,8 @@ func _patrol(p: CharacterBody3D, cmd: PlayerCommands, delta: float) -> void:
 	cmd.move = Vector2(local.x, local.z).limit_length(1.0)
 	cmd.sprint = p.global_position.distance_to(_goal) > 12.0 and local.z < -0.7
 
-	if p.weapon.ammo < p.weapon.data.mag_size / 2 and not p.weapon.is_reloading():
+	cmd.switch_to = 0
+	if not p.weapon.data.unlimited() and p.weapon.ammo < p.weapon.data.mag_size / 2 and not p.weapon.is_reloading():
 		cmd.reload = true
 
 

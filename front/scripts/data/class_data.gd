@@ -1,10 +1,12 @@
 class_name ClassData
 extends Resource
-## Fiche d'une classe de personnage (Tank, Assassin, Tireur…).
-## Chaque classe est un fichier .tres dans data/classes/.
-## Ajouter une classe = dupliquer un .tres et changer les valeurs.
+## Fiche d'un spécialiste (Samouraï, Shinobi, Archer, Oni) : design et capacité.
+## (Le script garde le nom ClassData pour ne pas casser les .tres existants ; dans
+## le jeu, « classe » désigne l'équipement, voir WeaponCatalog.)
+## Chaque spécialiste est un fichier .tres dans data/classes/.
+## Ajouter un spécialiste = dupliquer un .tres, changer les valeurs, l'ajouter à GameState.CLASSES.
 
-enum Ability { SHIELD, DASH, PIERCE }
+enum Ability { SHIELD, DASH, PIERCE, CHARGE }
 
 @export var display_name: String = "Classe"
 @export_multiline var description: String = ""

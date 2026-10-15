@@ -1,7 +1,9 @@
 extends Control
 ## Menu principal (après connexion).
-##   JOUER         classe, groupe, lancement en ligne, serveurs publics, LAN, hors ligne
-##   CLASSES       ouvre l'écran de choix de classe
+##   JOUER         spécialiste et classe choisis, groupe, lancement en ligne, serveurs
+##                 publics, LAN, hors ligne
+##   SPÉCIALISTES  ouvre l'écran de choix du spécialiste (personnage + capacité)
+##   CLASSES       éditeur de classes (équipements : 2 armes + 2 grenades), LoadoutEditor
 ##   STATISTIQUES  stats et succès du joueur, classements (XP, victoires, éliminations)
 ##   AMIS          panneau de droite : présence, demandes d'ami, ajout, invitation dans le groupe
 ## Toutes les données viennent de l'autoload Backend (vrai back, ou simulé hors ligne).
@@ -71,6 +73,7 @@ func _ready() -> void:
 	Net.joined.connect(_on_net_joined)
 	Net.connection_failed.connect(_on_net_failed)
 	_refresh_profile()
+	_sync_loadouts()
 	_refresh_friends()
 	_refresh_services()
 	Backend.refresh_friends()
@@ -96,7 +99,7 @@ func _build_top_bar() -> Control:
 	row.add_child(logo)
 	row.add_child(UiTheme.spacer(Vector2(16, 0)))
 
-	for page in [["JOUER", "play"], ["CLASSES", "classes"], ["STATISTIQUES", "stats"]]:
+	for page in [["JOUER", "play"], ["SPÉCIALISTES", "specialists"], ["CLASSES", "classes"], ["STATISTIQUES", "stats"]]:
 		var b := Button.new()
 		b.text = page[0]
 		b.flat = true
@@ -204,10 +207,23 @@ func _on_session_lost(reason: String) -> void:
 	get_tree().change_scene_to_file(AUTH)
 
 
+## Récupère les classes enregistrées sur le compte. Première fois (compte vide) :
+## on y enregistre celles du PC, pour que le joueur les retrouve ailleurs.
+func _sync_loadouts() -> void:
+	var r: Dictionary = await Backend.get_loadouts()
+	if not r.ok or not is_inside_tree():
+		return
+	if (r.loadouts as Array).is_empty():
+		if not Backend.is_simulated():
+			Backend.save_loadouts(GameState.loadouts)
+		return
+	GameState.set_loadouts(r.loadouts)
+
+
 # =========================================================================== pages
 
 func _show_page(page: String) -> void:
-	if page == "classes":
+	if page == "specialists":
 		get_tree().change_scene_to_file(CLASS_SELECT)
 		return
 	for key in _nav_buttons:
@@ -220,6 +236,8 @@ func _show_page(page: String) -> void:
 			_page_holder.add_child(_build_play_page())
 		"stats":
 			_page_holder.add_child(_build_stats_page())
+		"classes":
+			_page_holder.add_child(LoadoutEditor.new())
 		"servers":
 			_page_holder.add_child(_build_server_page())
 
@@ -230,20 +248,42 @@ func _build_play_page() -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 26)
 
-	# Personnage choisi.
+	# Spécialiste et classe choisis.
 	var hero := VBoxContainer.new()
 	hero.add_theme_constant_override("separation", 6)
 	var cls: ClassData = GameState.selected_class
-	hero.add_child(UiTheme.label("TA CLASSE", 14, UiTheme.MUTED, true))
+	var loadout := GameState.current_loadout()
+	var primary := WeaponCatalog.find(loadout.primary)
+	hero.add_child(UiTheme.label("TON SPÉCIALISTE", 14, UiTheme.MUTED, true))
 	hero.add_child(UiTheme.title(cls.display_name.to_upper(), 34, cls.color.lightened(0.2)))
 	var preview := CharacterPreview.new()
 	preview.pose_names = ["Repos", "Visée", "Marche", "Accroupi"]
 	preview.show_pose_label = false
 	hero.add_child(preview)
-	preview.setup(cls.character_design, cls.weapon.model, Vector2i(340, 400), 4.2, 1.0)
-	var change := UiTheme.button("CHANGER DE CLASSE")
+	preview.setup(cls.character_design, primary.model if primary else cls.weapon.model, Vector2i(340, 360), 4.2, 1.0)
+	var change := UiTheme.button("CHANGER DE SPÉCIALISTE")
 	change.pressed.connect(func() -> void: get_tree().change_scene_to_file(CLASS_SELECT))
 	hero.add_child(change)
+	# Classe (équipement) pour la prochaine partie.
+	var class_row := HBoxContainer.new()
+	class_row.add_theme_constant_override("separation", 8)
+	class_row.add_child(UiTheme.label("CLASSE", 14, UiTheme.MUTED, true))
+	var picker := OptionButton.new()
+	picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for i in GameState.loadouts.size():
+		var l: Dictionary = GameState.loadouts[i]
+		var p := WeaponCatalog.find(l.primary)
+		var sec := WeaponCatalog.find(l.secondary)
+		picker.add_item("%s  ·  %s + %s" % [l.name, p.display_name if p else "?", sec.display_name if sec else "?"], i)
+	picker.select(GameState.selected_loadout)
+	picker.item_selected.connect(func(index: int) -> void:
+		GameState.select_loadout(index)
+		_show_page("play"))
+	class_row.add_child(picker)
+	hero.add_child(class_row)
+	var edit := UiTheme.button("MODIFIER MES CLASSES", false, UiTheme.MAGENTA, 38)
+	edit.pressed.connect(_show_page.bind("classes"))
+	hero.add_child(edit)
 	row.add_child(hero)
 
 	# Colonne de droite : groupe, lancement, LAN, hors ligne (défile sur petit écran).

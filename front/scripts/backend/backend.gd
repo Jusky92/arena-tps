@@ -28,7 +28,7 @@ signal toast(text: String)
 
 ## Doit être identique sur le jeu et le serveur dédié (vérifiée à la connexion),
 ## et sert à filtrer la liste des serveurs.
-const BUILD_VERSION := "0.8.0-alpha"
+const BUILD_VERSION := "0.9.0-alpha"
 const BFF_PORT := 8000
 const REALTIME_PORT := 8005
 const CONFIG_PATH := "user://reseau.cfg"
@@ -183,6 +183,17 @@ func _clear() -> void:
 ##  deaths, kd, achievements: [{id, name, description, unlocked_at}]}
 func get_profile() -> Dictionary:
 	return await _impl.get_profile()
+
+
+## Classes (équipements) du joueur, sauvegardées sur son compte :
+## {ok, loadouts: [{name, primary, secondary}]}. Liste vide = jamais enregistrées.
+func get_loadouts() -> Dictionary:
+	return await _impl.get_loadouts()
+
+
+## Remplace toutes les classes du joueur (10 au maximum) : {ok}.
+func save_loadouts(list: Array) -> Dictionary:
+	return await _impl.save_loadouts(list)
 
 
 ## `type` : "xp", "wins" ou "kills". `around` : autour du joueur plutôt que le haut.

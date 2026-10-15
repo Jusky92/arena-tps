@@ -24,10 +24,13 @@ const SOUNDS := {
 	"ui_close": preload("res://assets/sounds/ui_close.wav"),
 }
 
-## Son de tir selon le modèle d'arme (WeaponData.Model : SHOTGUN, SMG, SNIPER).
-const SHOT_BY_MODEL := ["shot_shotgun", "shot_smg", "shot_sniper"]
-## Son de capacité selon ClassData.Ability (SHIELD, DASH, PIERCE).
-const ABILITY_SOUNDS := ["ability_shield", "ability_dash", "ability_pierce"]
+## Son de tir selon le modèle d'arme (WeaponData.Model : SHOTGUN, SMG, SNIPER, ROCKET,
+## FLAMER, LASER, KATANA, POOP, GRENADE). Les nouvelles armes reprennent des sons
+## existants en attendant leurs propres sons.
+const SHOT_BY_MODEL := ["shot_shotgun", "shot_smg", "shot_sniper", "shot_sniper", "ability_dash",
+	"ability_pierce", "ability_dash", "deflect", "ui_open"]
+## Son de capacité selon ClassData.Ability (SHIELD, DASH, PIERCE, CHARGE).
+const ABILITY_SOUNDS := ["ability_shield", "ability_dash", "ability_pierce", "ability_dash"]
 
 const MAX_VOICES := 24      ## nombre max de sons simultanés (évite la saturation)
 

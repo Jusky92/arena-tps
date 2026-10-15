@@ -49,7 +49,9 @@ var _running := false
 var _respawns := {}                     # joueur -> temps restant avant réapparition
 var _match_time := 0.0
 var _ping := randi_range(7, 14)          # ping simulé du joueur local
-var _pending_class: ClassData = null    # classe choisie pour la prochaine apparition
+var _pending_class: ClassData = null    # spécialiste choisi pour la prochaine apparition
+var _pending_loadout := false           # classe (équipement) changée pour la prochaine apparition
+var _net_projectiles := {}              # en ligne : identifiant -> projectile affiché
 var _online := false                    # partie sur le serveur dédié (voir Net)
 var _net_nodes := {}                    # identifiant réseau -> personnage
 
@@ -68,6 +70,8 @@ func _ready() -> void:
 	_pause.resumed.connect(_close_pause)
 	_pause.quit_requested.connect(_go_to_menu)
 	_pause.class_selected.connect(_on_class_selected)
+	_pause.loadout_selected.connect(_on_loadout_selected)
+	add_to_group("projectile_host")
 
 	_online = Net.online and Net.in_match and _mode == "deathmatch"
 	if _online:
@@ -83,7 +87,7 @@ func _ready() -> void:
 			roam_points = MatchRules.roam_points()
 			for i in GameState.bot_count:
 				var cls: ClassData = GameState.CLASSES[randi() % GameState.CLASSES.size()]
-				_spawn_player(cls, BOT_NAMES[i % BOT_NAMES.size()], false)
+				_spawn_player(cls, BOT_NAMES[i % BOT_NAMES.size()], false, WeaponCatalog.random_loadout())
 			_time_left = GameState.match_duration
 			_running = true
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -156,7 +160,7 @@ func _open_pause() -> void:
 	hud.visible = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	Sfx.ui("ui_open")
-	_pause.open(player.class_data, _pending_class)
+	_pause.open(player.class_data, _pending_class, _pending_loadout)
 	_pause.set_info(_pause_info())
 
 
@@ -181,14 +185,29 @@ func _pause_info() -> String:
 	return "\n".join(lines)
 
 
-## Classe choisie dans le menu pause : appliquée à la prochaine apparition.
+## Spécialiste choisi dans le menu pause : appliqué à la prochaine apparition.
 func _on_class_selected(cls: ClassData) -> void:
-	GameState.selected_class = cls        # gardée aussi pour les prochaines parties
-	if _online:
-		Net.set_class(cls.resource_path)
+	GameState.select_specialist(cls)      # gardé aussi pour les prochaines parties
 	_pending_class = null if cls == player.class_data else cls
-	if _pending_class:
-		hud.set_next_class(cls.display_name, cls.color)
+	_announce_next_spawn()
+
+
+## Classe (équipement) choisie dans le menu pause : appliquée à la prochaine apparition.
+func _on_loadout_selected(index: int) -> void:
+	GameState.select_loadout(index)
+	var l := GameState.current_loadout()
+	_pending_loadout = player.weapons[0].data.id != l.primary or player.weapons[1].data.id != l.secondary
+	_announce_next_spawn()
+
+
+## Prévient le serveur et affiche dans le HUD ce qui changera à la prochaine apparition.
+func _announce_next_spawn() -> void:
+	var cls: ClassData = _pending_class if _pending_class else player.class_data
+	var l := GameState.current_loadout()
+	if _online:
+		Net.set_loadout(cls.resource_path, l.primary, l.secondary)
+	if _pending_class or _pending_loadout:
+		hud.set_next_class("%s · %s" % [cls.display_name, l.name], cls.color)
 	else:
 		hud.set_next_class("")
 
@@ -209,6 +228,7 @@ func _replace_local_player(cls: ClassData) -> void:
 	hud.hide_death()
 	old.queue_free()
 	_pending_class = null
+	_pending_loadout = false
 	hud.set_next_class("")
 	Sfx.play("spawn", -8.0)
 
@@ -237,6 +257,9 @@ func _start_online_match() -> void:
 	Net.player_respawned.connect(_on_net_respawn)
 	Net.health_updated.connect(_on_net_health)
 	Net.hit_landed.connect(_on_net_hit)
+	Net.projectile_spawned.connect(_on_net_projectile)
+	Net.projectile_exploded.connect(_on_net_explosion)
+	Net.effect_received.connect(_on_net_effect)
 	Net.match_over.connect(_on_net_match_over)
 	Net.remote_spawned.connect(_on_net_joined)
 	Net.remote_left.connect(_on_net_left)
@@ -252,6 +275,7 @@ func _spawn_net_player(id: int) -> CharacterBody3D:
 	var is_me := id == Net.my_id()
 	var p: CharacterBody3D = PlayerScene.instantiate()
 	p.class_data = cls
+	p.loadout = Net.loadout_of(id)
 	p.player_name = info.get("name", "Joueur")
 	p.is_local = is_me
 	p.peer_id = id
@@ -326,12 +350,12 @@ func _on_net_death(victim_id: int, killer_id: int, weapon: String, headshot: boo
 
 
 ## Réapparition annoncée par le serveur (pour tout le monde).
-func _on_net_respawn(peer_id: int, position: Vector3, yaw: float, class_id: String) -> void:
+func _on_net_respawn(peer_id: int, position: Vector3, yaw: float, class_id: String, loadout: Dictionary) -> void:
 	var node = _net_nodes.get(peer_id)
 	if not is_instance_valid(node):
 		return
-	# Changement de classe : on remplace le personnage en gardant le score.
-	if node.class_data.resource_path != class_id:
+	# Autre spécialiste ou autre classe : on remplace le personnage en gardant le score.
+	if MatchRules.needs_rebuild(node, class_id, loadout):
 		node = _replace_net_player(peer_id, class_id)
 	node.respawn(position, yaw)
 	node.teleport(position, yaw)
@@ -342,6 +366,7 @@ func _on_net_respawn(peer_id: int, position: Vector3, yaw: float, class_id: Stri
 	if peer_id == Net.my_id():
 		hud.hide_death()
 		_pending_class = null
+		_pending_loadout = false
 		hud.set_next_class("")
 
 
@@ -414,9 +439,11 @@ func _on_net_disconnected(reason: String) -> void:
 
 # ---------------------------------------------------------------- Joueurs
 
-func _spawn_player(cls: ClassData, display_name: String, local: bool) -> CharacterBody3D:
+## `loadout` vide pour le joueur local : il prend la classe choisie dans le menu.
+func _spawn_player(cls: ClassData, display_name: String, local: bool, loadout := {}) -> CharacterBody3D:
 	var p: CharacterBody3D = PlayerScene.instantiate()
 	p.class_data = cls
+	p.loadout = loadout
 	p.player_name = display_name
 	p.is_local = local
 	p.name = display_name   # Godot ajoute un suffixe si le nom est déjà pris
@@ -452,8 +479,8 @@ func _add_name_tag(p: CharacterBody3D) -> void:
 
 
 func _respawn(p: CharacterBody3D) -> void:
-	if p == player and _pending_class:
-		_replace_local_player(_pending_class)
+	if p == player and (_pending_class or _pending_loadout):
+		_replace_local_player(_pending_class if _pending_class else player.class_data)
 		return
 	var t := MatchRules.best_spawn(map, players, p)
 	p.respawn(t.origin, t.basis.get_euler().y)
@@ -476,7 +503,7 @@ func _on_player_died(killer: Node, victim: CharacterBody3D) -> void:
 	if killer and killer != victim and killer in players:
 		killer.add_kill()
 		killer_name = killer.player_name
-		weapon_name = killer.class_data.weapon.display_name
+		weapon_name = killer.weapon.data.display_name
 		if killer == player:
 			_ui.show_banner(_kill_banner(killer.streak, victim.last_headshot))
 	elif killer and killer.get("player_name") == null and killer != victim:
@@ -547,3 +574,74 @@ func _spawn_targets() -> void:
 		target.global_position = point
 		target.rotation.y = randf() * TAU
 		index += 1
+
+
+# ---------------------------------------------------------------- Projectiles et effets
+
+## Hors ligne : crée un projectile qui fait foi (Projectile.launch, groupe "projectile_host").
+func launch_projectile(data: WeaponData, shooter: Node, origin: Vector3, velocity: Vector3) -> void:
+	var projectile := Projectile.new()
+	projectile.setup(data, shooter, origin, velocity, true)
+	projectile.exploded.connect(_on_projectile_exploded)
+	add_child(projectile)
+
+
+## Hors ligne : explosion d'un projectile, dégâts de zone et effets appliqués ici.
+func _on_projectile_exploded(projectile: Projectile, position: Vector3, direct_target: Node) -> void:
+	var data := projectile.data
+	var shooter: Node = projectile.shooter if is_instance_valid(projectile.shooter) else null
+	_explosion_fx(position, data)
+	var any_hit := false
+	var any_kill := false
+	for victim in MatchRules.explosion_victims(get_world_3d(), position, data, shooter, direct_target):
+		var node: Node = victim.node
+		if node != shooter:
+			any_hit = true
+		var killed: bool = node.take_damage(victim.damage, shooter)
+		any_kill = any_kill or (killed and node != shooter)
+		if node.has_method("apply_effect"):
+			if data.knockback > 0.0:
+				node.apply_effect("knockback", data.knockback, 0.0, victim.direction, shooter)
+			if data.slow_time > 0.0:
+				node.apply_effect("slow", data.slow_factor, data.slow_time, Vector3.ZERO, shooter)
+			if data.splat_time > 0.0:
+				node.apply_effect("splat", 1.0, data.splat_time, Vector3.ZERO, shooter)
+	if shooter == player and any_hit:
+		player.hit_confirmed.emit(any_kill, false)
+
+
+## En ligne : projectile annoncé par le serveur, affiché ici (sans dégâts).
+func _on_net_projectile(projectile_id: int, weapon_id: String, origin: Vector3, velocity: Vector3, shooter_id: int) -> void:
+	var data := WeaponCatalog.find(weapon_id)
+	if data == null:
+		return
+	var projectile := Projectile.new()
+	projectile.setup(data, _net_nodes.get(shooter_id), origin, velocity, false)
+	add_child(projectile)
+	_net_projectiles[projectile_id] = projectile
+
+
+## En ligne : explosion annoncée par le serveur (la position fait foi).
+func _on_net_explosion(projectile_id: int, position: Vector3, weapon_id: String) -> void:
+	var projectile = _net_projectiles.get(projectile_id)
+	_net_projectiles.erase(projectile_id)
+	if is_instance_valid(projectile):
+		projectile.finish(position)
+	var data := WeaponCatalog.find(weapon_id)
+	if data:
+		_explosion_fx(position, data)
+
+
+## En ligne : effet subi par mon joueur (ralentissement, tache, recul), décidé par le serveur.
+func _on_net_effect(kind: String, value: float, duration: float, direction: Vector3) -> void:
+	if is_instance_valid(player):
+		player.apply_effect(kind, value, duration, direction, null)
+
+
+func _explosion_fx(position: Vector3, data: WeaponData) -> void:
+	var cartoon := data.model == WeaponData.Model.POOP
+	Effects.explosion(self, position, data.splash_radius, data.tracer_color, cartoon)
+	if cartoon:
+		Sfx.play_at("deflect", position, 0.0, 0.55)
+	else:
+		Sfx.play_at("shot_shotgun", position, 6.0, 0.45)

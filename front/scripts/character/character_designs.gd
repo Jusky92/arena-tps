@@ -23,6 +23,11 @@ const PALETTES := {
 		"armor": Color(0.86, 0.86, 0.88), "armor2": Color(0.12, 0.2, 0.42),
 		"suit": Color(0.12, 0.13, 0.18), "trim": Color(0.78, 0.64, 0.3), "glow": Color(0.3, 0.8, 1.0),
 	},
+	# Oni : laque vert sombre, acier noir, ferrures orange, néon vert acide.
+	"oni": {
+		"armor": Color(0.16, 0.32, 0.1), "armor2": Color(0.1, 0.1, 0.11),
+		"suit": Color(0.08, 0.09, 0.08), "trim": Color(0.95, 0.55, 0.15), "glow": Color(0.55, 1.0, 0.25),
+	},
 	"dummy": {
 		"armor": Color(0.9, 0.45, 0.1), "armor2": Color(0.24, 0.24, 0.26),
 		"suit": Color(0.2, 0.2, 0.21), "trim": Color(0.95, 0.78, 0.1), "glow": Color(1.0, 0.25, 0.2),
@@ -236,6 +241,58 @@ static func build_weapon(rig, kind: int, design_id: String, weapon_node: Node3D)
 			rig.add_part(g, Vector3(0.03, 0.03, 0.006), 0.8, Vector3(0, 0.115, -0.087), m.glow)
 			muzzle = Vector3(0, 0.05, -0.53)
 			foregrip = 0.24
+		WeaponData.Model.ROCKET:
+			# Tube lance-roquettes posé sur l'épaule, embouchure lumineuse.
+			rig.add_part(g, Vector3(0.14, 0.14, 1.05), 0.7, Vector3(0, 0.09, -0.15), m.armor2, Vector3.ZERO, Vector2(0.95, 1.0))
+			rig.add_part(g, Vector3(0.17, 0.17, 0.08), 1.0, Vector3(0, 0.09, -0.66), m.gun)
+			rig.add_part(g, Vector3(0.13, 0.13, 0.02), 1.0, Vector3(0, 0.09, -0.7), m.glow)
+			rig.add_part(g, Vector3(0.16, 0.16, 0.1), 0.8, Vector3(0, 0.09, 0.38), m.gun, Vector3.ZERO, Vector2(1.0, 1.25))
+			rig.add_part(g, Vector3(0.05, 0.07, 0.12), 0.6, Vector3(0.07, 0.18, -0.25), m.armor)
+			rig.add_part(g, Vector3(0.012, 0.012, 0.5), 0.8, Vector3(0.075, 0.09, -0.15), m.glow)
+			rig.add_part(g, Vector3(0.04, 0.11, 0.06), 0.5, Vector3(0, -0.04, 0.03), m.gun, Vector3(20, 0, 0))
+			rig.add_part(g, Vector3(0.04, 0.1, 0.05), 0.5, Vector3(0, -0.03, -0.3), m.gun)
+			muzzle = Vector3(0, 0.09, -0.75)
+			foregrip = 0.32
+		WeaponData.Model.FLAMER:
+			# Lance-flammes : réservoir sous le canon, buse avec veilleuse.
+			rig.add_part(g, Vector3(0.08, 0.12, 0.36), 0.6, Vector3(0, 0.03, -0.06), m.gun)
+			rig.add_part(g, Vector3(0.13, 0.13, 0.32), 0.9, Vector3(0, -0.08, 0.02), m.armor, Vector3.ZERO, Vector2(1.0, 1.0))
+			rig.add_part(g, Vector3(0.14, 0.02, 0.14), 1.0, Vector3(0, -0.08, -0.05), m.glow)
+			rig.add_part(g, Vector3(0.06, 0.45, 0.06), 1.0, Vector3(0, 0.05, -0.42), m.armor2, Vector3(90, 0, 0), Vector2(1.0, 1.3))
+			rig.add_part(g, Vector3(0.1, 0.1, 0.05), 1.0, Vector3(0, 0.05, -0.64), m.gun)
+			rig.add_part(g, Vector3(0.025, 0.025, 0.025), 1.0, Vector3(0, 0.0, -0.64), m.glow)
+			rig.add_part(g, Vector3(0.04, 0.11, 0.06), 0.5, Vector3(0, -0.04, 0.12), m.gun, Vector3(18, 0, 0))
+			muzzle = Vector3(0, 0.05, -0.68)
+			foregrip = 0.34
+		WeaponData.Model.LASER:
+			# Pistolet laser compact, émetteur sphérique et liseré lumineux.
+			rig.add_part(g, Vector3(0.055, 0.09, 0.24), 0.65, Vector3(0, 0.04, -0.08), m.armor)
+			rig.add_part(g, Vector3(0.045, 0.045, 0.06), 1.0, Vector3(0, 0.05, -0.22), m.glow)
+			rig.add_part(g, Vector3(0.06, 0.012, 0.18), 0.8, Vector3(0, 0.088, -0.08), m.glow)
+			rig.add_part(g, Vector3(0.038, 0.11, 0.055), 0.55, Vector3(0, -0.04, 0.02), m.gun, Vector3(15, 0, 0))
+			muzzle = Vector3(0, 0.05, -0.26)
+			foregrip = 0.06
+		WeaponData.Model.KATANA:
+			# Katana : lame longue légèrement courbe, garde ronde, poignée tressée.
+			rig.add_part(g, Vector3(0.018, 0.05, 0.86), 0.6, Vector3(0, 0.03, -0.52), m.trim, Vector3(-3, 0, 0), Vector2(0.4, 1.0))
+			rig.add_part(g, Vector3(0.006, 0.012, 0.8), 0.9, Vector3(0, 0.005, -0.52), m.glow, Vector3(-3, 0, 0))
+			rig.add_part(g, Vector3(0.11, 0.025, 0.11), 1.0, Vector3(0, 0.02, -0.08), m.armor2)
+			rig.add_part(g, Vector3(0.036, 0.036, 0.24), 0.8, Vector3(0, 0.02, 0.06), m.gun)
+			rig.add_part(g, Vector3(0.04, 0.04, 0.02), 1.0, Vector3(0, 0.02, 0.19), m.glow)
+			muzzle = Vector3(0, 0.03, -0.95)
+			foregrip = 0.1
+		WeaponData.Model.POOP:
+			# Lance-caca cartoon : canon en entonnoir et réservoir rond sur le dessus.
+			var brown := StandardMaterial3D.new()
+			brown.albedo_color = Color(0.42, 0.25, 0.1)
+			brown.roughness = 0.4
+			rig.add_part(g, Vector3(0.1, 0.12, 0.32), 0.7, Vector3(0, 0.03, -0.06), m.armor)
+			rig.add_part(g, Vector3(0.11, 0.38, 0.11), 1.0, Vector3(0, 0.05, -0.36), m.armor2, Vector3(90, 0, 0), Vector2(1.5, 1.0))
+			rig.add_part(g, Vector3(0.16, 0.14, 0.16), 1.0, Vector3(0, 0.16, -0.02), brown, Vector3.ZERO, Vector2(1.0, 0.7))
+			rig.add_part(g, Vector3(0.17, 0.02, 0.17), 1.0, Vector3(0, 0.1, -0.02), m.glow)
+			rig.add_part(g, Vector3(0.04, 0.11, 0.06), 0.5, Vector3(0, -0.06, 0.04), m.gun, Vector3(18, 0, 0))
+			muzzle = Vector3(0, 0.05, -0.58)
+			foregrip = 0.3
 		_:
 			rig.add_part(g, Vector3(0.07, 0.1, 0.48), 0.25, Vector3(0, 0.03, -0.1), m.gun)
 			rig.add_part(g, Vector3(0.032, 0.62, 0.032), 1.0, Vector3(0, 0.05, -0.63), m.gun, Vector3(90, 0, 0), Vector2.ONE, 0.12)
