@@ -89,11 +89,14 @@ func report(status: String, players: int, map: String) -> void:
 	var remote: String = data.get("status", sent)
 	if remote == "reserved" and _remote_status != "reserved":
 		party_id = data.get("party_id")
-		Net.log_line("SERVER LIST : réservé pour le groupe %s (%d place(s))" % [party_id, reserved_slots])
+		var received: Variant = data.get("match_settings")
+		match_settings = received if received is Dictionary else {}
+		Net.log_line("SERVER LIST : réservé pour le groupe %s (%d place(s)), réglages %s" % [party_id, reserved_slots, match_settings])
 		reserved.emit(str(party_id))
 	elif remote == "idle" and _remote_status == "reserved":
 		Net.log_line("SERVER LIST : réservation expirée, serveur de nouveau libre")
 		party_id = null
+		match_settings = {}
 		reservation_ended.emit()
 	_remote_status = remote
 

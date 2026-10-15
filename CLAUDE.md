@@ -62,7 +62,7 @@ This split exists so the dedicated server can later drive the simulation from co
 
 The mode and the backend host (typed on the login screen) are saved in `user://reseau.cfg`. Players log in with their email **or** their username (`identifier`); an unverified account that logged in by username is asked for its email on the code screen. Functions are `await`ed and return `{ok, error, message, …}`. `error` is the backend's error code (API contract), and `ApiClient.ERROR_MESSAGES` maps it to French. When adding a backend feature, add it to both implementations and the facade.
 
-Online flow: the party leader calls `Backend.launch_party()`, which returns its ticket. The other members get theirs through `match_ready` (Real-time `party.match_ready`). Everyone calls `Net.join(address, name, port, ticket)`. Public servers: `get_servers()`, then `get_join_ticket()`. Offline matches (bots, training) are never reported: stats only come from the dedicated server's `match.finished`.
+Online flow: the party leader opens the launch page from LANCER EN LIGNE (bots and duration, kept in `GameState.online_settings`; map and mode will be added there), then calls `Backend.launch_party(settings)`, which sends them as `match_settings` and returns its ticket. The other members get theirs through `match_ready` (Real-time `party.match_ready`). Everyone calls `Net.join(address, name, port, ticket)`. Public servers: `get_servers()`, then `get_join_ticket()`. Offline matches (bots, training) are never reported: stats only come from the dedicated server's `match.finished`.
 
 `Backend.BUILD_VERSION` must match between client and server, and it filters the public server list. Bump it when the network protocol changes.
 
@@ -86,7 +86,7 @@ All of the server's backend calls go through `scripts/server/backend_link.gd`: r
 - `LanLink` (default) accepts every ticket and logs the events.
 - `ServerListLink` (`--serverlist-url http://host:8002` plus the env var `GAME_SERVER_SECRET`) does the real calls.
   - It registers and re-registers on `404 server_not_found`, and heartbeats every 5 s.
-  - The heartbeat reply tells it about a reservation (`reserved` signal). `server_main.gd` then auto-starts when every ticket is used, or 30 s after the reservation.
+  - The heartbeat reply tells it about a reservation (`reserved` signal). The reply also carries the party's `match_settings`, which `server_main.gd` applies for that match only (back to the `--bots`/`--duration` defaults afterwards). It then auto-starts when every ticket is used, or 30 s after the reservation.
   - At match end it sends `match.finished`, then disconnects everyone (`Net.close_all`) and goes back to `idle`.
   - No lobby leader in that mode: `Net.lan_lobby = false`.
 

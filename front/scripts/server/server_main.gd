@@ -16,7 +16,8 @@ extends Node
 ##   --name "Arena TPS"                nom du serveur (liste des serveurs)
 ##   --public-address 1.2.3.4          adresse que la Server List donne aux joueurs
 ##   --region eu                       région annoncée à la Server List
-##   --bots 2 --duration 180           réglages des parties (modifiables par le chef en LAN)
+##   --bots 2 --duration 180           réglages des parties (modifiables par le chef en LAN ;
+##                                     en mode Server List, le chef du groupe choisit les siens)
 ##   --serverlist-url http://…:8002    active le mode Server List
 ##
 ## Le serveur tourne sans fin, d'une partie à l'autre :
@@ -39,6 +40,8 @@ var _in_match := {}
 ## et temps écoulé depuis la réservation.
 var _expected_players := 0
 var _reserved_for := 0.0
+## Réglages de la ligne de commande, rétablis après chaque partie d'un groupe.
+var _default_settings := {}
 
 
 func _ready() -> void:
@@ -78,10 +81,8 @@ func _ready() -> void:
 		return
 
 	Net.lan_lobby = _link.is_lan()
-	Net.settings = {
-		"bots": clampi(int(args.get("bots", 2)), 0, Net.MAX_PLAYERS - 1),
-		"duration": clampf(float(args.get("duration", 180.0)), 60.0, 600.0),
-	}
+	_default_settings = _clamped_settings(int(args.get("bots", 2)), float(args.get("duration", 180.0)))
+	Net.settings = _default_settings.duplicate()
 	Net.ticket_verifier = _link.verify
 	Net.start_requested.connect(Net.start_match)
 	Net.match_starting.connect(_on_match_starting)
@@ -146,6 +147,11 @@ func _process(delta: float) -> void:
 func _on_reserved(_party_id: String) -> void:
 	if Net.server_status != "idle":
 		return
+	# Réglages choisis par le chef du groupe (ceux du serveur s'il n'en a pas envoyé).
+	var chosen := _link.match_settings
+	Net.settings = _clamped_settings(int(chosen.get("bots", _default_settings.bots)),
+		float(chosen.get("duration_seconds", _default_settings.duration)))
+	Net.log_line("SERVEUR : réglages du groupe, %d bot(s), %d s" % [Net.settings.bots, int(Net.settings.duration)])
 	_reserved_for = 0.0
 	_expected_players = Net.human_count() + _link.reserved_slots
 	Net.set_status("reserved")
@@ -153,7 +159,12 @@ func _on_reserved(_party_id: String) -> void:
 
 func _on_reservation_ended() -> void:
 	if Net.server_status == "reserved":
+		Net.settings = _default_settings.duplicate()
 		Net.set_status("idle")
+
+
+func _clamped_settings(bots: int, duration: float) -> Dictionary:
+	return {"bots": clampi(bots, 0, Net.MAX_PLAYERS - 1), "duration": clampf(duration, 60.0, 600.0)}
 
 
 # ---------------------------------------------------------------- Partie
@@ -182,6 +193,8 @@ func _on_match_over(_rows: Array) -> void:
 		# Partie d'un groupe terminée : tout le monde retourne au menu et le
 		# serveur redevient libre pour le prochain groupe.
 		_link.party_id = null
+		_link.match_settings = {}
+		Net.settings = _default_settings.duplicate()
 		await Net.close_all("Partie terminée : retour au menu.")
 	Net.back_to_lobby()
 	_heartbeat()

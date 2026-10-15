@@ -243,7 +243,7 @@ func kick_from_party(member_id: String) -> Dictionary:
 	return _ok()
 
 
-func launch_party() -> Dictionary:
+func launch_party(_settings: Dictionary) -> Dictionary:
 	return _err(ONLINE_ONLY)
 
 

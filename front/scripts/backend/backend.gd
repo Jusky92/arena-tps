@@ -28,7 +28,7 @@ signal toast(text: String)
 
 ## Doit être identique sur le jeu et le serveur dédié (vérifiée à la connexion),
 ## et sert à filtrer la liste des serveurs.
-const BUILD_VERSION := "0.7.0-alpha"
+const BUILD_VERSION := "0.8.0-alpha"
 const BFF_PORT := 8000
 const REALTIME_PORT := 8005
 const CONFIG_PATH := "user://reseau.cfg"
@@ -252,11 +252,12 @@ func kick_from_party(member_id: String) -> Dictionary:
 	return await _impl.kick_from_party(member_id)
 
 
-## Chef : réserve un serveur pour le groupe (créé s'il n'existe pas).
+## Chef : réserve un serveur pour le groupe (créé s'il n'existe pas), qui jouera avec
+## `settings` ({bots, duration}, voir GameState.online_settings).
 ## {ok, server_id, address, port, ticket} ; les autres membres reçoivent `match_ready`.
-func launch_party() -> Dictionary:
+func launch_party(settings: Dictionary) -> Dictionary:
 	var had_party := not party.is_empty()
-	var r: Dictionary = await _impl.launch_party()
+	var r: Dictionary = await _impl.launch_party(settings)
 	if not had_party and not party.is_empty():
 		_solo_party_id = party.party_id
 	return r

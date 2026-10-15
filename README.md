@@ -43,8 +43,8 @@ Le jeu et le serveur sont exportés depuis le même projet Godot. Deux façons d
 
 - **Avec le vrai back** (comptes, amis, statistiques) : le serveur est lancé en mode
   Server List (`tools/lancer_serveur.sh`). Les joueurs se connectent avec leur compte
-  (e-mail ou pseudo), forment un groupe, et le chef clique **LANCER EN LIGNE** : tout le
-  groupe rejoint le serveur automatiquement. Les **SERVEURS PUBLICS** permettent de
+  (e-mail ou pseudo), forment un groupe, et le chef clique **LANCER EN LIGNE**, règle les bots et la durée,
+  puis **LANCER LA PARTIE** : tout le groupe rejoint le serveur automatiquement. Les **SERVEURS PUBLICS** permettent de
   rejoindre une partie en cours.
 - **En LAN, sans back** : « Jouer hors ligne » sur l'écran de connexion, puis
   **REJOINDRE PAR ADRESSE** avec l'adresse affichée par le serveur. Le premier joueur

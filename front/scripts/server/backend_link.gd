@@ -37,6 +37,9 @@ var server_id := ""
 var party_id: Variant = null
 ## Tickets pas encore utilisés (places réservées), d'après le dernier battement de cœur.
 var reserved_slots := 0
+## Réglages choisis par le chef du groupe qui a réservé le serveur :
+## {bots, duration_seconds}, vide si aucun (LAN, ou pas de réservation).
+var match_settings := {}
 
 
 ## true pour le mode LAN : pas de back, le premier joueur règle et lance la partie.

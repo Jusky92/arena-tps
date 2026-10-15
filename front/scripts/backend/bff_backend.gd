@@ -369,11 +369,15 @@ func kick_from_party(member_id: String) -> Dictionary:
 	return r
 
 
-func launch_party() -> Dictionary:
+func launch_party(settings: Dictionary) -> Dictionary:
 	var created := await _ensure_party()
 	if not created.ok:
 		return created
-	var r := await _call(POST, "/parties/%s/launch" % b.party.party_id, {"build_version": b.BUILD_VERSION})
+	var body := {
+		"build_version": b.BUILD_VERSION,
+		"match_settings": {"bots": int(settings.bots), "duration_seconds": int(settings.duration)},
+	}
+	var r := await _call(POST, "/parties/%s/launch" % b.party.party_id, body)
 	if not r.ok:
 		return r
 	return {"ok": true, "server_id": r.data.server_id, "address": r.data.address, "port": int(r.data.port), "ticket": r.data.ticket}

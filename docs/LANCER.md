@@ -109,7 +109,7 @@ Sinon, sur un PC qui a le code et **Godot 4.7.2** :
 5. **Noter les adresses affichées**, par exemple :
 
    ```
-   === Arena TPS — serveur dédié (version 0.7.0-alpha) ===
+   === Arena TPS — serveur dédié (version 0.8.0-alpha) ===
    Mode LAN. Les joueurs se connectent avec REJOINDRE et une de ces adresses :
        192.168.1.20:24567
    ```
@@ -321,8 +321,9 @@ $env:GAME_SERVER_SECRET = "<la valeur du .env>"
    dans ses demandes reçues. La pastille montre qui est en ligne (vert) ou en partie (jaune).
 5. **Groupe** : le bouton **+** à côté d'un ami en ligne l'invite ; il clique **REJOINDRE**
    sur le bandeau d'invitation. 8 joueurs au plus.
-6. Le chef clique **LANCER EN LIGNE** (seul, c'est un groupe d'une personne) : un serveur
-   libre est réservé, tout le groupe s'y connecte automatiquement et la partie démarre dès
+6. Le chef clique **LANCER EN LIGNE** (seul, c'est un groupe d'une personne), choisit le
+   nombre de bots et la durée, puis clique **LANCER LA PARTIE** : un serveur libre est
+   réservé avec ces réglages (ceux de `--bots` / `--duration` ne servent plus qu'en LAN), tout le groupe s'y connecte automatiquement et la partie démarre dès
    que tout le monde est là (30 s au plus).
 7. **SERVEURS PUBLICS** : les parties en cours qui ont des places libres. **REJOINDRE**
    pour y entrer en cours de route.
