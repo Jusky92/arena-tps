@@ -19,6 +19,22 @@ var game
 ## Niveau du bot (0 = débutant, 1 = très fort) : réflexes, précision, vitesse de visée.
 var skill := 0.55
 
+## Niveaux proposés pour les parties solo. Chaque bot tire son `skill` entre min et
+## max : des bots du même niveau ne jouent pas tous exactement pareil.
+const LEVELS := [
+	{"name": "Facile", "min": 0.1, "max": 0.35, "help": "Réagissent lentement et visent mal."},
+	{"name": "Normal", "min": 0.35, "max": 0.75, "help": "Le niveau des serveurs en ligne."},
+	{"name": "Difficile", "min": 0.65, "max": 0.9, "help": "Rapides et précis."},
+	{"name": "Expert", "min": 0.9, "max": 1.0, "help": "Réflexes immédiats, visée presque parfaite."},
+]
+const NORMAL := 1
+
+
+## `skill` d'un nouveau bot de ce niveau (indice dans LEVELS).
+static func random_skill(level: int) -> float:
+	var l: Dictionary = LEVELS[clampi(level, 0, LEVELS.size() - 1)]
+	return randf_range(l.min, l.max)
+
 var target: Node = null
 var _attacker: Node = null
 var _perceive_in := 0.0

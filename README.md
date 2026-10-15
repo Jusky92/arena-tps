@@ -109,7 +109,7 @@ Effets sonores générés par `tools/generate_sounds.py` (tirs des 3 armes, impa
 
 ## Modes de jeu
 
-- **Match à mort** (en ligne sur serveur dédié, ou « Partie solo » hors ligne contre des bots) : 3 minutes par défaut. Fil des éliminations, séries, meneur, tableau des scores et classement final. En ligne, le serveur envoie le résultat au back (`match.finished`) ; hors ligne, rien n'est compté.
+- **Match à mort** (en ligne sur serveur dédié, ou « Partie solo » hors ligne contre des bots : SOLO (BOTS) ouvre une fenêtre pour choisir la map, le nombre de bots, de 1 à 15, et leur niveau, Facile, Normal, Difficile ou Expert) : 3 minutes par défaut. Fil des éliminations, séries, meneur, tableau des scores et classement final. En ligne, le serveur envoie le résultat au back (`match.finished`) ; hors ligne, rien n'est compté.
 - **Entraînement** : le joueur seul avec des mannequins-robots (dont certains accroupis), sans limite de temps.
 
 ### Bots

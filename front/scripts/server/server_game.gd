@@ -135,7 +135,7 @@ func _spawn(id: int) -> CharacterBody3D:
 	if bot:
 		var brain := BotBrain.new()
 		brain.game = self
-		brain.skill = randf_range(0.35, 0.75)
+		brain.skill = BotBrain.random_skill(BotBrain.NORMAL)
 		p.brain = brain
 	p.name = "Net_%d" % id
 	add_child(p)

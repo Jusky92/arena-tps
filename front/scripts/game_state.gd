@@ -46,9 +46,12 @@ static func class_from_id(id: Variant) -> ClassData:
 
 ## Mode de la prochaine partie : "deathmatch" (bots, chronomètre, scores) ou "training" (mannequins).
 var mode := "deathmatch"
-## Durée d'une partie (secondes) et nombre de bots pour compléter le serveur.
+## Durée d'une partie (secondes). Partie solo : nombre de bots (1 à MAX_SOLO_BOTS) et
+## leur niveau (indice dans BotBrain.LEVELS), choisis avant de lancer, gardés pour la session.
 var match_duration := 180.0
 var bot_count := 5
+var bot_level := BotBrain.NORMAL
+const MAX_SOLO_BOTS := 15
 ## Réglages de départ de la prochaine partie en ligne, envoyés avec la réservation :
 ## bots (0 à 15), durée en secondes (60 à 600). Le chef les change dans le salon du
 ## serveur (lobby_screen.gd), qui les garde ici pour le lancement suivant.

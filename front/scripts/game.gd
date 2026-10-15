@@ -472,7 +472,7 @@ func _spawn_player(cls: ClassData, display_name: String, local: bool, loadout :=
 	if not local:
 		var brain := BotBrain.new()
 		brain.game = self
-		brain.skill = randf_range(0.35, 0.75)
+		brain.skill = BotBrain.random_skill(GameState.bot_level)
 		p.brain = brain
 	add_child(p)
 	p.global_transform = MatchRules.best_spawn(map, players, p)
