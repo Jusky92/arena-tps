@@ -63,6 +63,8 @@ var _vignette_tween: Tween
 var _ammo_tween: Tween
 var _was_low_ammo := false
 var _key_help_started := false
+## Emplacement de l'arme affichée en petit (0 ou 1), pour son rappel de touche.
+var _other_slot := 1
 var _splat_tween: Tween
 var _heartbeat := 0.0
 # Invisibilité (super-pouvoir) : voile sur les bords de l'écran et étiquette sous le
@@ -87,6 +89,9 @@ func _ready() -> void:
 	_ammo_label.resized.connect(func() -> void: _ammo_label.pivot_offset = _ammo_label.size / 2.0)
 	_death_title.resized.connect(func() -> void: _death_title.pivot_offset = _death_title.size / 2.0)
 	_build_invisibility_indicator()
+	# Rappels de touches : celles du joueur, mises à jour s'il les change en partie.
+	_refresh_key_hints()
+	Inputs.bindings_changed.connect(_refresh_key_hints)
 
 
 func _build_invisibility_indicator() -> void:
@@ -283,10 +288,10 @@ func _on_weapon_switched(slot: int) -> void:
 	var current: WeaponData = _player.weapon.data
 	_weapon_icon.texture = UiIcons.weapon(current)
 	_weapon_label.text = current.display_name
-	var other_slot := 1 if slot == 0 else 0
-	var other: WeaponData = _player.weapons[other_slot].data if _player.weapons.size() > other_slot else null
+	_other_slot = 1 if slot == 0 else 0
+	var other: WeaponData = _player.weapons[_other_slot].data if _player.weapons.size() > _other_slot else null
 	_other_icon.texture = UiIcons.weapon(other)
-	_other_key.text = "[%d]" % (other_slot + 1)
+	_other_key.text = Inputs.hint("weapon_%d" % (_other_slot + 1))
 	_on_ammo_changed(_player.weapon.ammo, current.mag_size, _player.weapon.is_reloading())
 
 
@@ -437,6 +442,18 @@ func _draw_health_ticks() -> void:
 	for i in range(1, count):
 		var x := roundf(w * i * HP_PER_TICK / float(_max_health))
 		_health_ticks.draw_rect(Rect2(x - 1.0, 0.0, 2.0, h), Color(0.02, 0.03, 0.06, 0.85))
+
+
+## Repères de touches du HUD (arme en petit, grenade, ligne d'aide) d'après les
+## touches du joueur (Inputs). La capacité et le super-pouvoir ont les leurs.
+func _refresh_key_hints() -> void:
+	_other_key.text = Inputs.hint("weapon_%d" % (_other_slot + 1))
+	var grenade_key := find_child("GrenadeKey", true, false) as Label
+	if grenade_key:
+		grenade_key.text = Inputs.hint("grenade")
+	_key_help.text = "%s : recharger · %s : capacité · %s/%s : armes · %s : grenade · %s : scores · Échap : pause" % [
+		Inputs.key_name("reload"), Inputs.key_name("ability"), Inputs.key_name("weapon_1"),
+		Inputs.key_name("weapon_2"), Inputs.key_name("grenade"), Inputs.key_name("scoreboard")]
 
 
 func _start_key_help_fade() -> void:
