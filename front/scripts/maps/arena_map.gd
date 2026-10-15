@@ -113,10 +113,37 @@ func _ready() -> void:
 	build()
 
 
+# =========================================================================== description de la map
+# Questions posées par la partie (game.gd, server_game.gd, MatchRules). Une autre map
+# (Hikari Mall) hérite de ce script et redéfinit ces fonctions et build().
+
+## Identifiant (réseau, back) : voir MapCatalog.
+func map_id() -> String:
+	return "neo-edo"
+
+
+func spawn_points() -> Array:
+	return SPAWN_POINTS
+
+
+## Bonus : [Pickups.Kind, Vector3(x, hauteur de départ du rayon, z)].
+func pickup_points() -> Array:
+	return PICKUP_POINTS
+
+
+func target_points() -> Array:
+	return TARGET_POINTS
+
+
+## Zone où les bots peuvent circuler (calcul de la navigation).
+func nav_aabb() -> AABB:
+	return AABB(Vector3(-HALF - 1, -1, -HALF - 1), Vector3(HALF * 2 + 2, 16, HALF * 2 + 2))
+
+
 ## Positions d'apparition sous forme de Transform3D (position + orientation vers le centre).
 func get_spawn_transforms() -> Array[Transform3D]:
 	var result: Array[Transform3D] = []
-	for p in SPAWN_POINTS:
+	for p in spawn_points():
 		var yaw := atan2(-(0.0 - p.x), -(0.0 - p.z))
 		result.append(Transform3D(Basis(Vector3.UP, yaw), p + Vector3(0, 0.1, 0)))
 	return result

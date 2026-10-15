@@ -17,6 +17,8 @@ extends Node
 ##   --public-address 1.2.3.4          adresse que la Server List donne aux joueurs
 ##   --region eu                       région annoncée à la Server List
 ##   --bots 2 --duration 180           réglages des parties (modifiables par le chef en LAN)
+##   --map neo-edo                     map des parties : neo-edo ou hikari-mall (voir MapCatalog ;
+##                                     en LAN, le chef peut en changer dans le salon)
 ##   --max-players 16                  joueurs humains maximum par partie (1 à 16)
 ##   --serverlist-url http://…:8002    active le mode Server List
 ##
@@ -50,6 +52,11 @@ func _ready() -> void:
 	var port := int(args.get("port", Net.DEFAULT_PORT))
 	Net.max_players = clampi(int(args.get("max-players", 16)), 1, 16)
 
+	var map_id := str(args.get("map", MapCatalog.DEFAULT_ID))
+	if not MapCatalog.is_valid(map_id):
+		_fail("Map inconnue : %s. Maps possibles : %s." % [map_id, ", ".join(MapCatalog.MAPS.map(func(m): return m.id))])
+		return
+
 	var serverlist_url := str(args.get("serverlist-url", ""))
 	if serverlist_url.is_empty():
 		_link = LanLink.new()
@@ -70,7 +77,7 @@ func _ready() -> void:
 		"address": args.get("public-address", _first_address()),
 		"port": port,
 		"region": args.get("region", "eu"),
-		"map": MatchRules.MAP_ID,
+		"map": map_id,
 		"max_players": Net.max_players,
 		"build_version": Backend.BUILD_VERSION,
 	})
@@ -83,6 +90,7 @@ func _ready() -> void:
 	Net.settings = {
 		"bots": clampi(int(args.get("bots", 2)), 0, Net.max_players - 1),
 		"duration": clampf(float(args.get("duration", 180.0)), 60.0, 600.0),
+		"map": map_id,
 	}
 	Net.ticket_verifier = _link.verify
 	Net.start_requested.connect(Net.start_match)
@@ -102,6 +110,7 @@ func _ready() -> void:
 
 	print("")
 	print("=== Arena TPS — serveur dédié (version %s) ===" % Backend.BUILD_VERSION)
+	print("Map : %s (%s), %d joueurs maximum." % [MapCatalog.name_of(map_id), map_id, Net.max_players])
 	if _link.is_lan():
 		print("Mode LAN. Les joueurs se connectent avec REJOINDRE et une de ces adresses :")
 		for address in Net.local_addresses():
@@ -127,7 +136,7 @@ func _exit_tree() -> void:
 
 
 func _heartbeat() -> void:
-	await _link.report(Net.server_status, Net.human_count(), MatchRules.MAP_ID)
+	await _link.report(Net.server_status, Net.human_count(), Net.settings.get("map", MapCatalog.DEFAULT_ID))
 	if Net.server_status == "reserved":
 		# Les tickets expirés ne comptent plus : on n'attend que les joueurs qui peuvent encore venir.
 		_expected_players = Net.human_count() + _link.reserved_slots

@@ -26,6 +26,9 @@ var selected_class: ClassData = CLASSES[0]
 var loadouts: Array = []
 var selected_loadout := 0
 
+## Map des parties hors ligne (solo, entraînement) ; en LAN, c'est le chef qui choisit.
+var map_id := MapCatalog.DEFAULT_ID
+
 ## Mode de la prochaine partie : "deathmatch" (bots, chronomètre, scores) ou "training" (mannequins).
 var mode := "deathmatch"
 ## Durée d'une partie (secondes) et nombre de bots pour compléter le serveur.

@@ -27,6 +27,8 @@ var _bots_label: Label
 var _bots_slider: HSlider
 var _duration_label: Label
 var _duration_slider: HSlider
+var _map_picker: OptionButton
+var _map_label: Label
 var _server_label: Label
 
 
@@ -162,6 +164,22 @@ func _build_settings_panel() -> Control:
 	panel.add_child(box)
 	box.add_child(UiTheme.label("RÉGLAGES DE LA PARTIE", 15, UiTheme.MUTED, true))
 
+	var map_row := HBoxContainer.new()
+	map_row.add_theme_constant_override("separation", 10)
+	var map_title := UiTheme.label("Map", 17, UiTheme.TEXT)
+	map_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	map_row.add_child(map_title)
+	_map_picker = OptionButton.new()
+	_map_picker.custom_minimum_size.x = 200
+	for i in MapCatalog.MAPS.size():
+		_map_picker.add_item(MapCatalog.MAPS[i].name, i)
+	_map_picker.select(_map_index(Net.settings.get("map", MapCatalog.DEFAULT_ID)))
+	_map_picker.item_selected.connect(func(_i: int) -> void: _push_settings())
+	map_row.add_child(_map_picker)
+	box.add_child(map_row)
+	_map_label = UiTheme.label("", 14, UiTheme.MUTED)
+	box.add_child(_map_label)
+
 	var bots_row := HBoxContainer.new()
 	var bots_title := UiTheme.label("Bots pour compléter", 17, UiTheme.TEXT)
 	bots_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -197,13 +215,26 @@ func _build_settings_panel() -> Control:
 
 
 func _push_settings() -> void:
-	_show_settings(int(_bots_slider.value), _duration_slider.value)
-	Net.request_settings(int(_bots_slider.value), _duration_slider.value)
+	var map_id := _picked_map()
+	_show_settings(int(_bots_slider.value), _duration_slider.value, map_id)
+	Net.request_settings(int(_bots_slider.value), _duration_slider.value, map_id)
 
 
-func _show_settings(bots: int, duration: float) -> void:
+func _show_settings(bots: int, duration: float, map_id: String) -> void:
 	_bots_label.text = "%d" % bots
 	_duration_label.text = "%d:%02d" % [int(duration) / 60, int(duration) % 60]
+	_map_label.text = MapCatalog.find(map_id).subtitle
+
+
+func _map_index(map_id: String) -> int:
+	for i in MapCatalog.MAPS.size():
+		if MapCatalog.MAPS[i].id == map_id:
+			return i
+	return 0
+
+
+func _picked_map() -> String:
+	return MapCatalog.MAPS[maxi(_map_picker.selected, 0)].id
 
 
 # ---------------------------------------------------------------- Mise à jour
@@ -222,14 +253,17 @@ func _refresh() -> void:
 	# Réglages tenus par le serveur ; le chef garde la main sur ses curseurs.
 	var bots: int = Net.settings.get("bots", 2)
 	var duration: float = Net.settings.get("duration", 180.0)
+	var map_id: String = Net.settings.get("map", MapCatalog.DEFAULT_ID)
 	_bots_slider.editable = leader
 	_duration_slider.editable = leader
+	_map_picker.disabled = not leader
 	if not leader:
 		_bots_slider.set_value_no_signal(bots)
 		_duration_slider.set_value_no_signal(duration)
-		_show_settings(bots, duration)
+		_map_picker.select(_map_index(map_id))
+		_show_settings(bots, duration, map_id)
 	else:
-		_show_settings(int(_bots_slider.value), _duration_slider.value)
+		_show_settings(int(_bots_slider.value), _duration_slider.value, _picked_map())
 	_server_label.text = "Connecté. %s" % STATUS_TEXT.get(Net.server_status, Net.server_status)
 	var can_start := leader and Net.server_status == "idle"
 	_start_button.disabled = not can_start

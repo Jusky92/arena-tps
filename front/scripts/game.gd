@@ -23,7 +23,6 @@ extends Node3D
 ## chargement à partir des collisions de la map (MatchRules.bake_navigation).
 
 const LOBBY := "res://scenes/lobby.tscn"
-const MapScene := preload("res://scenes/maps/arena.tscn")
 const PlayerScene := preload("res://scenes/player.tscn")
 const TargetScene := preload("res://scenes/target_dummy.tscn")
 const MatchUIScene := preload("res://scenes/ui/match_ui.tscn")
@@ -35,7 +34,7 @@ const STREAK_BANNERS := {2: "DOUBLE ÉLIMINATION", 3: "TRIPLE ÉLIMINATION", 5: 
 
 @onready var hud: CanvasLayer = $HUD
 
-var map: ArenaMap
+var map: Node3D                         # ArenaMap ou une map qui en hérite (voir MapCatalog)
 var player: CharacterBody3D             # joueur local
 var players: Array = []                 # tous les joueurs (local + bots)
 var roam_points: Array = []             # points de patrouille des bots
@@ -60,7 +59,8 @@ var _net_nodes := {}                    # identifiant réseau -> personnage
 
 func _ready() -> void:
 	_mode = GameState.mode
-	map = MapScene.instantiate()
+	var map_id: String = Net.settings.get("map", MapCatalog.DEFAULT_ID) if Net.online and Net.in_match else GameState.map_id
+	map = MapCatalog.scene_of(map_id).instantiate()
 	add_child(map)
 	_ui = MatchUIScene.instantiate()
 	add_child(_ui)
@@ -80,7 +80,7 @@ func _ready() -> void:
 	pickups = PickupDirector.new()
 	pickups.name = "Pickups"
 	add_child(pickups)
-	pickups.setup(ArenaMap.PICKUP_POINTS, not _online)
+	pickups.setup(map.pickup_points(), not _online)
 	if _online:
 		pickups.apply_snapshot(Net.pickup_states)
 	else:
@@ -96,8 +96,8 @@ func _ready() -> void:
 			_ui.hide_timer()
 		else:
 			nav_map = MatchRules.bake_navigation(self, map)
-			roam_points = MatchRules.roam_points()
-			for point in ArenaMap.PICKUP_POINTS:
+			roam_points = MatchRules.roam_points(map)
+			for point in map.pickup_points():
 				var p: Vector3 = point[1]
 				roam_points.append(Vector3(p.x, 0, p.z))      # les bots passent par les bonus
 			for i in GameState.bot_count:
@@ -128,8 +128,9 @@ func _process(delta: float) -> void:
 			# qui annonce la fin de la partie.
 			_time_left = maxf(_time_left - delta, 0.0)
 			_match_time += delta
-			var leader: Dictionary = _scoreboard_rows()[0]
-			_ui.set_time(_time_left, leader.name, leader.kills)
+			var rows := _scoreboard_rows()
+			if not rows.is_empty():           # vide un instant après une déconnexion
+				_ui.set_time(_time_left, rows[0].name, rows[0].kills)
 			if _time_left <= 0.0 and not _online:
 				_finish_match()
 		var show_board: bool = _running and not _pause.is_open() and Input.is_action_pressed("scoreboard")
@@ -559,8 +560,8 @@ func _scoreboard_rows() -> Array:
 
 func _server_subtitle() -> String:
 	if _online:
-		return "Serveur dédié · %d joueurs · NEO-EDO" % Net.players.size()
-	return "Hors ligne · NEO-EDO"
+		return "Serveur dédié · %d joueurs · %s" % [Net.players.size(), MapCatalog.name_of(map.map_id())]
+	return "Hors ligne · %s" % MapCatalog.name_of(map.map_id())
 
 
 func _finish_match() -> void:
@@ -588,7 +589,7 @@ func _finish_match() -> void:
 
 func _spawn_targets() -> void:
 	var index := 0
-	for point in ArenaMap.TARGET_POINTS:
+	for point in map.target_points():
 		var target := TargetScene.instantiate()
 		target.crouched = index % 3 == 2   # un mannequin sur trois est accroupi
 		add_child(target)

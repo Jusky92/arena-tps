@@ -13,14 +13,13 @@ extends Node3D
 ##   - il annonce les éliminations, décide des réapparitions et tient le chronomètre ;
 ##   - à la fin, il envoie les résultats au back (match.finished) via BackendLink.
 
-const MapScene := preload("res://scenes/maps/arena.tscn")
 const PlayerScene := preload("res://scenes/player.tscn")
 
 ## Lien vers le back (donné par server_main.gd avant l'ajout à l'arbre).
 var link: BackendLink
 
 # Lus par BotBrain (scripts/bots/bot_brain.gd) à travers `brain.game`.
-var map: ArenaMap
+var map: Node3D                         # map choisie (Net.settings.map, voir MapCatalog)
 var players: Array = []                 # tous les personnages (pantins + bots)
 var roam_points: Array = []
 var nav_map: RID
@@ -71,10 +70,10 @@ var _next_projectile_id := 1
 
 
 func _ready() -> void:
-	map = MapScene.instantiate()
+	map = MapCatalog.scene_of(Net.settings.get("map", MapCatalog.DEFAULT_ID)).instantiate()
 	add_child(map)
 	nav_map = MatchRules.bake_navigation(self, map)
-	roam_points = MatchRules.roam_points()
+	roam_points = MatchRules.roam_points(map)
 	for id in Net.players:
 		_spawn(id)
 	_match_id = Uuid.v4()
@@ -86,11 +85,11 @@ func _ready() -> void:
 	pickups = PickupDirector.new()
 	pickups.name = "Pickups"
 	add_child(pickups)
-	pickups.setup(ArenaMap.PICKUP_POINTS, true)
+	pickups.setup(map.pickup_points(), true)
 	pickups.players_provider = func() -> Array: return players
 	pickups.picked.connect(_on_pickup)
 	pickups.state_changed.connect(func(pad_id: int, available: bool) -> void: Net.push_pickup.rpc(pad_id, available))
-	for point in ArenaMap.PICKUP_POINTS:
+	for point in map.pickup_points():
 		var p: Vector3 = point[1]
 		roam_points.append(Vector3(p.x, 0, p.z))      # les bots passent par les bonus
 	Net.special_given.connect(_on_special_given)
@@ -591,7 +590,7 @@ func _match_result() -> Dictionary:
 		"match_id": _match_id,
 		"server_id": link.server_id,
 		"party_id": link.party_id,
-		"map": MatchRules.MAP_ID,
+		"map": map.map_id(),
 		"started_at": _started_at,
 		"ended_at": _now_iso(),
 		"players": results,

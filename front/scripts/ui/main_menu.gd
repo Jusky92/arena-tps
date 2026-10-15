@@ -357,6 +357,22 @@ func _build_play_page() -> Control:
 	col.add_child(online)
 
 	# --- Hors ligne (ne compte pas dans les statistiques) ---
+	var map_row := HBoxContainer.new()
+	map_row.add_theme_constant_override("separation", 10)
+	map_row.add_child(UiTheme.label("MAP HORS LIGNE", 14, UiTheme.MUTED, true))
+	var map_picker := OptionButton.new()
+	map_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	map_picker.fit_to_longest_item = false
+	map_picker.clip_text = true
+	for i in MapCatalog.MAPS.size():
+		var m: Dictionary = MapCatalog.MAPS[i]
+		map_picker.add_item("%s  ·  %s" % [m.name, m.subtitle], i)
+		if m.id == GameState.map_id:
+			map_picker.select(i)
+	map_picker.tooltip_text = "Map de la partie solo et de l'entraînement (en LAN, c'est le chef du salon qui choisit)"
+	map_picker.item_selected.connect(func(index: int) -> void: GameState.map_id = MapCatalog.MAPS[index].id)
+	map_row.add_child(map_picker)
+	col.add_child(map_row)
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 12)
 	var solo := UiTheme.button("PARTIE SOLO (BOTS)", false, UiTheme.CYAN, 50)

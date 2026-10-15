@@ -4,13 +4,13 @@ extends RefCounted
 ## dédié (scripts/server/server_game.gd). Fonctions "static" : MatchRules.best_spawn(...).
 
 const RESPAWN_DELAY := 3.0
-## Nom de la map tel qu'il part au back (Server List, match.finished).
-const MAP_ID := "neo-edo"
+## Map par défaut (identifiants : voir MapCatalog ; la map en cours répond à map_id()).
+const MAP_ID := MapCatalog.DEFAULT_ID
 
 
 ## Point d'apparition le plus éloigné des adversaires vivants (un peu de hasard).
-static func best_spawn(map: ArenaMap, players: Array, for_player: Node) -> Transform3D:
-	var spawns := map.get_spawn_transforms()
+static func best_spawn(map: Node3D, players: Array, for_player: Node) -> Transform3D:
+	var spawns: Array = map.get_spawn_transforms()
 	var scored := []
 	for t in spawns:
 		var nearest := INF
@@ -55,7 +55,7 @@ static func hit_damage(weapon: WeaponData, headshot: bool) -> int:
 
 ## Calcule le maillage de navigation (zones où l'on peut marcher) à partir des
 ## collisions de la map, l'ajoute sous `parent` et renvoie la carte de navigation.
-static func bake_navigation(parent: Node3D, map: ArenaMap) -> RID:
+static func bake_navigation(parent: Node3D, map: Node3D) -> RID:
 	var navmesh := NavigationMesh.new()
 	navmesh.agent_radius = 0.5
 	navmesh.agent_height = 1.75
@@ -64,7 +64,7 @@ static func bake_navigation(parent: Node3D, map: ArenaMap) -> RID:
 	navmesh.cell_size = 0.25
 	navmesh.cell_height = 0.25
 	navmesh.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
-	navmesh.filter_baking_aabb = AABB(Vector3(-61, -1, -61), Vector3(122, 16, 122))
+	navmesh.filter_baking_aabb = map.nav_aabb()
 	var source := NavigationMeshSourceGeometryData3D.new()
 	NavigationServer3D.parse_source_geometry_data(navmesh, source, map)
 	NavigationServer3D.bake_from_source_geometry_data(navmesh, source)
@@ -75,10 +75,10 @@ static func bake_navigation(parent: Node3D, map: ArenaMap) -> RID:
 
 
 ## Points de patrouille des bots.
-static func roam_points() -> Array:
+static func roam_points(map: Node3D) -> Array:
 	var points := []
-	points.append_array(ArenaMap.SPAWN_POINTS)
-	points.append_array(ArenaMap.TARGET_POINTS)
+	points.append_array(map.spawn_points())
+	points.append_array(map.target_points())
 	return points
 
 

@@ -99,7 +99,7 @@ var pseudo := "Joueur"
 ## Le serveur (pair 1) n'y figure pas : il ne joue pas. Les bots ont un id négatif.
 var players := {}
 ## Réglages de la partie, choisis par le chef.
-var settings := {"bots": 2, "duration": 180.0}
+var settings := {"bots": 2, "duration": 180.0, "map": MapCatalog.DEFAULT_ID}
 ## true en LAN : le chef (premier joueur) règle et lance la partie. false avec
 ## la Server List : pas de chef, la partie démarre quand le groupe est connecté.
 var lan_lobby := true
@@ -317,11 +317,13 @@ func controls(id: int) -> bool:
 
 
 func _lobby_info() -> Dictionary:
-	return {"bots": settings.bots, "duration": settings.duration, "leader_id": leader_id, "status": server_status, "lan": lan_lobby}
+	return {"bots": settings.bots, "duration": settings.duration, "map": settings.get("map", MapCatalog.DEFAULT_ID),
+		"leader_id": leader_id, "status": server_status, "lan": lan_lobby}
 
 
 func _apply_lobby_info(info: Dictionary) -> void:
-	settings = {"bots": info.get("bots", 2), "duration": info.get("duration", 180.0)}
+	settings = {"bots": info.get("bots", 2), "duration": info.get("duration", 180.0),
+		"map": MapCatalog.valid_id(str(info.get("map", MapCatalog.DEFAULT_ID)))}
 	leader_id = info.get("leader_id", 0)
 	server_status = info.get("status", "idle")
 	lan_lobby = info.get("lan", true)
@@ -516,17 +518,18 @@ func _valid_class(class_id: String) -> String:
 	return GameState.CLASSES[0].resource_path
 
 
-## Chef : règle le nombre de bots et la durée.
-func request_settings(bots: int, duration: float) -> void:
+## Chef : règle le nombre de bots, la durée et la map (identifiant de MapCatalog).
+func request_settings(bots: int, duration: float, map_id: String) -> void:
 	if is_leader():
-		_request_settings.rpc_id(1, bots, duration)
+		_request_settings.rpc_id(1, bots, duration, map_id)
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _request_settings(bots: int, duration: float) -> void:
+func _request_settings(bots: int, duration: float, map_id: String) -> void:
 	if not _serving or not lan_lobby or multiplayer.get_remote_sender_id() != leader_id or in_match:
 		return
-	settings = {"bots": clampi(bots, 0, max_players - 1), "duration": clampf(duration, 60.0, 600.0)}
+	settings = {"bots": clampi(bots, 0, max_players - 1), "duration": clampf(duration, 60.0, 600.0),
+		"map": MapCatalog.valid_id(map_id)}
 	lobby_changed.emit()
 	_send_lobby()
 
