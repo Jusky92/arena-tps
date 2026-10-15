@@ -538,6 +538,9 @@ func use_ability() -> bool:
 	_ability_cooldown = class_data.ability_cooldown
 	_ability_time = class_data.ability_duration
 	_play_sound(Sfx.ability_sound(class_data.ability), -4.0)
+	# En ligne, le serveur doit le savoir : garde (dégâts réduits), balles perforantes.
+	if Net.online and peer_id != 0 and is_local and not is_remote:
+		Net.use_ability()
 
 	match class_data.ability:
 		ClassData.Ability.SHIELD:
@@ -563,6 +566,20 @@ func use_ability() -> bool:
 			for w in weapons:
 				w.piercing = true      # ne joue que sur les armes à balles (voir weapon.gd)
 	return true
+
+
+## Serveur : capacité annoncée par le client (Net.use_ability). Refusée si elle n'est
+## pas rechargée (avec 20 % de tolérance pour les écarts du réseau).
+func start_ability_from_network() -> bool:
+	if not alive or _ability_cooldown > class_data.ability_cooldown * 0.2:
+		return false
+	_ability_cooldown = 0.0
+	return use_ability()
+
+
+## true pendant la Flèche perforante de l'Archer (balles qui traversent).
+func is_piercing() -> bool:
+	return class_data.ability == ClassData.Ability.PIERCE and _ability_time > 0.0
 
 
 func _update_ability(delta: float) -> void:
@@ -945,6 +962,11 @@ func damage_multiplier() -> float:
 
 
 ## true si les autres ne voient (presque) pas ce personnage.
+## Invisible mais visible un instant (vient de tirer).
+func is_revealed() -> bool:
+	return invisible_time > 0.0 and _reveal_time > 0.0
+
+
 func is_invisible() -> bool:
 	return invisible_time > 0.0 and _reveal_time <= 0.0
 

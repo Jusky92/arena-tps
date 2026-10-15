@@ -4,6 +4,8 @@ extends RefCounted
 ## dédié (scripts/server/server_game.gd). Fonctions "static" : MatchRules.best_spawn(...).
 
 const RESPAWN_DELAY := 3.0
+## Capacité de l'Archer (Flèche perforante) : murs ou obstacles traversés par une balle.
+const PIERCE_WALLS := 2
 ## Map par défaut (identifiants : voir MapCatalog ; la map en cours répond à map_id()).
 const MAP_ID := MapCatalog.DEFAULT_ID
 

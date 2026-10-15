@@ -17,6 +17,7 @@ extends Node
 ##   --public-address 1.2.3.4          adresse que la Server List donne aux joueurs
 ##   --region eu                       région annoncée à la Server List
 ##   --bots 2 --duration 180           réglages des parties (modifiables par le chef en LAN)
+##   --bot-level moyen                 niveau des bots : faible, moyen ou eleve (le chef peut changer)
 ##   --map neo-edo                     map des parties : neo-edo ou hikari-mall (voir MapCatalog ;
 ##                                     en LAN, le chef peut en changer dans le salon)
 ##   --max-players 16                  joueurs humains maximum par partie (1 à 16)
@@ -91,6 +92,7 @@ func _ready() -> void:
 		"bots": clampi(int(args.get("bots", 2)), 0, Net.max_players - 1),
 		"duration": clampf(float(args.get("duration", 180.0)), 60.0, 600.0),
 		"map": map_id,
+		"bot_level": BotBrain.valid_level(str(args.get("bot-level", "moyen"))),
 	}
 	Net.ticket_verifier = _link.verify
 	Net.start_requested.connect(Net.start_match)

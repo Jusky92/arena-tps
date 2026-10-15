@@ -163,6 +163,8 @@ func _fire_pellet(spread_deg: float) -> Dictionary:
 	var exclude: Array[RID] = []
 	var end_point := to
 	var pierce_left := MAX_PIERCE if (piercing and data.is_hitscan()) or data.pierce_always else 1
+	# Murs traversés : ceux de l'arme, plus ceux de la capacité de l'Archer.
+	var walls_left := data.pierce_walls + (MatchRules.PIERCE_WALLS if piercing and data.is_hitscan() else 0)
 
 	while pierce_left > 0:
 		var hit := _raycast(space, from, to, exclude)
@@ -192,7 +194,10 @@ func _fire_pellet(spread_deg: float) -> Dictionary:
 			Effects.impact(_world(), hit.position, data.tracer_color)
 			if _hears_impacts():
 				Sfx.play_at("impact_world", hit.position, -10.0, 1.0, 40.0)
-			break  # un mur arrête toujours la balle
+			if walls_left <= 0:
+				break  # un mur arrête la balle…
+			walls_left -= 1  # … sauf une balle qui peut encore traverser
+			exclude.append(hit.rid)
 
 	if data.model == WeaponData.Model.LASER:
 		Effects.laser_beam(_world(), from, end_point, data.tracer_color)

@@ -31,7 +31,7 @@ extends Node
 ##
 ## Protocole (toutes les fonctions marquées @rpc) :
 ##   client -> serveur  hello, set_loadout, request_settings, request_start, state,
-##                      fire, reload, hit, fire_projectile, use_super
+##                      fire, reload, hit, fire_projectile, use_super, use_ability
 ##   (serveur -> clients aussi : projectile, explosion, effect, pickup, pickups,
 ##    special, aura)
 ##   serveur -> clients refuse, lobby, start_match, player_joined, player_left,
@@ -99,7 +99,7 @@ var pseudo := "Joueur"
 ## Le serveur (pair 1) n'y figure pas : il ne joue pas. Les bots ont un id négatif.
 var players := {}
 ## Réglages de la partie, choisis par le chef.
-var settings := {"bots": 2, "duration": 180.0, "map": MapCatalog.DEFAULT_ID}
+var settings := {"bots": 2, "duration": 180.0, "map": MapCatalog.DEFAULT_ID, "bot_level": "moyen"}
 ## true en LAN : le chef (premier joueur) règle et lance la partie. false avec
 ## la Server List : pas de chef, la partie démarre quand le groupe est connecté.
 var lan_lobby := true
@@ -318,12 +318,13 @@ func controls(id: int) -> bool:
 
 func _lobby_info() -> Dictionary:
 	return {"bots": settings.bots, "duration": settings.duration, "map": settings.get("map", MapCatalog.DEFAULT_ID),
-		"leader_id": leader_id, "status": server_status, "lan": lan_lobby}
+		"bot_level": settings.get("bot_level", "moyen"), "leader_id": leader_id, "status": server_status, "lan": lan_lobby}
 
 
 func _apply_lobby_info(info: Dictionary) -> void:
 	settings = {"bots": info.get("bots", 2), "duration": info.get("duration", 180.0),
-		"map": MapCatalog.valid_id(str(info.get("map", MapCatalog.DEFAULT_ID)))}
+		"map": MapCatalog.valid_id(str(info.get("map", MapCatalog.DEFAULT_ID))),
+		"bot_level": BotBrain.valid_level(str(info.get("bot_level", "moyen")))}
 	leader_id = info.get("leader_id", 0)
 	server_status = info.get("status", "idle")
 	lan_lobby = info.get("lan", true)
@@ -518,18 +519,19 @@ func _valid_class(class_id: String) -> String:
 	return GameState.CLASSES[0].resource_path
 
 
-## Chef : règle le nombre de bots, la durée et la map (identifiant de MapCatalog).
-func request_settings(bots: int, duration: float, map_id: String) -> void:
+## Chef : règle le nombre de bots, la durée, la map (identifiant de MapCatalog) et le
+## niveau des bots (BotBrain.LEVELS).
+func request_settings(bots: int, duration: float, map_id: String, bot_level: String) -> void:
 	if is_leader():
-		_request_settings.rpc_id(1, bots, duration, map_id)
+		_request_settings.rpc_id(1, bots, duration, map_id, bot_level)
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _request_settings(bots: int, duration: float, map_id: String) -> void:
+func _request_settings(bots: int, duration: float, map_id: String, bot_level: String) -> void:
 	if not _serving or not lan_lobby or multiplayer.get_remote_sender_id() != leader_id or in_match:
 		return
 	settings = {"bots": clampi(bots, 0, max_players - 1), "duration": clampf(duration, 60.0, 600.0),
-		"map": MapCatalog.valid_id(map_id)}
+		"map": MapCatalog.valid_id(map_id), "bot_level": BotBrain.valid_level(bot_level)}
 	lobby_changed.emit()
 	_send_lobby()
 
@@ -820,6 +822,20 @@ func push_projectile(projectile_id: int, weapon_id: String, origin: Vector3, vel
 @rpc("authority", "call_remote", "reliable")
 func push_explosion(projectile_id: int, position: Vector3, weapon_id: String) -> void:
 	projectile_exploded.emit(projectile_id, position, weapon_id)
+
+
+## Client -> serveur : j'active la capacité de mon spécialiste (touche E). Le serveur la
+## démarre sur son personnage : garde du Samouraï, balles perforantes de l'Archer.
+func use_ability() -> void:
+	if online and not _serving and in_match:
+		_use_ability.rpc_id(1)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _use_ability() -> void:
+	var id := multiplayer.get_remote_sender_id()
+	if _serving and in_match and arbiter and players.has(id):
+		arbiter.on_use_ability(id)
 
 
 ## Client -> serveur : déclencher le super-pouvoir en réserve.

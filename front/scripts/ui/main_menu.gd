@@ -32,6 +32,9 @@ var _overlay: Control
 var _address_field: LineEdit
 var _online_error: Label
 var _launch_button: Button
+## Réglages du panneau « Partie solo » (affichés à côté des curseurs).
+var _solo_bots_label: Label
+var _solo_duration_label: Label
 
 
 func _ready() -> void:
@@ -60,7 +63,8 @@ func _ready() -> void:
 	for side in ["left", "right", "top", "bottom"]:
 		_page_holder.add_theme_constant_override("margin_" + side, 24 if side != "top" else 18)
 	body.add_child(_page_holder)
-	body.add_child(_build_social_panel())
+	if not Backend.is_simulated():
+		body.add_child(_build_social_panel())     # hors ligne, les amis seraient factices
 	root.add_child(_build_bottom_bar())
 
 	Backend.party_changed.connect(_refresh_party)
@@ -98,7 +102,10 @@ func _build_top_bar() -> Control:
 	logo.add_child(UiTheme.title("TPS", 24, UiTheme.CYAN))
 	row.add_child(logo)
 
-	for page in [["JOUER", "play"], ["SPÉCIALISTES", "specialists"], ["CLASSES", "classes"], ["STATISTIQUES", "stats"]]:
+	var pages := [["JOUER", "play"], ["SPÉCIALISTES", "specialists"], ["CLASSES", "classes"]]
+	if not Backend.is_simulated():
+		pages.append(["STATISTIQUES", "stats"])     # hors ligne, elles seraient factices
+	for page in pages:
 		var b := Button.new()
 		b.text = page[0]
 		b.flat = true
@@ -166,6 +173,17 @@ func _refresh_services() -> void:
 
 
 func _refresh_profile() -> void:
+	if Backend.is_simulated():
+		# Hors ligne : pas de niveau ni d'XP, seulement le pseudo et le mode.
+		for c in _profile_box.get_children():
+			c.queue_free()
+		var chip := PanelContainer.new()
+		chip.add_theme_stylebox_override("panel", UiTheme.box(Color(UiTheme.YELLOW, 0.14), UiTheme.YELLOW, 1, 4, 10, 4))
+		chip.add_child(UiTheme.label("MODE HORS LIGNE", 13, UiTheme.YELLOW, true))
+		chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		_profile_box.add_child(chip)
+		_profile_box.add_child(UiTheme.label(Backend.username(), 19, Color.WHITE, true))
+		return
 	var p: Dictionary = await Backend.get_profile()
 	if not is_instance_valid(_profile_box):
 		return
@@ -304,12 +322,18 @@ func _build_play_page() -> Control:
 	col.add_theme_constant_override("separation", 14)
 	scroll.add_child(col)
 
+	# Hors ligne : ni groupe, ni lancement en ligne, ni serveurs publics (il faut le back).
+	var with_back := not Backend.is_simulated()
 	var party := UiTheme.panel()
 	_party_box = VBoxContainer.new()
 	_party_box.add_theme_constant_override("separation", 8)
 	party.add_child(_party_box)
-	col.add_child(party)
-	_refresh_party()
+	if with_back:
+		col.add_child(party)
+		_refresh_party()
+	else:
+		party.queue_free()
+		_party_box = null
 
 	# --- En ligne, avec le back : groupe -> serveur dédié ---
 	var launch_row := HBoxContainer.new()
@@ -326,8 +350,12 @@ func _build_play_page() -> Control:
 	servers.tooltip_text = "Rejoindre une partie en cours qui a des places libres"
 	servers.pressed.connect(_show_page.bind("servers"))
 	launch_row.add_child(servers)
-	col.add_child(launch_row)
-	_update_launch_button()
+	if with_back:
+		col.add_child(launch_row)
+		_update_launch_button()
+	else:
+		launch_row.queue_free()
+		_launch_button = null
 
 	# --- LAN : serveur rejoint par adresse ---
 	var online := UiTheme.panel(Color(UiTheme.CYAN, 0.07), Color(UiTheme.CYAN, 0.35))
@@ -377,8 +405,8 @@ func _build_play_page() -> Control:
 	buttons.add_theme_constant_override("separation", 12)
 	var solo := UiTheme.button("PARTIE SOLO (BOTS)", false, UiTheme.CYAN, 50)
 	solo.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	solo.tooltip_text = "Match à mort hors ligne contre des bots (ne compte pas dans les statistiques)"
-	solo.pressed.connect(_start_solo)
+	solo.tooltip_text = "Match à mort hors ligne contre des bots : map, nombre et niveau des bots, durée"
+	solo.pressed.connect(_open_solo_panel)
 	buttons.add_child(solo)
 	var training := UiTheme.button("ENTRAÎNEMENT", false, UiTheme.CYAN, 50)
 	training.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1023,10 +1051,126 @@ func _friend_row(f: Dictionary) -> Control:
 
 # =========================================================================== hors ligne
 
+## Panneau « Partie solo » : map, nombre de bots (1 à 15), niveau, durée ; LANCER.
+func _open_solo_panel() -> void:
+	Sfx.ui("ui_open")
+	_close_overlay()
+	_overlay = ColorRect.new()
+	(_overlay as ColorRect).color = Color(0.01, 0.015, 0.03, 0.82)
+	_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_overlay)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_overlay.add_child(center)
+	var panel := UiTheme.panel(UiTheme.PANEL, Color(UiTheme.CYAN, 0.5))
+	panel.custom_minimum_size = Vector2(560, 0)
+	center.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	panel.add_child(box)
+	box.add_child(UiTheme.title("PARTIE SOLO", 30, UiTheme.CYAN))
+	var help := UiTheme.label("Match à mort hors ligne contre des bots. Rien n'est compté dans les statistiques.", 15, UiTheme.MUTED)
+	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(help)
+	box.add_child(UiTheme.neon_line(UiTheme.CYAN, 1))
+
+	# Map.
+	var map_row := HBoxContainer.new()
+	map_row.add_theme_constant_override("separation", 10)
+	var map_title := UiTheme.label("Map", 17, UiTheme.TEXT)
+	map_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	map_row.add_child(map_title)
+	var map_picker := OptionButton.new()
+	map_picker.custom_minimum_size.x = 260
+	for i in MapCatalog.MAPS.size():
+		map_picker.add_item(MapCatalog.MAPS[i].name, i)
+		if MapCatalog.MAPS[i].id == GameState.map_id:
+			map_picker.select(i)
+	map_picker.item_selected.connect(func(index: int) -> void: GameState.map_id = MapCatalog.MAPS[index].id)
+	map_row.add_child(map_picker)
+	box.add_child(map_row)
+
+	# Nombre de bots.
+	var bots_row := HBoxContainer.new()
+	var bots_title := UiTheme.label("Nombre de bots", 17, UiTheme.TEXT)
+	bots_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bots_row.add_child(bots_title)
+	_solo_bots_label = UiTheme.label(str(GameState.bot_count), 17, UiTheme.CYAN, true)
+	bots_row.add_child(_solo_bots_label)
+	box.add_child(bots_row)
+	var bots := HSlider.new()
+	bots.min_value = 1
+	bots.max_value = 15
+	bots.step = 1
+	bots.value = clampi(GameState.bot_count, 1, 15)
+	bots.custom_minimum_size = Vector2(0, 24)
+	bots.value_changed.connect(func(v: float) -> void:
+		GameState.bot_count = int(v)
+		_solo_bots_label.text = str(int(v)))
+	box.add_child(bots)
+
+	# Niveau des bots : trois boutons, un seul choisi.
+	var level_row := HBoxContainer.new()
+	level_row.add_theme_constant_override("separation", 10)
+	var level_title := UiTheme.label("Niveau des bots", 17, UiTheme.TEXT)
+	level_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	level_row.add_child(level_title)
+	var group := ButtonGroup.new()
+	for level in ["faible", "moyen", "eleve"]:
+		var b := UiTheme.button(BotBrain.LEVEL_NAMES[level].to_upper(), false, UiTheme.CYAN, 40)
+		b.toggle_mode = true
+		b.button_group = group
+		b.custom_minimum_size.x = 100
+		b.button_pressed = level == GameState.bot_level
+		b.add_theme_stylebox_override("pressed", UiTheme.box(Color(UiTheme.CYAN, 0.3), UiTheme.CYAN, 2, 4, 12, 6))
+		b.toggled.connect(func(on: bool) -> void:
+			if on:
+				GameState.bot_level = level)
+		level_row.add_child(b)
+	box.add_child(level_row)
+
+	# Durée.
+	var duration_row := HBoxContainer.new()
+	var duration_title := UiTheme.label("Durée du match", 17, UiTheme.TEXT)
+	duration_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	duration_row.add_child(duration_title)
+	_solo_duration_label = UiTheme.label("", 17, UiTheme.CYAN, true)
+	duration_row.add_child(_solo_duration_label)
+	box.add_child(duration_row)
+	var duration := HSlider.new()
+	duration.min_value = 60
+	duration.max_value = 600
+	duration.step = 30
+	duration.value = GameState.match_duration
+	duration.custom_minimum_size = Vector2(0, 24)
+	var show_duration := func(v: float) -> void:
+		GameState.match_duration = v
+		_solo_duration_label.text = "%d:%02d" % [int(v) / 60, int(v) % 60]
+	show_duration.call(duration.value)
+	duration.value_changed.connect(show_duration)
+	box.add_child(duration)
+
+	box.add_child(UiTheme.spacer(Vector2(0, 4)))
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 12)
+	var cancel := UiTheme.button("ANNULER", false, UiTheme.MAGENTA, 50)
+	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cancel.pressed.connect(func() -> void:
+		Sfx.ui("ui_close")
+		GameState.save_solo()
+		_close_overlay())
+	buttons.add_child(cancel)
+	var launch := UiTheme.button("LANCER", true, UiTheme.CYAN, 50)
+	launch.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	launch.pressed.connect(_start_solo)
+	buttons.add_child(launch)
+	box.add_child(buttons)
+	launch.grab_focus()
+
+
 func _start_solo() -> void:
 	GameState.mode = "deathmatch"
-	# Le match est complété par des bots pour atteindre 6 joueurs au moins.
-	GameState.bot_count = 5
+	GameState.save_solo()
 	get_tree().change_scene_to_file(GAME)
 
 

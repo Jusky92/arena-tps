@@ -66,6 +66,7 @@ var _projectiles := {}                  # identifiant -> Projectile (qui fait fo
 ## Bonus de la map (socles, ramassages, réapparitions) : version qui fait foi.
 var pickups: PickupDirector
 var _charges := {}                      # tireur -> {start: début de sa dernière charge (s), hits: cibles touchées}
+var _pierce_until := {}                 # tireur -> fin (s, avec marge) de sa Flèche perforante
 var _next_projectile_id := 1
 
 
@@ -135,7 +136,7 @@ func _spawn(id: int) -> CharacterBody3D:
 	if bot:
 		var brain := BotBrain.new()
 		brain.game = self
-		brain.skill = randf_range(0.35, 0.75)
+		brain.skill = BotBrain.skill_for(Net.settings.get("bot_level", "moyen"))
 		p.brain = brain
 	p.name = "Net_%d" % id
 	add_child(p)
@@ -240,7 +241,7 @@ func on_fire(shooter_id: int, slot: int) -> bool:
 	var hits := data.pellets
 	if data.kind in [WeaponData.Kind.MELEE, WeaponData.Kind.FLAME]:
 		hits = AREA_HITS
-	elif shooter.class_data.ability == ClassData.Ability.PIERCE and data.is_hitscan():
+	elif (shooter.class_data.ability == ClassData.Ability.PIERCE and data.is_hitscan()) or data.pierce_always:
 		hits *= PIERCE_BURST
 	for i in hits:
 		w.tokens.append(now + HIT_WINDOW)
@@ -449,18 +450,54 @@ func _reject_reason(node: Node3D, shooter: Node3D, hit_offset: Vector3, weapon_d
 			or hit_offset.y < -HITBOX_MARGIN or hit_offset.y > height + HITBOX_MARGIN:
 		return "point d'impact hors de la cible"
 	# Ligne de vue : des yeux du tireur au point touché, seul le décor peut bloquer.
+	# Une balle perforante (Archer, certaines armes) traverse quelques murs.
 	var eye := shooter.global_position + Vector3.UP * (MatchRules.body_height(shooter) - 0.2)
 	var impact := node.global_position + hit_offset
-	var query := PhysicsRayQueryParameters3D.create(eye, impact)
+	var walls := _walls_between(eye, impact)
+	var allowed := _walls_allowed(shooter, weapon_data)
+	if walls > allowed:
+		return "mur entre le tireur et la cible" if allowed == 0 else "%d murs entre le tireur et la cible (%d traversables)" % [walls, allowed]
+	return ""
+
+
+## Nombre de murs ou d'obstacles du décor entre deux points (les personnages ne
+## comptent pas ; un obstacle collé au point touché non plus).
+func _walls_between(from: Vector3, to: Vector3) -> int:
 	var exclude: Array[RID] = []
 	for p in players:
 		if is_instance_valid(p):
 			exclude.append(p.get_rid())
-	query.exclude = exclude
-	var wall := get_world_3d().direct_space_state.intersect_ray(query)
-	if not wall.is_empty() and (wall.position as Vector3).distance_to(impact) > LOS_MARGIN:
-		return "mur entre le tireur et la cible"
-	return ""
+	var space := get_world_3d().direct_space_state
+	var count := 0
+	for i in 8:
+		var query := PhysicsRayQueryParameters3D.create(from, to)
+		query.exclude = exclude
+		var wall := space.intersect_ray(query)
+		if wall.is_empty() or (wall.position as Vector3).distance_to(to) <= LOS_MARGIN:
+			break
+		count += 1
+		exclude.append(wall.rid)
+	return count
+
+
+## Murs qu'un tir du tireur peut traverser : ceux de l'arme, plus ceux de la Flèche
+## perforante si elle est active (annoncée par Net.use_ability, avec une petite marge).
+func _walls_allowed(shooter: Node, weapon_data: WeaponData) -> int:
+	var allowed := weapon_data.pierce_walls
+	if weapon_data.is_hitscan() and (shooter.is_piercing() or _now() < float(_pierce_until.get(shooter.peer_id, 0.0))):
+		allowed += MatchRules.PIERCE_WALLS
+	return allowed
+
+
+## Client : il active la capacité de son spécialiste. Elle démarre aussi ici, sur
+## son personnage : la garde réduit les dégâts, la Flèche perforante autorise les tirs
+## à travers les murs.
+func on_use_ability(id: int) -> void:
+	var node = _nodes.get(id)
+	if not is_instance_valid(node) or not node.start_ability_from_network():
+		return
+	if node.class_data.ability == ClassData.Ability.PIERCE:
+		_pierce_until[id] = _now() + node.class_data.ability_duration + 0.5
 
 
 ## Armes d'un personnage remises à neuf (apparition, réapparition, changement de classe).

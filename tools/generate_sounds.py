@@ -148,6 +148,11 @@ def shot_smg(v=1):
     return gunshot(v, 4200, 30, 190, 40, 0.18, crack=0.9, mech=0.35)
 
 
+def shot_rifle(v=1):
+    """Fusil d'assaut : entre la mitraillette et le fusil de précision, claquement plus grave."""
+    return gunshot(v, 3200, 18, 140, 22, 0.35, crack=1.1, mech=0.3)
+
+
 def shot_shotgun(v=1):
     blast = gunshot(v, 2400, 9, 120, 12, 0.6, crack=1.2, mech=0.2)
     pump = place(mix(bandpass(noise(0.05), 900, 3000) * env(0.05, 0.001, 80),
@@ -495,6 +500,8 @@ SOUNDS = {
     "ui_open": (ui_open, 1),
     "ui_close": (ui_close, 1),
     "ambience": (ambience, 1),
+    # Ajoutés en fin de liste : les sons déjà générés restent identiques (même tirage).
+    "shot_rifle": (shot_rifle, 3),
 }
 
 if __name__ == "__main__":

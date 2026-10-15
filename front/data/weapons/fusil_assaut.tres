@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" uid="uid://c1eue6wr0lwki" path="res://scripts/data/weapon_data.gd" id="1_w"]
+
+[resource]
+script = ExtResource("1_w")
+id = "assault"
+display_name = "Fusil d'assaut"
+model = 12
+damage = 24
+max_range = 90.0
+headshot_multiplier = 2.0
+fire_rate = 7.5
+mag_size = 30
+reload_time = 2.0
+spread_deg = 1.6
+aim_spread_deg = 0.35
+aim_fov = 50.0
+recoil_deg = 0.7
+tracer_color = Color(1, 0.8, 0.45, 1)

@@ -19,6 +19,24 @@ var game
 ## Niveau du bot (0 = débutant, 1 = très fort) : réflexes, précision, vitesse de visée.
 var skill := 0.55
 
+## Niveaux proposés (partie solo, salon LAN, --bot-level) -> fourchette de `skill`.
+const LEVELS := {
+	"faible": Vector2(0.15, 0.3),
+	"moyen": Vector2(0.4, 0.6),
+	"eleve": Vector2(0.75, 0.95),
+}
+const LEVEL_NAMES := {"faible": "Faible", "moyen": "Moyen", "eleve": "Élevé"}
+
+
+static func valid_level(level: String) -> String:
+	return level if LEVELS.has(level) else "moyen"
+
+
+## `skill` d'un nouveau bot de ce niveau (un peu de hasard entre les bots).
+static func skill_for(level: String) -> float:
+	var range_: Vector2 = LEVELS[valid_level(level)]
+	return randf_range(range_.x, range_.y)
+
 var target: Node = null
 var _attacker: Node = null
 var _perceive_in := 0.0
@@ -126,7 +144,7 @@ const INVISIBLE_SIGHT := 4.0
 const PREFERRED_DISTANCE := {
 	WeaponData.Model.SHOTGUN: 7.0, WeaponData.Model.SMG: 13.0, WeaponData.Model.ROCKET: 18.0,
 	WeaponData.Model.FLAMER: 5.0, WeaponData.Model.LASER: 18.0, WeaponData.Model.KATANA: 1.6,
-	WeaponData.Model.POOP: 12.0,
+	WeaponData.Model.POOP: 12.0, WeaponData.Model.ASSAULT: 22.0,
 }
 
 
@@ -186,19 +204,20 @@ func _combat(p: CharacterBody3D, cmd: PlayerCommands, delta: float) -> void:
 		if p.super_power != Pickups.Super.SHOCKWAVE or distance < 7.0:
 			cmd.use_super = true
 
-	# Capacité de classe.
+	# Capacité de classe (un bot fort s'en sert plus souvent et plus tôt).
+	var eager := lerpf(0.5, 1.6, skill)
 	match p.class_data.ability:
 		ClassData.Ability.SHIELD:
-			cmd.ability = p.health < p.class_data.max_health * 0.55
+			cmd.ability = p.health < p.class_data.max_health * lerpf(0.4, 0.75, skill)
 		ClassData.Ability.DASH:
-			if distance > 7.0 and distance < 20.0 and randf() < 0.02:
+			if distance > 7.0 and distance < 20.0 and randf() < 0.02 * eager:
 				cmd.ability = true
 				cmd.move = Vector2(0, -1)
 		ClassData.Ability.PIERCE:
-			cmd.ability = distance > 18.0 and randf() < 0.05
+			cmd.ability = distance > 18.0 and randf() < 0.05 * eager
 		ClassData.Ability.CHARGE:
 			# Fonce sur la cible quand elle est proche et bien en face.
-			if aimed and distance > 2.5 and distance < 9.0 and randf() < 0.06:
+			if aimed and distance > 2.5 and distance < 9.0 and randf() < 0.06 * eager:
 				cmd.ability = true
 
 
