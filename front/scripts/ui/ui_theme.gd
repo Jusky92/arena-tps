@@ -38,6 +38,9 @@ static func get_theme() -> Theme:
 	t.set_stylebox("normal", "Button", box(Color(0.08, 0.11, 0.18, 0.92), Color(CYAN, 0.3), 1, 4, 14, 8))
 	t.set_stylebox("hover", "Button", box(Color(0.1, 0.17, 0.25, 0.95), CYAN, 1, 4, 14, 8))
 	t.set_stylebox("pressed", "Button", box(Color(CYAN, 0.35), CYAN, 1, 4, 14, 8))
+	# Sans lui, un bouton coché et survolé (CheckBox…) prend le style par défaut de
+	# Godot, aux marges différentes : le texte se décale.
+	t.set_stylebox("hover_pressed", "Button", box(Color(CYAN, 0.35), CYAN, 1, 4, 14, 8))
 	t.set_stylebox("focus", "Button", box(Color(0, 0, 0, 0), Color(CYAN, 0.7), 1, 4, 14, 8))
 	t.set_stylebox("disabled", "Button", box(Color(0.06, 0.07, 0.1, 0.8), Color(1, 1, 1, 0.06), 1, 4, 14, 8))
 	t.set_color("font_color", "Button", TEXT)

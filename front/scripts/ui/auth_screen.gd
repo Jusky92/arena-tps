@@ -7,6 +7,9 @@ extends Control
 ## aucune connexion, on joue en LAN par adresse IP.
 
 const MAIN_MENU := "res://scenes/main_menu.tscn"
+## Identifiants retenus par « Se souvenir de moi ». Fichier chiffré avec une clé
+## propre à la machine : illisible tel quel, mais ce n'est pas un coffre-fort.
+const REMEMBER_PATH := "user://identifiants.cfg"
 
 var _card_content: VBoxContainer
 var _error_label: Label
@@ -196,7 +199,27 @@ func _show_login() -> void:
 	_card_content.add_child(_field_label("Mot de passe"))
 	var password := _field("••••••••", true)
 	_card_content.add_child(password)
-	_card_content.add_child(_link("Mot de passe oublié ?", _show_reset))
+	var remember := CheckBox.new()
+	remember.text = "Se souvenir de moi"
+	remember.add_theme_font_size_override("font_size", 16)
+	remember.add_theme_color_override("font_color", UiTheme.MUTED)
+	remember.add_theme_color_override("font_hover_color", UiTheme.CYAN)
+	remember.add_theme_color_override("font_pressed_color", UiTheme.TEXT)
+	remember.add_theme_color_override("font_hover_pressed_color", UiTheme.CYAN)
+	var saved := _load_credentials()
+	if not saved.is_empty():
+		ident.text = saved.identifier
+		password.text = saved.password
+		remember.button_pressed = true
+	# Décocher oublie tout de suite les identifiants enregistrés.
+	remember.toggled.connect(func(on: bool) -> void:
+		if not on:
+			_forget_credentials())
+	var options := HBoxContainer.new()
+	options.add_child(remember)
+	options.add_child(UiTheme.spacer(Vector2.ZERO, true))
+	options.add_child(_link("Mot de passe oublié ?", _show_reset))
+	_card_content.add_child(options)
 	_card_content.add_child(_error_label)
 	var go := UiTheme.button("SE CONNECTER", true)
 	_card_content.add_child(go)
@@ -206,7 +229,12 @@ func _show_login() -> void:
 	_submit = func() -> void:
 		_apply_host()
 		_run(go, "CONNEXION…", func() -> Dictionary: return await Backend.login(ident.text, password.text),
-			func(_r: Dictionary) -> void: _enter_game(),
+			func(_r: Dictionary) -> void:
+				if remember.button_pressed:
+					_save_credentials(ident.text.strip_edges(), password.text)
+				else:
+					_forget_credentials()
+				_enter_game(),
 			func(r: Dictionary) -> bool:
 				# Compte pas encore vérifié : on passe à la saisie du code. Connecté avec
 				# son pseudo, le joueur devra aussi donner son e-mail (le code y est envoyé).
@@ -217,7 +245,11 @@ func _show_login() -> void:
 					return true
 				return false)
 	go.pressed.connect(func() -> void: _submit.call())
-	ident.grab_focus.call_deferred()
+	# Identifiants pré-remplis : le focus va au bouton, Entrée suffit pour se connecter.
+	if saved.is_empty():
+		ident.grab_focus.call_deferred()
+	else:
+		go.grab_focus.call_deferred()
 
 
 func _show_register() -> void:
@@ -393,6 +425,35 @@ func _show_error(message: String, color := UiTheme.RED) -> void:
 	_error_label.text = message
 	_error_label.add_theme_color_override("font_color", color)
 	_error_label.visible = true
+
+
+## Clé de chiffrement du fichier des identifiants : liée à cette machine.
+func _credentials_key() -> String:
+	var id := OS.get_unique_id()
+	return "arena-tps:" + (id if not id.is_empty() else OS.get_name())
+
+
+## Identifiants retenus ({identifier, password}), ou {} s'il n'y en a pas.
+func _load_credentials() -> Dictionary:
+	var cfg := ConfigFile.new()
+	if cfg.load_encrypted_pass(REMEMBER_PATH, _credentials_key()) != OK:
+		return {}
+	var identifier: String = cfg.get_value("compte", "identifiant", "")
+	if identifier.is_empty():
+		return {}
+	return {"identifier": identifier, "password": cfg.get_value("compte", "mot_de_passe", "")}
+
+
+func _save_credentials(identifier: String, password: String) -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("compte", "identifiant", identifier)
+	cfg.set_value("compte", "mot_de_passe", password)
+	cfg.save_encrypted_pass(REMEMBER_PATH, _credentials_key())
+
+
+func _forget_credentials() -> void:
+	if FileAccess.file_exists(REMEMBER_PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(REMEMBER_PATH))
 
 
 func _enter_game() -> void:
