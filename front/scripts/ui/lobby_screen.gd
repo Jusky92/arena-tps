@@ -195,6 +195,7 @@ func _build_settings_panel() -> Control:
 	_bots_slider.min_value = 0
 	_bots_slider.max_value = Net.max_players - 1
 	_bots_slider.step = 1
+	_bots_slider.scrollable = false       # la molette ne change pas les réglages
 	_bots_slider.value = Net.settings.get("bots", 2)
 	_bots_slider.custom_minimum_size = Vector2(0, 24)
 	_bots_slider.value_changed.connect(func(_v: float) -> void: _push_settings())
@@ -211,6 +212,7 @@ func _build_settings_panel() -> Control:
 	_duration_slider.min_value = 60
 	_duration_slider.max_value = 600
 	_duration_slider.step = 30
+	_duration_slider.scrollable = false
 	_duration_slider.value = Net.settings.get("duration", 180.0)
 	_duration_slider.custom_minimum_size = Vector2(0, 24)
 	_duration_slider.value_changed.connect(func(_v: float) -> void: _push_settings())
