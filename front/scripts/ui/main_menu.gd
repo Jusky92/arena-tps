@@ -62,6 +62,7 @@ func _ready() -> void:
 	root.add_child(_build_bottom_bar())
 
 	Backend.party_changed.connect(_refresh_party)
+	Backend.party_changed.connect(_refresh_friends)    # bouton + réservé au chef
 	Backend.invites_changed.connect(_refresh_party)
 	Backend.friends_changed.connect(_refresh_friends)
 	Backend.match_ready.connect(_on_match_ready)
@@ -75,6 +76,7 @@ func _ready() -> void:
 	_refresh_services()
 	Backend.refresh_friends()
 	_show_page("play")
+	Backend.leave_solo_party()
 
 
 # =========================================================================== barres
@@ -256,11 +258,10 @@ func _build_play_page() -> Control:
 	col.add_theme_constant_override("separation", 14)
 	scroll.add_child(col)
 
-	var party := UiTheme.panel()
+	# Invitations reçues, puis le groupe (ou le bouton pour en créer un).
 	_party_box = VBoxContainer.new()
 	_party_box.add_theme_constant_override("separation", 8)
-	party.add_child(_party_box)
-	col.add_child(party)
+	col.add_child(_party_box)
 	_refresh_party()
 
 	# --- En ligne, avec le back : groupe -> serveur dédié ---
@@ -370,23 +371,58 @@ func _refresh_party() -> void:
 		line.add_child(ignore)
 		_party_box.add_child(banner)
 
+	if Backend.party.is_empty():
+		_party_box.add_child(_build_no_party())
+	else:
+		_party_box.add_child(_build_party_panel())
+
+
+## Pas de groupe (cas par défaut) : bouton pour en créer un.
+func _build_no_party() -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	var create := UiTheme.button("CRÉER UN GROUPE", false, UiTheme.CYAN, 46)
+	create.custom_minimum_size.x = 210
+	create.tooltip_text = "Crée un groupe dont tu es le chef, puis invite tes amis"
+	create.pressed.connect(func() -> void:
+		create.disabled = true
+		var r: Dictionary = await Backend.create_party()
+		if not r.ok:
+			if is_instance_valid(create):
+				create.disabled = false
+			_show_toast(r.message))
+	row.add_child(create)
+	return row
+
+
+## Encadré GROUPE : membres et places libres, exclusion (chef), quitter ou supprimer.
+func _build_party_panel() -> Control:
+	var panel := UiTheme.panel()
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	panel.add_child(box)
+
 	var members: Array = Backend.party_members()
-	var leader_id: String = Backend.party.get("leader_id", Backend.user_id())
+	var leader_id: String = Backend.party.get("leader_id", "")
 	var i_lead := Backend.is_party_leader()
 	var header := HBoxContainer.new()
 	header.add_child(UiTheme.label("GROUPE", 14, UiTheme.MUTED, true))
 	header.add_child(UiTheme.spacer(Vector2.ZERO, true))
 	header.add_child(UiTheme.label("%d / 8" % members.size(), 15, UiTheme.CYAN, true))
-	if not Backend.party.is_empty():
-		var leave := Button.new()
-		leave.text = "Quitter le groupe"
-		leave.pressed.connect(func() -> void:
-			var r: Dictionary = await Backend.leave_party()
-			if not r.ok:
-				_show_toast(r.message))
-		header.add_child(UiTheme.spacer(Vector2(10, 0)))
-		header.add_child(leave)
-	_party_box.add_child(header)
+	# Seul dans le groupe : le quitter le supprime (côté back aussi).
+	var alone := members.size() <= 1
+	var leave := Button.new()
+	leave.text = "Supprimer le groupe" if alone else "Quitter le groupe"
+	leave.pressed.connect(func() -> void:
+		leave.disabled = true
+		var r: Dictionary = await Backend.leave_party()
+		if not r.ok:
+			if is_instance_valid(leave):
+				leave.disabled = false
+			_show_toast(r.message))
+	header.add_child(UiTheme.spacer(Vector2(10, 0)))
+	header.add_child(leave)
+	box.add_child(header)
 
 	var grid := GridContainer.new()
 	grid.columns = 4
@@ -423,10 +459,11 @@ func _refresh_party() -> void:
 					_show_toast(r.message))
 			line.add_child(kick)
 		grid.add_child(slot)
-	_party_box.add_child(grid)
+	box.add_child(grid)
 	var help := UiTheme.label("Invite tes amis en ligne avec le bouton + dans la liste de droite. Le chef lance la partie : chacun rejoint le serveur automatiquement, et les places libres s'ouvrent aux autres joueurs.", 14, UiTheme.MUTED)
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_party_box.add_child(help)
+	box.add_child(help)
+	return panel
 
 
 # --------------------------------------------------------------------------- lancement en ligne
@@ -440,6 +477,7 @@ func _launch_online() -> void:
 	var r: Dictionary = await Backend.launch_party()
 	if not r.ok:
 		_overlay_error(r.message)
+		Backend.leave_solo_party()
 		return
 	_connect_with_ticket(r)
 
@@ -499,6 +537,7 @@ func _on_net_joined() -> void:
 
 
 func _on_net_failed(reason: String) -> void:
+	Backend.leave_solo_party()     # lancement solo : le serveur n'a pas pu être rejoint
 	if is_instance_valid(_overlay):
 		_overlay_error(reason)     # connexion avec un ticket (lancement, serveur public)
 		return

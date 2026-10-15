@@ -201,11 +201,19 @@ func _name_of(id: String) -> String:
 
 # =========================================================================== groupe
 
+func create_party() -> Dictionary:
+	if not b.party.is_empty():
+		return _err("Tu es déjà dans un groupe.")
+	b.party = {"party_id": Uuid.v4(), "leader_id": b.user_id(), "status": "lobby",
+		"members": [{"user_id": b.user_id(), "username": b.username()}]}
+	b.party_changed.emit()
+	return _ok()
+
+
 ## L'ami invité « accepte » après un court instant.
 func invite_to_party(friend_id: String) -> Dictionary:
 	if b.party.is_empty():
-		b.party = {"party_id": Uuid.v4(), "leader_id": b.user_id(), "status": "lobby",
-			"members": [{"user_id": b.user_id(), "username": b.username()}]}
+		create_party()
 	var members: Array = b.party.members
 	if members.any(func(m): return m.user_id == friend_id):
 		return _err("Ce joueur est déjà dans le groupe.")

@@ -301,6 +301,12 @@ func _ensure_party() -> Dictionary:
 	return r
 
 
+func create_party() -> Dictionary:
+	if not b.party.is_empty():
+		return _err("Tu es déjà dans un groupe.")
+	return await _ensure_party()
+
+
 func _apply_party(data: Dictionary, force := false) -> void:
 	var version := int(data.get("version", 0))
 	if not force and data.party_id == b.party.get("party_id") and version < _party_version:

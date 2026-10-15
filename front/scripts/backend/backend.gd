@@ -51,6 +51,8 @@ var outgoing: Array = []
 var invites: Array = []
 
 var _impl: Node
+## Groupe créé par un lancement en ligne sans groupe : le joueur le quitte au retour au menu.
+var _solo_party_id := ""
 
 
 func _ready() -> void:
@@ -165,6 +167,7 @@ func _lose_session(reason: String) -> void:
 
 
 func _clear() -> void:
+	_solo_party_id = ""
 	user = {}
 	party = {}
 	friends = []
@@ -221,6 +224,11 @@ func remove_friend(friend_id: String) -> Dictionary:
 
 # =========================================================================== Groupe
 
+## Crée un groupe dont le joueur est le chef (il n'en a pas par défaut).
+func create_party() -> Dictionary:
+	return await _impl.create_party()
+
+
 ## Invite un ami (le groupe est créé s'il n'existe pas encore).
 func invite_to_party(friend_id: String) -> Dictionary:
 	return await _impl.invite_to_party(friend_id)
@@ -235,6 +243,7 @@ func dismiss_invite(invite_id: String) -> void:
 	invites_changed.emit()
 
 
+## Quitte le groupe. Le dernier membre qui part le supprime.
 func leave_party() -> Dictionary:
 	return await _impl.leave_party()
 
@@ -246,7 +255,20 @@ func kick_from_party(member_id: String) -> Dictionary:
 ## Chef : réserve un serveur pour le groupe (créé s'il n'existe pas).
 ## {ok, server_id, address, port, ticket} ; les autres membres reçoivent `match_ready`.
 func launch_party() -> Dictionary:
-	return await _impl.launch_party()
+	var had_party := not party.is_empty()
+	var r: Dictionary = await _impl.launch_party()
+	if not had_party and not party.is_empty():
+		_solo_party_id = party.party_id
+	return r
+
+
+## Quitte le groupe créé par un lancement solo, s'il est toujours seul dedans.
+## Appelé au retour au menu (et si le lancement échoue).
+func leave_solo_party() -> void:
+	var id := _solo_party_id
+	_solo_party_id = ""
+	if not id.is_empty() and party.get("party_id") == id and party.get("members", []).size() <= 1:
+		await leave_party()
 
 
 # =========================================================================== Serveurs publics
