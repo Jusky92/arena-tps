@@ -86,7 +86,7 @@ func _build_top_bar() -> Control:
 	var bar := PanelContainer.new()
 	bar.add_theme_stylebox_override("panel", UiTheme.box(Color(0.02, 0.03, 0.05, 0.9), Color(0, 0, 0, 0), 0, 0, 24, 10))
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 22)
+	row.add_theme_constant_override("separation", 14)
 	bar.add_child(row)
 
 	var logo := HBoxContainer.new()
@@ -97,15 +97,20 @@ func _build_top_bar() -> Control:
 	logo.add_child(kana)
 	logo.add_child(UiTheme.title("TPS", 24, UiTheme.CYAN))
 	row.add_child(logo)
-	row.add_child(UiTheme.spacer(Vector2(16, 0)))
 
 	for page in [["JOUER", "play"], ["SPÉCIALISTES", "specialists"], ["CLASSES", "classes"], ["STATISTIQUES", "stats"]]:
 		var b := Button.new()
 		b.text = page[0]
 		b.flat = true
 		b.add_theme_font_override("font", UiTheme.title_font())
-		b.add_theme_font_size_override("font_size", 15)
+		b.add_theme_font_size_override("font_size", 13)
 		b.add_theme_color_override("font_color", UiTheme.MUTED)
+		# Onglet plat : petites marges (les marges des boutons du thème sont larges).
+		var tab_style := StyleBoxEmpty.new()
+		tab_style.content_margin_left = 6
+		tab_style.content_margin_right = 6
+		for state in ["normal", "hover", "pressed", "focus", "hover_pressed"]:
+			b.add_theme_stylebox_override(state, tab_style)
 		b.add_theme_color_override("font_hover_color", Color.WHITE)
 		b.pressed.connect(_show_page.bind(page[1]))
 		row.add_child(b)
@@ -270,6 +275,9 @@ func _build_play_page() -> Control:
 	class_row.add_child(UiTheme.label("CLASSE", 14, UiTheme.MUTED, true))
 	var picker := OptionButton.new()
 	picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	picker.fit_to_longest_item = false
+	picker.clip_text = true
+	picker.custom_minimum_size.x = 120
 	for i in GameState.loadouts.size():
 		var l: Dictionary = GameState.loadouts[i]
 		var p := WeaponCatalog.find(l.primary)
@@ -309,6 +317,7 @@ func _build_play_page() -> Control:
 	_launch_button = UiTheme.button("LANCER EN LIGNE", true, UiTheme.CYAN, 58)
 	_launch_button.add_theme_font_size_override("font_size", 20)
 	_launch_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_launch_button.clip_text = true      # le texte ne doit jamais élargir la page
 	_launch_button.tooltip_text = "Réserve un serveur de jeu pour ton groupe (ou pour toi seul)"
 	_launch_button.pressed.connect(_launch_online)
 	launch_row.add_child(_launch_button)
@@ -370,7 +379,9 @@ func _update_launch_button() -> void:
 	var leader := Backend.is_party_leader()
 	_launch_button.disabled = not leader or Backend.is_simulated()
 	if Backend.is_simulated():
-		_launch_button.text = "LANCER EN LIGNE (connecte-toi au back)"
+		# Texte court : un texte long élargissait toute la page (liste d'amis coupée).
+		_launch_button.text = "EN LIGNE : BACK REQUIS"
+		_launch_button.tooltip_text = "Hors ligne : connecte-toi au back depuis l'écran de connexion pour jouer en ligne"
 	elif not leader:
 		_launch_button.text = "LE CHEF LANCE LA PARTIE…"
 	else:

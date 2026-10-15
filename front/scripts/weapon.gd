@@ -16,6 +16,7 @@ signal hit_confirmed(killed: bool, headshot: bool)
 
 const MAX_PIERCE := 5     # nombre max de cibles traversées par une balle perforante
 const FIRING_HOLD := 0.2  # durée pendant laquelle l'arme est « en train de tirer » (vu par les autres)
+const AIM_RAY := 300.0    # longueur du rayon de visée depuis la caméra (m)
 
 @onready var muzzle: Marker3D = $Muzzle
 
@@ -296,11 +297,14 @@ func _push(target: Object, direction: Vector3, strength: float) -> void:
 
 
 ## Point visé à l'écran (avec dispersion), trouvé par un rayon depuis la caméra.
+## Le rayon va toujours loin (AIM_RAY) : la caméra est derrière le personnage, un
+## rayon limité à la portée d'une arme courte (katana) s'arrêterait derrière lui.
+## La portée de l'arme s'applique ensuite depuis le canon.
 func _aim_point(spread_deg: float) -> Vector3:
 	var space := get_world_3d().direct_space_state
 	var cam_from := _camera.global_position
 	var cam_dir := _spread_direction(-_camera.global_basis.z, spread_deg)
-	var cam_to := cam_from + cam_dir * data.max_range
+	var cam_to := cam_from + cam_dir * maxf(data.max_range, AIM_RAY)
 	var aim_hit := _raycast(space, cam_from, cam_to, [])
 	return aim_hit.position if aim_hit else cam_to
 

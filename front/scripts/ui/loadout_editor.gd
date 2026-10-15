@@ -31,7 +31,7 @@ func _ready() -> void:
 func _build() -> void:
 	# Colonne de gauche : les classes.
 	var left := UiTheme.panel()
-	left.custom_minimum_size = Vector2(300, 0)
+	left.custom_minimum_size = Vector2(230, 0)
 	add_child(left)
 	var lcol := VBoxContainer.new()
 	lcol.add_theme_constant_override("separation", 8)
@@ -114,7 +114,7 @@ func _build() -> void:
 
 func _weapon_grid() -> GridContainer:
 	var grid := GridContainer.new()
-	grid.columns = 3
+	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 10)
 	grid.add_theme_constant_override("v_separation", 10)
 	return grid
@@ -123,7 +123,8 @@ func _weapon_grid() -> GridContainer:
 ## Carte d'arme : icône, nom et caractéristiques principales.
 func _weapon_card(w: WeaponData, selected: bool) -> Button:
 	var b := UiTheme.button("", selected, UiTheme.CYAN, 84)
-	b.custom_minimum_size.x = 200
+	b.custom_minimum_size.x = 150
+	b.clip_text = true
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.icon = UiIcons.weapon(w)
 	b.expand_icon = false
