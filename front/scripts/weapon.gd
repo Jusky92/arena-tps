@@ -5,7 +5,7 @@ extends Node3D
 
 signal fired(recoil_deg: float)
 signal ammo_changed(ammo: int, mag_size: int, reloading: bool)
-signal hit_confirmed(killed: bool)
+signal hit_confirmed(killed: bool, headshot: bool)
 
 const MAX_PIERCE := 5  # nombre max de cibles traversées par une balle perforante
 
@@ -82,12 +82,14 @@ func _try_fire(aiming: bool, spread_factor := 1.0) -> void:
 	var spread := (data.aim_spread_deg if aiming else data.spread_deg) * spread_factor
 	var any_hit := false
 	var any_kill := false
+	var any_head := false
 	for i in data.pellets:
 		var result := _fire_pellet(spread)
 		any_hit = any_hit or result.hit
 		any_kill = any_kill or result.killed
+		any_head = any_head or result.headshot
 	if any_hit:
-		hit_confirmed.emit(any_kill)
+		hit_confirmed.emit(any_kill, any_head)
 
 	Effects.muzzle_flash(muzzle, data.tracer_color)
 	fired.emit(data.recoil_deg)
@@ -112,7 +114,7 @@ func _fire_pellet(spread_deg: float) -> Dictionary:
 	var dir := (aim_point - from).normalized()
 	var to := from + dir * data.max_range
 
-	var result := {"hit": false, "killed": false}
+	var result := {"hit": false, "killed": false, "headshot": false}
 	var exclude: Array[RID] = []
 	var end_point := to
 	var pierce_left := MAX_PIERCE if piercing else 1
@@ -129,16 +131,21 @@ func _fire_pellet(spread_deg: float) -> Dictionary:
 			Sfx.play_at("deflect", hit.position, -6.0, randf_range(0.9, 1.1))
 			break
 		if target.has_method("take_damage"):
-			Effects.impact(_world(), hit.position, Color(1, 0.25, 0.2), 0.09)
+			# Point touché par rapport aux pieds de la cible : donne la zone (tête / corps).
+			var offset: Vector3 = hit.position - (target as Node3D).global_position
+			var headshot := MatchRules.is_headshot(target, offset)
+			Effects.impact(_world(), hit.position, Color(1, 0.85, 0.2) if headshot else Color(1, 0.25, 0.2), 0.12 if headshot else 0.09)
 			var killed := false
 			if Net.online and target.get("peer_id") != null and target.peer_id != 0:
-				# En ligne, c'est le serveur qui applique les dégâts : on lui signale l'impact.
+				# En ligne, le serveur vérifie l'impact, choisit la zone et calcule les
+				# dégâts : on ne lui envoie que la cible, le point touché et l'arme.
 				# L'élimination nous reviendra par le réseau (signal player_died).
-				Net.hit(target.peer_id, data.damage, data.display_name, _shooter.peer_id if "peer_id" in _shooter else 0)
+				Net.hit(target.peer_id, offset, data.display_name, _shooter.peer_id if "peer_id" in _shooter else 0)
 			else:
-				killed = target.take_damage(data.damage, _shooter)
+				killed = target.take_damage(MatchRules.hit_damage(data, headshot), _shooter, headshot)
 			result.hit = true
 			result.killed = result.killed or killed
+			result.headshot = result.headshot or headshot
 			exclude.append(hit.rid)
 			pierce_left -= 1
 		else:

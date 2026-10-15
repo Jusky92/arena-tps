@@ -24,9 +24,33 @@ static func best_spawn(map: ArenaMap, players: Array, for_player: Node) -> Trans
 
 ## Dégâts réellement subis : le bouclier (capacité du Tank) les réduit.
 static func damage_taken(target: Node, damage: int) -> int:
-	if target.is_shielded():
+	if target.has_method("is_shielded") and target.is_shielded():
 		return maxi(int(round(damage * target.class_data.ability_strength)), 1)
 	return damage
+
+
+# ---------------------------------------------------------------- Zones de tir
+
+## Hauteur de la zone "tête", mesurée depuis le haut de la capsule de collision.
+const HEAD_SIZE := 0.32
+
+
+## Hauteur actuelle de la cible (sa capsule rapetisse quand elle s'accroupit).
+static func body_height(target: Node) -> float:
+	var shape: Shape3D = target.collision.shape
+	return (shape as CapsuleShape3D).height if shape is CapsuleShape3D else 1.8
+
+
+## true si l'impact est dans la tête. `hit_offset` = point touché - position de la
+## cible (ses pieds) : seule la hauteur compte.
+static func is_headshot(target: Node, hit_offset: Vector3) -> bool:
+	return hit_offset.y >= body_height(target) - HEAD_SIZE
+
+
+## Dégâts d'une balle (un plomb), multipliés pour la tête. Le bouclier de la cible
+## s'applique ensuite (damage_taken, ou take_damage hors ligne).
+static func hit_damage(weapon: WeaponData, headshot: bool) -> int:
+	return int(round(float(weapon.damage) * (weapon.headshot_multiplier if headshot else 1.0)))
 
 
 ## Calcule le maillage de navigation (zones où l'on peut marcher) à partir des

@@ -20,10 +20,11 @@ extends CharacterBody3D
 ##   F9 : s'infliger 25 dégâts (test, seulement depuis l'éditeur ou un export debug)
 
 signal health_changed(health: int, max_health: int)
-signal damaged(amount: int)
+## `source` = position du tireur, ou Vector3.INF si on ne la connaît pas (indicateur de provenance).
+signal damaged(amount: int, source: Vector3)
 signal died(killer: Node)
 signal ammo_changed(ammo: int, mag_size: int, reloading: bool)
-signal hit_confirmed(killed: bool)
+signal hit_confirmed(killed: bool, headshot: bool)
 
 const BASE_FOV := 70.0
 const SPRINT_FOV := 78.0
@@ -81,6 +82,8 @@ var best_streak: int = 0
 var crouching: bool = false
 ## Secondes de protection d'apparition restantes (0 = vulnérable).
 var spawn_protection: float = 0.0
+## true si le dernier coup reçu était un tir à la tête (fil des éliminations hors ligne).
+var last_headshot := false
 ## false = le joueur local ne contrôle plus son personnage (menu pause ouvert).
 ## La simulation continue : il tombe, peut être touché, etc.
 var input_enabled: bool = true
@@ -134,7 +137,7 @@ func _ready() -> void:
 	rig.build(class_data.character_design, class_data.weapon.model, weapon)
 
 	weapon.ammo_changed.connect(_on_weapon_ammo_changed)
-	weapon.hit_confirmed.connect(func(k): hit_confirmed.emit(k))
+	weapon.hit_confirmed.connect(func(k, h): hit_confirmed.emit(k, h))
 	weapon.fired.connect(_on_weapon_fired)
 	weapon.setup(class_data.weapon, self, camera)
 
@@ -501,7 +504,7 @@ func _update_spawn_protection(delta: float) -> void:
 
 ## Inflige des dégâts. Renvoie true si ce coup a éliminé le joueur.
 ## Même méthode que les cibles : un tir ne fait pas la différence.
-func take_damage(amount: int, from: Node) -> bool:
+func take_damage(amount: int, from: Node, headshot := false) -> bool:
 	if not alive:
 		return false
 	if is_protected():
@@ -511,7 +514,8 @@ func take_damage(amount: int, from: Node) -> bool:
 	health = max(health - amount, 0)
 	_shake = min(_shake + 0.5, 1.0)
 	rig.flash()
-	damaged.emit(amount)
+	last_headshot = headshot
+	damaged.emit(amount, (from as Node3D).global_position if from is Node3D else Vector3.INF)
 	health_changed.emit(health, class_data.max_health)
 	if brain and from:
 		brain.on_damaged(self, from)

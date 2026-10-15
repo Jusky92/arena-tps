@@ -9,6 +9,7 @@ display_name = "Fusil à pompe"
 damage = 11
 pellets = 9
 max_range = 30.0
+headshot_multiplier = 1.5
 fire_rate = 1.3
 automatic = false
 mag_size = 6

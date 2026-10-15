@@ -9,6 +9,7 @@ display_name = "Fusil de précision"
 damage = 70
 pellets = 1
 max_range = 200.0
+headshot_multiplier = 2.5
 fire_rate = 0.9
 automatic = false
 mag_size = 5

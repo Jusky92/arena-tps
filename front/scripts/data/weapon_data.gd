@@ -12,6 +12,7 @@ enum Model { SHOTGUN, SMG, SNIPER }
 @export var damage: int = 20                  ## dégâts par projectile
 @export var pellets: int = 1                  ## nombre de projectiles par tir (fusil à pompe > 1)
 @export var max_range: float = 100.0          ## portée en mètres
+@export var headshot_multiplier: float = 2.0  ## dégâts multipliés quand la balle touche la tête
 
 @export_group("Cadence et munitions")
 @export var fire_rate: float = 8.0            ## tirs par seconde

@@ -5,8 +5,10 @@ extends Node3D
 ## Le serveur ne joue pas : il arbitre.
 ##   - les joueurs humains sont des pantins qui suivent l'état envoyé par leur client ;
 ##   - les bots sont simulés ici (BotBrain) et diffusés comme les joueurs ;
-##   - il applique les dégâts signalés par les tireurs, annonce les éliminations,
-##     décide des réapparitions et tient le chronomètre ;
+##   - il arbitre les tirs : un client signale seulement « j'ai touché telle cible à
+##     tel endroit avec mon arme » ; le serveur vérifie (arme, portée, ligne de vue,
+##     cadence), choisit la zone (tête / corps) et calcule les dégâts ;
+##   - il annonce les éliminations, décide des réapparitions et tient le chronomètre ;
 ##   - à la fin, il envoie les résultats au back (match.finished) via BackendLink.
 
 const MapScene := preload("res://scenes/maps/arena.tscn")
@@ -32,6 +34,16 @@ var _result_keys := {}                  # identifiant réseau -> clé dans _resu
 var _match_id := ""
 var _started_at := ""
 var _running := false
+## Cadence : touches encore autorisées par tireur -> [jetons, instant de la dernière recharge (ms)].
+var _hit_budget := {}
+
+## Tolérances de l'arbitrage des tirs (les positions vues par le tireur ont un peu
+## de retard sur celles du serveur).
+const RANGE_MARGIN := 3.0               # mètres au-delà de la portée de l'arme
+const HITBOX_MARGIN := 0.3              # mètres autour de la capsule de la cible
+const LOS_MARGIN := 0.6                 # un mur à moins de ça du point touché ne bloque pas
+const FIRE_RATE_MARGIN := 1.25          # cadence tolérée par rapport à celle de l'arme
+const PIERCE_BURST := 5                 # touches d'un seul tir (balles perforantes)
 
 
 func _ready() -> void:
@@ -45,7 +57,7 @@ func _ready() -> void:
 	_started_at = _now_iso()
 	_running = true
 
-	Net.health_provider = _apply_damage
+	Net.hit_resolver = _resolve_hit
 	Net.remote_states.connect(_on_remote_states)
 	Net.player_died.connect(_on_death)
 	Net.player_respawned.connect(_on_respawn)
@@ -54,7 +66,7 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	Net.health_provider = Callable()
+	Net.hit_resolver = Callable()
 
 
 func _process(delta: float) -> void:
@@ -120,7 +132,7 @@ func _on_joined(id: int, _info: Dictionary) -> void:
 	if _nodes.has(id) or not Net.players.has(id):
 		return
 	_spawn(id)
-	if _nodes.size() > Net.MAX_PLAYERS:
+	if _nodes.size() > Net.max_players:
 		var bots := _nodes.keys().filter(func(i): return Net.is_bot(i))
 		if not bots.is_empty():
 			bots.sort()
@@ -160,22 +172,78 @@ func _on_remote_states(_sender_id: int, states: Dictionary) -> void:
 			_human_states[id] = states[id]
 
 
-## Un tireur signale un impact : on applique les dégâts et on diffuse.
-func _apply_damage(target_id: int, damage: int, shooter_id: int, weapon: String) -> void:
+## Un tireur signale un impact. Le serveur vérifie qu'il est plausible, choisit la
+## zone touchée et calcule lui-même les dégâts à partir de la fiche de l'arme.
+## `hit_offset` = point touché - position de la cible, vu par le tireur.
+func _resolve_hit(target_id: int, shooter_id: int, hit_offset: Vector3, weapon: String) -> void:
 	var node = _nodes.get(target_id)
-	if not is_instance_valid(node) or not node.alive or node.is_protected():
-		return
-	node.health = maxi(node.health - MatchRules.damage_taken(node, damage), 0)
 	var shooter = _nodes.get(shooter_id)
-	if node.brain and is_instance_valid(shooter):
+	if not is_instance_valid(node) or not is_instance_valid(shooter):
+		return
+	if not node.alive or node.is_protected() or not shooter.alive or node == shooter:
+		return
+	var reason := _reject_reason(node, shooter, hit_offset, weapon)
+	if not reason.is_empty():
+		Net.log_line("SERVEUR : tir de %d sur %d refusé (%s)" % [shooter_id, target_id, reason])
+		return
+	if not _spend_hit(shooter_id, shooter.class_data.weapon):
+		return   # plus de touches que l'arme ne peut en faire : ignorée sans bruit
+
+	var headshot := MatchRules.is_headshot(node, hit_offset)
+	var damage := MatchRules.damage_taken(node, MatchRules.hit_damage(shooter.class_data.weapon, headshot))
+	node.health = maxi(node.health - damage, 0)
+	if node.brain:
 		node.brain.on_damaged(node, shooter)
 	Net.push_health.rpc(target_id, node.health, node.class_data.max_health)
+	Net.send_hit(target_id, shooter_id, damage, headshot)
 	if node.health == 0:
-		Net.push_death.rpc(target_id, shooter_id, weapon)
+		Net.push_death.rpc(target_id, shooter_id, weapon, headshot)
+
+
+## Raison du refus d'un impact, ou "" s'il est accepté.
+func _reject_reason(node: Node3D, shooter: Node3D, hit_offset: Vector3, weapon: String) -> String:
+	var weapon_data: WeaponData = shooter.class_data.weapon
+	if weapon_data.display_name != weapon:
+		return "arme %s au lieu de %s" % [weapon, weapon_data.display_name]
+	if shooter.global_position.distance_to(node.global_position) > weapon_data.max_range + RANGE_MARGIN:
+		return "hors de portée"
+	var height := MatchRules.body_height(node)
+	var radius: float = (node.collision.shape as CapsuleShape3D).radius
+	if Vector2(hit_offset.x, hit_offset.z).length() > radius + HITBOX_MARGIN 			or hit_offset.y < -HITBOX_MARGIN or hit_offset.y > height + HITBOX_MARGIN:
+		return "point d'impact hors de la cible"
+	# Ligne de vue : des yeux du tireur au point touché, seul le décor peut bloquer.
+	var eye := shooter.global_position + Vector3.UP * (MatchRules.body_height(shooter) - 0.2)
+	var impact := node.global_position + hit_offset
+	var query := PhysicsRayQueryParameters3D.create(eye, impact)
+	var exclude: Array[RID] = []
+	for p in players:
+		if is_instance_valid(p):
+			exclude.append(p.get_rid())
+	query.exclude = exclude
+	var wall := get_world_3d().direct_space_state.intersect_ray(query)
+	if not wall.is_empty() and (wall.position as Vector3).distance_to(impact) > LOS_MARGIN:
+		return "mur entre le tireur et la cible"
+	return ""
+
+
+## Cadence : chaque tireur a une réserve de touches qui se recharge au rythme de
+## son arme (plombs par tir x tirs par seconde, avec une marge). Renvoie false si
+## la réserve est vide.
+func _spend_hit(shooter_id: int, weapon: WeaponData) -> bool:
+	var now := Time.get_ticks_msec()
+	var capacity := float(weapon.pellets * PIERCE_BURST)
+	var rate := weapon.fire_rate * weapon.pellets * FIRE_RATE_MARGIN
+	var budget: Array = _hit_budget.get(shooter_id, [capacity, now])
+	var tokens := minf(float(budget[0]) + (now - int(budget[1])) / 1000.0 * rate, capacity)
+	if tokens < 1.0:
+		_hit_budget[shooter_id] = [tokens, now]
+		return false
+	_hit_budget[shooter_id] = [tokens - 1.0, now]
+	return true
 
 
 ## Élimination (annoncée par push_death, qui s'exécute aussi ici).
-func _on_death(victim_id: int, killer_id: int, _weapon: String) -> void:
+func _on_death(victim_id: int, killer_id: int, _weapon: String, _headshot: bool) -> void:
 	var victim = _nodes.get(victim_id)
 	if is_instance_valid(victim):
 		victim.net_die()

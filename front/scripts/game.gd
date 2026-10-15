@@ -29,7 +29,8 @@ const TargetScene := preload("res://scenes/target_dummy.tscn")
 const MatchUIScene := preload("res://scenes/ui/match_ui.tscn")
 const PauseMenuScript := preload("res://scripts/ui/pause_menu.gd")
 
-const BOT_NAMES := ["NeoByte", "Gl1tch", "V0LT", "Cipher", "Kairo", "Nova", "Raven", "Hexa", "ZeroDay", "Proxy"]
+const BOT_NAMES := ["NeoByte", "Gl1tch", "V0LT", "Cipher", "Kairo", "Nova", "Raven", "Hexa", "ZeroDay", "Proxy",
+	"Synth", "Kitsune", "Ronin", "Pixel", "Onyx"]
 const STREAK_BANNERS := {2: "DOUBLE ÉLIMINATION", 3: "TRIPLE ÉLIMINATION", 5: "SÉRIE x5 · INARRÊTABLE", 8: "SÉRIE x8 · LÉGENDAIRE"}
 
 @onready var hud: CanvasLayer = $HUD
@@ -235,6 +236,7 @@ func _start_online_match() -> void:
 	Net.player_died.connect(_on_net_death)
 	Net.player_respawned.connect(_on_net_respawn)
 	Net.health_updated.connect(_on_net_health)
+	Net.hit_landed.connect(_on_net_hit)
 	Net.match_over.connect(_on_net_match_over)
 	Net.remote_spawned.connect(_on_net_joined)
 	Net.remote_left.connect(_on_net_left)
@@ -288,26 +290,32 @@ func _on_net_health(peer_id: int, health: int, max_health: int) -> void:
 	var node = _net_nodes.get(peer_id)
 	if not is_instance_valid(node):
 		return
-	var lost: bool = health < node.health
 	node.health = health
 	node.rig.flash()
-	if lost and node == player:
-		player.damaged.emit(node.class_data.max_health - health)
 	node.health_changed.emit(health, max_health)
 
 
+## Tir validé par le serveur, reçu seulement par la cible et le tireur : la cible
+## affiche d'où vient le tir (le flash rouge et l'indicateur de provenance).
+func _on_net_hit(target_id: int, shooter_id: int, damage: int, _headshot: bool) -> void:
+	if target_id != Net.my_id() or not is_instance_valid(player):
+		return
+	var shooter = _net_nodes.get(shooter_id)
+	player.damaged.emit(damage, shooter.global_position if is_instance_valid(shooter) else Vector3.INF)
+
+
 ## Élimination annoncée par le serveur : animation, fil des éliminations, écran de mort.
-func _on_net_death(victim_id: int, killer_id: int, weapon: String) -> void:
+func _on_net_death(victim_id: int, killer_id: int, weapon: String, headshot: bool) -> void:
 	var victim = _net_nodes.get(victim_id)
 	if not is_instance_valid(victim):
 		return
 	if victim.alive:
 		victim.net_die()
 	var killer_name := Net.player_name_of(killer_id) if killer_id != victim_id else "Arène"
-	_ui.add_kill(killer_name, victim.player_name, weapon, killer_id == Net.my_id(), victim_id == Net.my_id())
+	_ui.add_kill(killer_name, victim.player_name, weapon, killer_id == Net.my_id(), victim_id == Net.my_id(), headshot)
 	if killer_id == Net.my_id() and killer_id != victim_id:
 		var streak: int = Net.players.get(killer_id, {}).get("kills", 1)
-		_ui.show_banner("%s  +100" % STREAK_BANNERS.get(streak, "ÉLIMINATION"))
+		_ui.show_banner(_kill_banner(streak, headshot))
 		Sfx.play("kill", -2.0)
 	if victim_id == Net.my_id():
 		hud.show_death(killer_name if killer_name != "Arène" else "")
@@ -470,14 +478,19 @@ func _on_player_died(killer: Node, victim: CharacterBody3D) -> void:
 		killer_name = killer.player_name
 		weapon_name = killer.class_data.weapon.display_name
 		if killer == player:
-			var banner: String = STREAK_BANNERS.get(killer.streak, "ÉLIMINATION")
-			_ui.show_banner("%s  +100" % banner)
+			_ui.show_banner(_kill_banner(killer.streak, victim.last_headshot))
 	elif killer and killer.get("player_name") == null and killer != victim:
 		killer_name = str(killer.name)
 	if _mode == "deathmatch":
-		_ui.add_kill(killer_name, victim.player_name, weapon_name, killer == player, victim == player)
+		_ui.add_kill(killer_name, victim.player_name, weapon_name, killer == player, victim == player, victim.last_headshot)
 	if victim == player:
 		hud.show_death(killer_name if killer_name != "Arène" else "")
+
+
+## Bannière d'élimination : série en cours, sinon tir à la tête, sinon simple élimination.
+func _kill_banner(streak: int, headshot: bool) -> String:
+	var text: String = STREAK_BANNERS.get(streak, "TIR À LA TÊTE" if headshot else "ÉLIMINATION")
+	return "%s  +100" % text
 
 
 # ---------------------------------------------------------------- Partie

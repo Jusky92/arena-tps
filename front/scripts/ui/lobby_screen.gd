@@ -171,7 +171,7 @@ func _build_settings_panel() -> Control:
 	box.add_child(bots_row)
 	_bots_slider = HSlider.new()
 	_bots_slider.min_value = 0
-	_bots_slider.max_value = 6
+	_bots_slider.max_value = Net.max_players - 1
 	_bots_slider.step = 1
 	_bots_slider.value = Net.settings.get("bots", 2)
 	_bots_slider.custom_minimum_size = Vector2(0, 24)

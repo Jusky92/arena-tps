@@ -51,8 +51,8 @@ func hide_timer() -> void:
 	_leader_label.text = "ENTRAÎNEMENT · ÉCHAP POUR QUITTER"
 
 
-## Ajoute une ligne "tueur [arme] victime" au fil des éliminations.
-func add_kill(killer: String, victim: String, weapon: String, killer_local: bool, victim_local: bool) -> void:
+## Ajoute une ligne "tueur [arme] (tête) victime" au fil des éliminations.
+func add_kill(killer: String, victim: String, weapon: String, killer_local: bool, victim_local: bool, headshot := false) -> void:
 	var entry: PanelContainer = FeedEntryScene.instantiate()
 	_feed.add_child(entry)
 	if _feed.get_child_count() > MAX_FEED:
@@ -79,6 +79,8 @@ func add_kill(killer: String, victim: String, weapon: String, killer_local: bool
 	var weapon_text: Label = entry.get_node("%WeaponText")
 	weapon_text.text = "[%s]" % weapon
 	weapon_text.visible = icon == null
+	var head_icon: TextureRect = entry.get_node("%HeadshotIcon")
+	head_icon.visible = headshot
 	# Arrive en glissant depuis la droite, puis s'efface.
 	entry.modulate.a = 0.0
 	var tween := entry.create_tween()

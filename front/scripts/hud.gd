@@ -14,6 +14,7 @@ const KEY_HELP_TIME := 10.0        # l'aide des touches s'efface après ce déla
 
 @onready var _vignette: ColorRect = %Vignette
 @onready var _crosshair: Crosshair = %Crosshair
+@onready var _damage_indicator: DamageIndicator = %DamageIndicator
 @onready var _protect_box: Control = %Protect
 @onready var _protect_label: Label = %ProtectLabel
 @onready var _protect_bar: ProgressBar = %ProtectBar
@@ -74,6 +75,7 @@ func bind(player: Node) -> void:
 		if is_instance_valid(_player.weapon) and _player.weapon.fired.is_connected(_on_fired):
 			_player.weapon.fired.disconnect(_on_fired)
 	_player = player
+	_damage_indicator.player = player
 	var data: ClassData = player.class_data
 	_class_label.text = data.display_name.to_upper()
 	_class_label.add_theme_color_override("font_color", data.color.lightened(0.3))
@@ -177,7 +179,8 @@ func _on_health_changed(health: int, max_health: int, animate := true) -> void:
 	(_vignette.material as ShaderMaterial).set_shader_parameter("low_health", low)
 
 
-func _on_damaged(_amount: int) -> void:
+func _on_damaged(_amount: int, source: Vector3) -> void:
+	_damage_indicator.add(source)
 	var mat := _vignette.material as ShaderMaterial
 	if _vignette_tween:
 		_vignette_tween.kill()
@@ -205,10 +208,14 @@ func _on_fired(_recoil_deg: float) -> void:
 	_crosshair.kick()
 
 
-## Marque de touche sur le réticule (rouge quand on élimine), avec un son de confirmation.
-func _on_hit_confirmed(killed: bool) -> void:
-	Sfx.play("kill" if killed else "hit", -2.0 if killed else -6.0)
-	_crosshair.hit(killed)
+## Marque de touche sur le réticule (jaune à la tête, rouge quand on élimine), avec un
+## son de confirmation (plus aigu à la tête).
+func _on_hit_confirmed(killed: bool, headshot: bool) -> void:
+	if killed:
+		Sfx.play("kill", -2.0)
+	else:
+		Sfx.play("hit", -3.0 if headshot else -6.0, 1.45 if headshot else 1.0)
+	_crosshair.hit(killed, headshot)
 
 
 func show_death(killer_name: String) -> void:
@@ -232,6 +239,7 @@ func set_respawn_countdown(seconds: float) -> void:
 
 func hide_death() -> void:
 	_death_overlay.visible = false
+	_damage_indicator.clear()
 	_countdown.text = ""
 
 

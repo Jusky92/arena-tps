@@ -17,6 +17,7 @@ extends Node
 ##   --public-address 1.2.3.4          adresse que la Server List donne aux joueurs
 ##   --region eu                       région annoncée à la Server List
 ##   --bots 2 --duration 180           réglages des parties (modifiables par le chef en LAN)
+##   --max-players 16                  joueurs humains maximum par partie (1 à 16)
 ##   --serverlist-url http://…:8002    active le mode Server List
 ##
 ## Le serveur tourne sans fin, d'une partie à l'autre :
@@ -47,6 +48,7 @@ func _ready() -> void:
 	Engine.max_fps = 60
 	var args := _parse_args()
 	var port := int(args.get("port", Net.DEFAULT_PORT))
+	Net.max_players = clampi(int(args.get("max-players", 16)), 1, 16)
 
 	var serverlist_url := str(args.get("serverlist-url", ""))
 	if serverlist_url.is_empty():
@@ -69,7 +71,7 @@ func _ready() -> void:
 		"port": port,
 		"region": args.get("region", "eu"),
 		"map": MatchRules.MAP_ID,
-		"max_players": Net.MAX_PLAYERS,
+		"max_players": Net.max_players,
 		"build_version": Backend.BUILD_VERSION,
 	})
 	if not error.is_empty():
@@ -79,7 +81,7 @@ func _ready() -> void:
 
 	Net.lan_lobby = _link.is_lan()
 	Net.settings = {
-		"bots": clampi(int(args.get("bots", 2)), 0, Net.MAX_PLAYERS - 1),
+		"bots": clampi(int(args.get("bots", 2)), 0, Net.max_players - 1),
 		"duration": clampf(float(args.get("duration", 180.0)), 60.0, 600.0),
 	}
 	Net.ticket_verifier = _link.verify
