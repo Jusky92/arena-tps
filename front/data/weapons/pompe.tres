@@ -1,12 +1,12 @@
-[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="WeaponData" format=3 uid="uid://di6ngubxsj60g"]
 
-[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_w"]
+[ext_resource type="Script" uid="uid://c1eue6wr0lwki" path="res://scripts/data/weapon_data.gd" id="1_w"]
 
 [resource]
 script = ExtResource("1_w")
 id = "shotgun"
-model = 0
 display_name = "Fusil à pompe"
+model = 0
 damage = 11
 pellets = 9
 max_range = 30.0

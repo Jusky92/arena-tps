@@ -1,16 +1,14 @@
-[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="WeaponData" format=3 uid="uid://b8k8ix1pwy38i"]
 
-[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_w"]
+[ext_resource type="Script" uid="uid://c1eue6wr0lwki" path="res://scripts/data/weapon_data.gd" id="1_w"]
 
 [resource]
 script = ExtResource("1_w")
 id = "rocket"
 display_name = "Lance-roquettes"
 model = 3
-slot = 0
 kind = 1
 damage = 100
-pellets = 1
 max_range = 80.0
 headshot_multiplier = 1.0
 fire_rate = 0.6
@@ -19,7 +17,6 @@ mag_size = 1
 reload_time = 2.5
 spread_deg = 1.5
 aim_spread_deg = 0.0
-aim_fov = 55.0
 recoil_deg = 4.0
 projectile_speed = 35.0
 splash_radius = 6.0

@@ -1,18 +1,15 @@
-[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="WeaponData" format=3 uid="uid://bbtenyfwfevp7"]
 
-[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_w"]
+[ext_resource type="Script" uid="uid://c1eue6wr0lwki" path="res://scripts/data/weapon_data.gd" id="1_w"]
 
 [resource]
 script = ExtResource("1_w")
 id = "smg"
-model = 1
 display_name = "Mitraillette"
 damage = 9
-pellets = 1
 max_range = 50.0
 headshot_multiplier = 1.75
 fire_rate = 13.0
-automatic = true
 mag_size = 30
 reload_time = 1.4
 spread_deg = 2.5
