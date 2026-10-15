@@ -142,7 +142,7 @@ func _spawn(id: int) -> CharacterBody3D:
 	# Un humain choisit son point d'apparition et le pantin s'y replace dès le
 	# premier état reçu ; un bot apparaît loin des autres.
 	p.global_transform = MatchRules.best_spawn(map, players, p)
-	p.add_to_group("players")       # utilisé par les caméras et capteurs de la map
+	p.add_to_group("players")       # utilisé par les caméras de la map et l'écran du laboratoire
 	p.start_spawn_protection()
 	players.append(p)
 	_nodes[id] = p

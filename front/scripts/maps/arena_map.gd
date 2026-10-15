@@ -1,7 +1,7 @@
 @tool
 class_name ArenaMap
 extends Node3D
-## Map « NEO-EDO » : quartier japonais de 120 x 120 m pour 8 joueurs.
+## Map « NEO-EDO » : quartier japonais de 120 x 120 m, jusqu'à 16 joueurs.
 ##
 ## Deux ambiances se répondent dans la même arène :
 ##   - un quartier TRADITIONNEL (sanctuaire, pagode, marché de bois, jardin sec) ;

@@ -1,9 +1,9 @@
 @tool
 class_name IotDashboard
 extends Node3D
-## Grand écran "LAB IoT · CFA INSTA" fixé sur l'entrepôt : il agrège en direct les
-## mesures des capteurs de la map, le nombre de drones et de joueurs détectés, et
-## un faux débit de messages MQTT.
+## Grand écran "LAB IoT · CFA INSTA" fixé sur l'entrepôt : il affiche en direct une
+## température et un taux de CO2 simulés, les caméras en ligne, le nombre de joueurs
+## détectés et un faux débit de messages MQTT.
 
 @export var size := Vector2(8.0, 3.2)
 

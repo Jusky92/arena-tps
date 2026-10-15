@@ -477,7 +477,7 @@ func _spawn_player(cls: ClassData, display_name: String, local: bool, loadout :=
 	add_child(p)
 	p.global_transform = MatchRules.best_spawn(map, players, p)
 	p.died.connect(_on_player_died.bind(p))
-	p.add_to_group("players")   # utilisé par les caméras et capteurs de la map
+	p.add_to_group("players")   # utilisé par les caméras de la map et l'écran du laboratoire
 	p.start_spawn_protection()
 	if not local:
 		_add_name_tag(p)
