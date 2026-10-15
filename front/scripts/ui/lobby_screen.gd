@@ -14,12 +14,6 @@ extends Control
 const MAIN_MENU := "res://scenes/main_menu.tscn"
 const GAME := "res://scenes/game.tscn"
 const CLASS_SELECT := "res://scenes/class_select.tscn"
-const STATUS_TEXT := {
-	"idle": "En attente du lancement.",
-	"reserved": "Réservé pour ton groupe : le chef règle et lance la partie quand tout le monde est prêt.",
-	"in_progress": "Partie en cours.",
-	"ending": "Fin de partie, retour au salon dans quelques secondes.",
-}
 
 var _players_box: VBoxContainer
 var _status: Label
@@ -33,7 +27,6 @@ var _level_picker: OptionButton
 ## Niveaux des bots dans l'ordre du menu (voir BotBrain.LEVELS).
 const LEVELS := ["faible", "moyen", "eleve"]
 var _map_label: Label
-var _server_label: Label
 ## Les curseurs étaient-ils à nous au dernier rafraîchissement ? Quand ils le
 ## deviennent (réservation reçue), ils repartent des réglages du serveur.
 var _was_editable := false
@@ -116,11 +109,11 @@ func _build() -> void:
 	_players_box.add_theme_constant_override("separation", 6)
 	left_box.add_child(_players_box)
 	left_box.add_child(UiTheme.spacer(Vector2.ZERO, false, true))
-	var change := UiTheme.button("CHANGER DE CLASSE")
+	var change := UiTheme.button("CHANGER DE SPÉCIALISTE")
 	change.pressed.connect(func() -> void: get_tree().change_scene_to_file(CLASS_SELECT))
 	left_box.add_child(change)
 
-	# Colonne droite : connexion et réglages (zone qui défile), puis le bouton de
+	# Colonne droite : réglages (zone qui défile), puis le bouton de
 	# lancement, toujours visible en bas même sur un petit écran.
 	var right := VBoxContainer.new()
 	right.add_theme_constant_override("separation", 14)
@@ -135,7 +128,6 @@ func _build() -> void:
 	scrolled.add_theme_constant_override("separation", 14)
 	scrolled.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(scrolled)
-	scrolled.add_child(_build_connection_panel())
 	scrolled.add_child(_build_settings_panel())
 
 	_status = UiTheme.label("", 17, UiTheme.MUTED)
@@ -148,19 +140,6 @@ func _build() -> void:
 		Sfx.ui("ui_click")
 		Net.request_start())
 	right.add_child(_start_button)
-
-
-## Serveur rejoint et son état.
-func _build_connection_panel() -> Control:
-	var panel := UiTheme.panel()
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 8)
-	panel.add_child(box)
-	box.add_child(UiTheme.label("SERVEUR", 15, UiTheme.MUTED, true))
-	_server_label = UiTheme.label("", 17, UiTheme.GREEN)
-	_server_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(_server_label)
-	return panel
 
 
 ## Réglages de la partie : modifiables par le chef, affichés pour les autres.
@@ -294,7 +273,6 @@ func _refresh() -> void:
 	else:
 		_show_settings(int(_bots_slider.value), _duration_slider.value, _picked_map())
 	_was_editable = editable
-	_server_label.text = "Connecté. %s" % STATUS_TEXT.get(Net.server_status, Net.server_status)
 	var can_start := editable
 	_start_button.disabled = not can_start
 	_start_button.focus_mode = Control.FOCUS_ALL if can_start else Control.FOCUS_NONE

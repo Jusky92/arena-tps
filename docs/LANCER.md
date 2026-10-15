@@ -254,7 +254,7 @@ L'adresse est retenue pour la prochaine fois.
 1. Le **premier joueur arrivé dans le salon est le chef** (étiquette « chef »).
 2. Le chef choisit **la map**, **le nombre et le niveau des bots** et **la durée**. Les autres voient les réglages
    changer, sans pouvoir y toucher.
-3. Chacun peut **CHANGER DE CLASSE** avant le lancement.
+3. Chacun peut **CHANGER DE SPÉCIALISTE** avant le lancement.
 4. Le chef clique **LANCER LA PARTIE** (ou Entrée) : la partie démarre chez tout le monde.
 5. À la fin, l'écran de fin s'affiche. **REJOUER** ramène au salon, toujours connecté.
    Le serveur revient au salon une dizaine de secondes après la fin.
