@@ -205,7 +205,7 @@ func create_party() -> Dictionary:
 	if not b.party.is_empty():
 		return _err("Tu es déjà dans un groupe.")
 	b.party = {"party_id": Uuid.v4(), "leader_id": b.user_id(), "status": "lobby",
-		"members": [{"user_id": b.user_id(), "username": b.username()}]}
+		"members": [{"user_id": b.user_id(), "username": b.username(), "class_id": ""}]}
 	b.party_changed.emit()
 	return _ok()
 
@@ -220,7 +220,8 @@ func invite_to_party(friend_id: String) -> Dictionary:
 	if members.size() >= 8:
 		return _err("Le groupe est complet (8 joueurs).")
 	await get_tree().create_timer(_rng.randf_range(0.8, 1.6)).timeout
-	members.append({"user_id": friend_id, "username": _name_of(friend_id)})
+	var cls: ClassData = GameState.CLASSES[_rng.randi() % GameState.CLASSES.size()]
+	members.append({"user_id": friend_id, "username": _name_of(friend_id), "class_id": GameState.class_id(cls)})
 	b.party_changed.emit()
 	return _ok({"message": "Invitation acceptée."})
 
@@ -240,6 +241,21 @@ func kick_from_party(member_id: String) -> Dictionary:
 	if not b.party.is_empty():
 		b.party.members = b.party.members.filter(func(m): return m.user_id != member_id)
 		b.party_changed.emit()
+	return _ok()
+
+
+func give_lead(member_id: String) -> Dictionary:
+	if not b.party.is_empty():
+		b.party.leader_id = member_id
+		b.party_changed.emit()
+	return _ok()
+
+
+func set_party_class(class_id: String) -> Dictionary:
+	for m in b.party.get("members", []):
+		if m.user_id == b.user_id():
+			m.class_id = class_id
+	b.party_changed.emit()
 	return _ok()
 
 

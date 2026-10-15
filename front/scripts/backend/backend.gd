@@ -40,7 +40,8 @@ var host := "localhost"
 
 ## Joueur connecté : {user_id, username, email} (vide si déconnecté).
 var user := {}
-## Groupe : {party_id, leader_id, status, members: [{user_id, username}]}, vide si aucun.
+## Groupe : {party_id, leader_id, status, members: [{user_id, username, class_id}]}, vide si aucun.
+## `class_id` : classe jouée par le membre (GameState.class_id), "" s'il ne l'a pas encore envoyée.
 var party := {}
 ## Amis : [{user_id, username, status ("online" | "offline"), activity ("menu" | "in_match" | null)}].
 var friends: Array = []
@@ -53,6 +54,8 @@ var invites: Array = []
 var _impl: Node
 ## Groupe créé par un lancement en ligne sans groupe : le joueur le quitte au retour au menu.
 var _solo_party_id := ""
+## Envoi de notre classe au groupe en cours (un seul à la fois).
+var _class_sending := false
 
 
 func _ready() -> void:
@@ -61,6 +64,7 @@ func _ready() -> void:
 		host = cfg.get_value("back", "adresse", host)
 		mode = cfg.get_value("back", "mode", mode)
 	_set_impl()
+	party_changed.connect(sync_party_class)
 
 
 ## Change de mode (et d'adresse pour le vrai back), retenu pour la prochaine fois.
@@ -250,6 +254,25 @@ func leave_party() -> Dictionary:
 
 func kick_from_party(member_id: String) -> Dictionary:
 	return await _impl.kick_from_party(member_id)
+
+
+## Chef : donne le rôle de chef à un autre membre.
+func give_lead(member_id: String) -> Dictionary:
+	return await _impl.give_lead(member_id)
+
+
+## Envoie au groupe la classe choisie si elle n'y est pas encore (les autres membres
+## voient notre personnage). Appelé à chaque changement du groupe et au retour au menu.
+func sync_party_class() -> void:
+	if party.is_empty() or _class_sending:
+		return
+	var wanted := GameState.class_id(GameState.selected_class)
+	for m in party.get("members", []):
+		if m.user_id == user_id() and m.get("class_id", "") == wanted:
+			return
+	_class_sending = true
+	await _impl.set_party_class(wanted)
+	_class_sending = false
 
 
 ## Chef : réserve un serveur pour le groupe (créé s'il n'existe pas), qui jouera avec

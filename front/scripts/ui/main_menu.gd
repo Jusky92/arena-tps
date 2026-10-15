@@ -35,10 +35,26 @@ var _launch_button: Button
 ## Page affichée : "play", "launch" (réglages avant un lancement en ligne), "stats", "servers".
 var _page := ""
 var _friends_button: Button
+## « CRÉER UN GROUPE » / « QUITTER LE GROUPE », à gauche du bouton AMIS (page JOUER).
+var _party_button: Button
+## Page JOUER : personnages du groupe, et membre dont le chef a ouvert les actions.
+var _lineup: Control
+var _lineup_key := ""
+var _selected_member := ""
 var _drawer: PanelContainer
 var _drawer_tween: Tween
 
 const DRAWER_WIDTH := 340.0
+## Largeurs de la page JOUER, en unités de l'interface (base 1280×720, agrandie à l'écran).
+## Bouton AMIS et encadré GROUPE, dessous :
+const SIDE_WIDTH := 320.0
+## Boutons pour jouer, en bas à droite :
+const PLAY_WIDTH := 480.0
+## Ligne des pieds des personnages, en fraction de la hauteur de l'écran : le tiers
+## bas (les corps montent vers le milieu de l'écran).
+const LINEUP_FEET := 2.0 / 3.0
+## Hauteur maximale du personnage du joueur (les autres membres : 85 %).
+const LINEUP_HEIGHT := 300
 ## Écart avec le bord droit de l'écran, le même que celui du bouton AMIS.
 const DRAWER_MARGIN := 24.0
 ## Tiroir d'amis ouvert ou fermé, gardé d'un écran à l'autre (choix de classe, partie).
@@ -95,6 +111,7 @@ func _ready() -> void:
 	Backend.refresh_friends()
 	_show_page("play")
 	Backend.leave_solo_party()
+	Backend.sync_party_class()     # la classe a peut-être changé sur l'écran de choix
 
 
 # =========================================================================== barres
@@ -152,13 +169,23 @@ func _build_friends_toggle() -> Control:
 	var row := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
 		row.add_theme_constant_override("margin_" + side, 24 if side in ["left", "right"] else 10 if side == "top" else 0)
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 10)
+	buttons.alignment = BoxContainer.ALIGNMENT_END
+	row.add_child(buttons)
+	# Pas de groupe par défaut : on en crée un ici (page JOUER), ou en invitant un ami.
+	_party_button = UiTheme.button("CRÉER UN GROUPE", false, UiTheme.CYAN, 40)
+	_party_button.custom_minimum_size.x = 240
+	_party_button.visible = false
+	_party_button.pressed.connect(_on_party_button)
+	buttons.add_child(_party_button)
 	_friends_button = UiTheme.button("AMIS", false, UiTheme.CYAN, 40)
 	_friends_button.toggle_mode = true
-	_friends_button.custom_minimum_size.x = 260
-	_friends_button.size_flags_horizontal = Control.SIZE_SHRINK_END
+	_friends_button.custom_minimum_size.x = SIDE_WIDTH
+	_friends_button.clip_text = true
 	_friends_button.tooltip_text = "Afficher ou masquer la liste d'amis"
 	_friends_button.toggled.connect(func(on: bool) -> void: _set_drawer(on))
-	row.add_child(_friends_button)
+	buttons.add_child(_friends_button)
 	return row
 
 
@@ -287,6 +314,7 @@ func _show_page(page: String) -> void:
 		get_tree().change_scene_to_file(CLASS_SELECT)
 		return
 	_page = page
+	_update_party_button()
 	for key in _nav_buttons:
 		var active: bool = key == page or (key == "play" and page == "launch")
 		_nav_buttons[key].add_theme_color_override("font_color", UiTheme.CYAN if active else UiTheme.MUTED)
@@ -305,109 +333,97 @@ func _show_page(page: String) -> void:
 
 # --------------------------------------------------------------------------- JOUER
 
-## Page JOUER : le personnage joué à gauche ; à droite, le groupe puis les façons de jouer.
+## Page JOUER : les personnages du groupe (le joueur au centre) ; en haut à droite,
+## sous le bouton AMIS, les invitations reçues ; en bas à droite, les façons de jouer.
 func _build_play_page() -> Control:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 32)
+	var page := Control.new()
+	page.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	# --- À gauche : personnage choisi, centré dans la place qui reste ---
-	var hero_area := CenterContainer.new()
-	hero_area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(hero_area)
-	var hero := VBoxContainer.new()
-	hero.add_theme_constant_override("separation", 6)
-	hero_area.add_child(hero)
-	var cls: ClassData = GameState.selected_class
-	var kicker := UiTheme.label("TA CLASSE", 14, UiTheme.MUTED, true)
-	kicker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hero.add_child(kicker)
-	var name_label := UiTheme.title(cls.display_name.to_upper(), 36, cls.color.lightened(0.2))
-	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hero.add_child(name_label)
-	var preview := CharacterPreview.new()
-	preview.pose_names = ["Repos", "Visée", "Marche", "Accroupi"]
-	preview.show_pose_label = false
-	hero.add_child(preview)
-	preview.setup(cls.character_design, cls.weapon.model, Vector2i(380, 420), 4.2, 1.0)
-	var change := UiTheme.button("CHANGER DE CLASSE")
-	change.custom_minimum_size.x = 280
-	change.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	change.pressed.connect(func() -> void: get_tree().change_scene_to_file(CLASS_SELECT))
-	hero.add_child(change)
+	# --- Au centre : les personnages du groupe ---
+	_lineup = Control.new()
+	_lineup.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_lineup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Les cases des personnages dépendent de la largeur : on reconstruit quand elle change.
+	_lineup.resized.connect(_refresh_lineup)
+	page.add_child(_lineup)
+	_lineup_key = ""
 
-	# --- À droite : groupe, puis jouer (défile sur petit écran) ---
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size.x = 560
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	row.add_child(scroll)
-	var col := VBoxContainer.new()
-	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	col.add_theme_constant_override("separation", 12)
-	scroll.add_child(col)
-
-	# Invitations reçues, puis le groupe (ou le bouton pour en créer un).
+	# --- En haut à droite : invitations et groupe, de la largeur du bouton AMIS ---
 	_party_box = VBoxContainer.new()
 	_party_box.add_theme_constant_override("separation", 8)
-	col.add_child(_party_box)
-	_refresh_party()
+	_party_box.anchor_left = 1.0
+	_party_box.anchor_right = 1.0
+	_party_box.offset_left = -SIDE_WIDTH
+	_party_box.offset_top = 4
+	_party_box.custom_minimum_size.x = SIDE_WIDTH
+	page.add_child(_party_box)
 
-	col.add_child(UiTheme.spacer(Vector2(0, 10)))
-	col.add_child(UiTheme.label("JOUER", 14, UiTheme.MUTED, true))
-	# --- En ligne, avec le back : groupe -> serveur dédié ---
-	_launch_button = UiTheme.button("LANCER EN LIGNE", true, UiTheme.CYAN, 62)
-	_launch_button.add_theme_font_size_override("font_size", 20)
-	_launch_button.tooltip_text = "Choisir les réglages, puis réserver un serveur de jeu pour ton groupe (ou pour toi seul)"
-	_launch_button.pressed.connect(_show_page.bind("launch"))
-	col.add_child(_launch_button)
-	_update_launch_button()
-	var servers := UiTheme.button("SERVEURS PUBLICS", false, UiTheme.MAGENTA, 50)
-	servers.tooltip_text = "Rejoindre une partie en cours qui a des places libres"
-	servers.pressed.connect(_show_page.bind("servers"))
-	col.add_child(servers)
+	# --- En bas à droite : jouer (compact, pour laisser la place aux personnages) ---
+	var play := VBoxContainer.new()
+	play.add_theme_constant_override("separation", 8)
+	play.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	play.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	play.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	play.custom_minimum_size.x = PLAY_WIDTH
+	page.add_child(play)
 
-	# --- LAN par adresse : seulement hors ligne (back simulé), avec le vrai back on passe par les tickets ---
+	# LAN par adresse, en bas à gauche, sur une ligne : seulement hors ligne (back
+	# simulé) ; avec le vrai back on passe par les tickets.
 	if Backend.is_simulated():
-		var online := UiTheme.panel(Color(UiTheme.CYAN, 0.07), Color(UiTheme.CYAN, 0.35))
-		var online_box := VBoxContainer.new()
-		online_box.add_theme_constant_override("separation", 10)
-		online.add_child(online_box)
-		online_box.add_child(UiTheme.label("REJOINDRE PAR ADRESSE (LAN)", 14, UiTheme.CYAN, true))
-		var online_help := UiTheme.label("Pour un serveur lancé en mode LAN : entre l'adresse qu'il affiche au démarrage.", 15, UiTheme.MUTED)
-		online_help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		online_box.add_child(online_help)
+		var online := VBoxContainer.new()
+		online.add_theme_constant_override("separation", 4)
+		online.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+		online.grow_vertical = Control.GROW_DIRECTION_BEGIN
+		online.custom_minimum_size.x = 380
 		var join_row := HBoxContainer.new()
-		join_row.add_theme_constant_override("separation", 10)
+		join_row.add_theme_constant_override("separation", 8)
 		_address_field = LineEdit.new()
-		_address_field.placeholder_text = "adresse du serveur, ex. 192.168.1.20"
+		_address_field.placeholder_text = "Serveur LAN : adresse, ex. 192.168.1.20"
+		_address_field.tooltip_text = "Pour un serveur lancé en mode LAN : l'adresse qu'il affiche au démarrage"
 		_address_field.text = _saved_address()
 		_address_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_address_field.text_submitted.connect(func(_t: String) -> void: _join_online())
 		join_row.add_child(_address_field)
-		var join_button := UiTheme.button("REJOINDRE", true, UiTheme.MAGENTA, 46)
-		join_button.custom_minimum_size.x = 170
+		var join_button := UiTheme.button("REJOINDRE (LAN)", true, UiTheme.MAGENTA, 44)
+		join_button.add_theme_font_size_override("font_size", 14)
 		join_button.pressed.connect(_join_online)
 		join_row.add_child(join_button)
-		online_box.add_child(join_row)
-		_online_error = UiTheme.label("", 15, UiTheme.RED)
+		_online_error = UiTheme.label("", 14, UiTheme.RED)
 		_online_error.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		online_box.add_child(_online_error)
-		col.add_child(online)
+		online.add_child(_online_error)
+		online.add_child(join_row)
+		page.add_child(online)
 
-	# --- Hors ligne (ne compte pas dans les statistiques) ---
+	# En ligne, avec le back : groupe -> serveur dédié.
+	_launch_button = UiTheme.button("LANCER EN LIGNE", true, UiTheme.CYAN, 54)
+	_launch_button.add_theme_font_size_override("font_size", 20)
+	_launch_button.tooltip_text = "Choisir les réglages, puis réserver un serveur de jeu pour ton groupe (ou pour toi seul)"
+	_launch_button.pressed.connect(_show_page.bind("launch"))
+	play.add_child(_launch_button)
+	_update_launch_button()
+
 	var buttons := HBoxContainer.new()
-	buttons.add_theme_constant_override("separation", 12)
-	var solo := UiTheme.button("PARTIE SOLO (BOTS)", false, UiTheme.CYAN, 50)
-	solo.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	buttons.add_theme_constant_override("separation", 8)
+	play.add_child(buttons)
+	var servers := UiTheme.button("SERVEURS PUBLICS", false, UiTheme.MAGENTA, 44)
+	servers.tooltip_text = "Rejoindre une partie en cours qui a des places libres"
+	servers.pressed.connect(_show_page.bind("servers"))
+	buttons.add_child(servers)
+	# Hors ligne (ne compte pas dans les statistiques).
+	var solo := UiTheme.button("SOLO (BOTS)", false, UiTheme.CYAN, 44)
 	solo.tooltip_text = "Match à mort hors ligne contre des bots (ne compte pas dans les statistiques)"
 	solo.pressed.connect(_start_solo)
 	buttons.add_child(solo)
-	var training := UiTheme.button("ENTRAÎNEMENT", false, UiTheme.CYAN, 50)
-	training.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var training := UiTheme.button("ENTRAÎNEMENT", false, UiTheme.CYAN, 44)
 	training.tooltip_text = "Seul sur la map avec des mannequins d'entraînement"
 	training.pressed.connect(_start_training)
 	buttons.add_child(training)
-	col.add_child(buttons)
-	return row
+	for b in buttons.get_children():
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.add_theme_font_size_override("font_size", 14)
+
+	_refresh_party()
+	return page
 
 
 func _update_launch_button() -> void:
@@ -424,30 +440,185 @@ func _update_launch_button() -> void:
 		_launch_button.text = "LANCER EN LIGNE" if count <= 1 else "LANCER EN LIGNE (%d JOUEURS)" % count
 
 
+# --------------------------------------------------------------------------- personnages du groupe
+
+## Les personnages du groupe, chacun avec son pseudo dessous, les pieds sur la ligne
+## du tiers bas de l'écran. Seul, le joueur est grand et centré. En groupe, ils se
+## partagent toute la largeur en cases égales, le joueur au centre et les autres de
+## part et d'autre ; leur taille vient de la largeur d'une case (plafonnée). Le chef
+## clique sur un autre membre pour voir Kick / Donner le lead.
+## Reconstruit seulement quand quelque chose d'affiché change.
+func _refresh_lineup() -> void:
+	if not is_instance_valid(_lineup):
+		return
+	var members: Array = Backend.party_members()
+	var leader_id: String = Backend.party.get("leader_id", "")
+	var me: String = Backend.user_id()
+	var i_lead := not Backend.party.is_empty() and Backend.is_party_leader()
+	if not i_lead or not members.any(func(m): return m.user_id == _selected_member):
+		_selected_member = ""
+	var my_class := GameState.class_id(GameState.selected_class)
+	var key := "%s|%s|%s|%s|%s" % [leader_id, my_class, _selected_member, i_lead, _lineup.get_global_rect()]
+	for m in members:
+		key += "|%s:%s:%s" % [m.user_id, m.username, m.get("class_id", "")]
+	if key == _lineup_key:
+		return
+	_lineup_key = key
+	for c in _lineup.get_children():
+		c.queue_free()
+
+	# Moi au centre, puis les autres en alternant à droite et à gauche.
+	var others := members.filter(func(m): return m.user_id != me)
+	var order := [{"user_id": me, "username": Backend.username(), "class_id": my_class}]
+	for i in others.size():
+		if i % 2 == 0:
+			order.append(others[i])
+		else:
+			order.push_front(others[i])
+
+	var change := UiTheme.button("CHANGER DE CLASSE", false, UiTheme.CYAN, 36)
+	change.add_theme_font_size_override("font_size", 14)
+	change.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	change.pressed.connect(func() -> void: get_tree().change_scene_to_file(CLASS_SELECT))
+
+	# Pieds sur la ligne du tiers bas de l'écran ; personne ne dépasse le haut de la page.
+	var feet := get_viewport_rect().size.y * LINEUP_FEET - _lineup.global_position.y
+	var max_height := int(minf(LINEUP_HEIGHT if members.size() > 1 else LINEUP_HEIGHT * 1.4, feet - 8))
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 6)
+	col.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_lineup.add_child(col)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 0)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(row)
+	# Seul, le joueur est centré ; en groupe, une case de même largeur par membre.
+	var cell := _lineup.size.x / order.size() if order.size() > 1 else 0.0
+	var tallest := 0
+	for m in order:
+		var is_me: bool = m.user_id == me
+		var height := max_height if is_me else int(max_height * 0.85)
+		if cell > 0:
+			height = mini(height, int(cell * 0.85 * 1.35))
+		tallest = maxi(tallest, height)
+		var size := Vector2i(int(height / 1.35), height)
+		var clickable: bool = i_lead and not is_me
+		row.add_child(_lineup_figure(m, size, int(cell), m.user_id == leader_id, clickable))
+	col.offset_top = feet - tallest     # pieds alignés (cases alignées en bas) sur la ligne
+	col.add_child(change)
+
+
+## Un personnage : aperçu 3D de sa classe, pseudo (★ pour le chef) et classe
+## dessous. `clickable` (le chef, sur un autre membre) : un clic montre ou cache
+## Kick / Donner le lead, par-dessus le personnage. `cell` : largeur de sa case (0 = la sienne).
+func _lineup_figure(member: Dictionary, size: Vector2i, cell: int, leader: bool, clickable: bool) -> Control:
+	var cls := GameState.class_from_id(member.get("class_id", ""))
+	var is_me: bool = member.user_id == Backend.user_id()
+	var selected: bool = clickable and _selected_member == member.user_id
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 2)
+	box.size_flags_vertical = Control.SIZE_SHRINK_END     # pieds alignés, même si le joueur est plus grand
+	box.custom_minimum_size.x = cell
+	box.mouse_filter = Control.MOUSE_FILTER_STOP if clickable else Control.MOUSE_FILTER_IGNORE
+	if clickable:
+		box.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		box.tooltip_text = "Kick ou donner le lead"
+		var member_id: String = member.user_id
+		box.gui_input.connect(func(event: InputEvent) -> void:
+			if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+				_selected_member = "" if _selected_member == member_id else member_id
+				_refresh_lineup())
+	# L'aperçu, avec Kick / Donner le lead par-dessus quand le chef a choisi ce membre.
+	var stage := Control.new()
+	stage.custom_minimum_size = size
+	stage.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(stage)
+	var preview := CharacterPreview.new()
+	preview.pose_names = ["Repos", "Visée", "Marche", "Accroupi"]
+	preview.show_pose_label = false
+	stage.add_child(preview)
+	preview.setup(cls.character_design, cls.weapon.model, size, 4.2, 1.0)
+	if selected:
+		var actions := _member_actions(member)
+		actions.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		actions.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		actions.grow_vertical = Control.GROW_DIRECTION_BEGIN
+		actions.offset_bottom = -size.y * 0.2
+		stage.add_child(actions)
+	var name_label := UiTheme.label(("★ " if leader else "") + str(member.username), 20 if is_me else 17,
+		UiTheme.CYAN if selected else (Color.WHITE if is_me else UiTheme.TEXT), true)
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.clip_text = true
+	box.add_child(name_label)
+	var class_label := UiTheme.label(cls.display_name.to_upper(), 13, cls.color.lightened(0.2), true)
+	class_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	class_label.clip_text = true
+	box.add_child(class_label)
+	return box
+
+
+## Sous le membre choisi par le chef : l'exclure (Kick), ou lui donner le lead.
+func _member_actions(member: Dictionary) -> Control:
+	var actions := VBoxContainer.new()
+	actions.add_theme_constant_override("separation", 4)
+	actions.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var member_id: String = member.user_id
+	var kick := UiTheme.button("Kick", false, UiTheme.RED, 28)
+	kick.add_theme_font_size_override("font_size", 14)
+	kick.add_theme_color_override("font_color", UiTheme.RED)
+	kick.pressed.connect(func() -> void:
+		kick.disabled = true
+		_selected_member = ""
+		var r: Dictionary = await Backend.kick_from_party(member_id)
+		if not r.ok:
+			_show_toast(r.message))
+	actions.add_child(kick)
+	var lead := UiTheme.button("Donner le lead", false, UiTheme.YELLOW, 28)
+	lead.add_theme_font_size_override("font_size", 14)
+	lead.add_theme_color_override("font_color", UiTheme.YELLOW)
+	lead.pressed.connect(func() -> void:
+		lead.disabled = true
+		_selected_member = ""
+		var r: Dictionary = await Backend.give_lead(member_id)
+		if not r.ok:
+			_show_toast(r.message))
+	actions.add_child(lead)
+	return actions
+
+
 # --------------------------------------------------------------------------- groupe
 
 func _refresh_party() -> void:
 	_update_launch_button()
+	_update_party_button()
 	# Plus chef (le groupe a changé) : la page de lancement ne le concerne plus.
 	if _page == "launch" and not Backend.is_party_leader():
 		_show_page("play")
 		return
+	_refresh_lineup()
 	if not is_instance_valid(_party_box):
 		return
 	for c in _party_box.get_children():
 		c.queue_free()
 
-	# Invitations reçues.
+	# Invitations reçues, sous le bouton AMIS.
 	for invite in Backend.invites:
 		var banner := PanelContainer.new()
-		banner.add_theme_stylebox_override("panel", UiTheme.box(Color(UiTheme.MAGENTA, 0.14), UiTheme.MAGENTA, 1, 4, 10, 6))
+		banner.add_theme_stylebox_override("panel", UiTheme.box(Color(UiTheme.MAGENTA, 0.14), UiTheme.MAGENTA, 1, 4, 10, 8))
+		var col := VBoxContainer.new()
+		col.add_theme_constant_override("separation", 6)
+		banner.add_child(col)
+		var text := UiTheme.label("%s t'invite dans son groupe." % invite.from_name, 16, Color.WHITE, true)
+		text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		col.add_child(text)
 		var line := HBoxContainer.new()
 		line.add_theme_constant_override("separation", 8)
-		banner.add_child(line)
-		var text := UiTheme.label("%s t'invite dans son groupe." % invite.from_name, 17, Color.WHITE, true)
-		text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		line.add_child(text)
+		col.add_child(line)
 		var accept := UiTheme.button("REJOINDRE", true, UiTheme.MAGENTA, 34)
+		accept.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		accept.pressed.connect(func() -> void:
 			accept.disabled = true
 			var r: Dictionary = await Backend.accept_invite(invite.invite_id)
@@ -460,95 +631,35 @@ func _refresh_party() -> void:
 		line.add_child(ignore)
 		_party_box.add_child(banner)
 
+
+## Bouton à gauche du bouton AMIS, sur la page JOUER : « CRÉER UN GROUPE » sans
+## groupe, sinon « QUITTER LE GROUPE » (« SUPPRIMER LE GROUPE » si le joueur y est seul).
+func _update_party_button() -> void:
+	if not is_instance_valid(_party_button):
+		return
+	_party_button.visible = _page == "play"
+	_party_button.disabled = false
 	if Backend.party.is_empty():
-		_party_box.add_child(_build_no_party())
+		_party_button.text = "CRÉER UN GROUPE"
+		_party_button.tooltip_text = "Crée un groupe dont tu es le chef, puis invite tes amis"
+		_party_button.remove_theme_color_override("font_color")
 	else:
-		_party_box.add_child(_build_party_panel())
+		var alone: bool = Backend.party_members().size() <= 1
+		_party_button.text = "SUPPRIMER LE GROUPE" if alone else "QUITTER LE GROUPE"
+		_party_button.tooltip_text = "Supprime ton groupe" if alone else "Quitte le groupe (un autre membre devient chef si c'était toi)"
+		_party_button.add_theme_color_override("font_color", UiTheme.RED)
 
 
-## Pas de groupe (cas par défaut) : bouton pour en créer un.
-func _build_no_party() -> Control:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 14)
-	var create := UiTheme.button("CRÉER UN GROUPE", false, UiTheme.CYAN, 50)
-	create.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	create.tooltip_text = "Crée un groupe dont tu es le chef, puis invite tes amis"
-	create.pressed.connect(func() -> void:
-		create.disabled = true
-		var r: Dictionary = await Backend.create_party()
-		if not r.ok:
-			if is_instance_valid(create):
-				create.disabled = false
-			_show_toast(r.message))
-	row.add_child(create)
-	return row
-
-
-## Encadré GROUPE : membres, exclusion (chef), quitter ou supprimer.
-func _build_party_panel() -> Control:
-	var panel := UiTheme.panel()
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 8)
-	panel.add_child(box)
-
-	var members: Array = Backend.party_members()
-	var leader_id: String = Backend.party.get("leader_id", "")
-	var i_lead := Backend.is_party_leader()
-	var header := HBoxContainer.new()
-	header.add_child(UiTheme.label("GROUPE", 14, UiTheme.MUTED, true))
-	header.add_child(UiTheme.spacer(Vector2.ZERO, true))
-	header.add_child(UiTheme.label("%d / 8" % members.size(), 15, UiTheme.CYAN, true))
-	# Seul dans le groupe : le quitter le supprime (côté back aussi).
-	var alone := members.size() <= 1
-	var leave := Button.new()
-	leave.text = "Supprimer le groupe" if alone else "Quitter le groupe"
-	leave.pressed.connect(func() -> void:
-		leave.disabled = true
-		var r: Dictionary = await Backend.leave_party()
-		if not r.ok:
-			if is_instance_valid(leave):
-				leave.disabled = false
-			_show_toast(r.message))
-	header.add_child(UiTheme.spacer(Vector2(10, 0)))
-	header.add_child(leave)
-	box.add_child(header)
-
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 8)
-	grid.add_theme_constant_override("v_separation", 8)
-	# Seulement les membres : le compteur « n / 8 » dit déjà combien de places restent.
-	for i in members.size():
-		var slot := PanelContainer.new()
-		slot.custom_minimum_size = Vector2(0, 36)
-		slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		slot.add_theme_stylebox_override("panel", UiTheme.box(Color(UiTheme.CYAN, 0.12), Color(UiTheme.CYAN, 0.5), 1, 4, 10, 4))
-		var line := HBoxContainer.new()
-		slot.add_child(line)
-		var m: Dictionary = members[i]
-		var text: String = ("★ " if m.user_id == leader_id else "") + m.username + (" (toi)" if m.user_id == Backend.user_id() else "")
-		var l := UiTheme.label(text, 16, Color.WHITE, true)
-		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		l.clip_text = true
-		line.add_child(l)
-		if i_lead and members[i].user_id != Backend.user_id():
-			var kick := Button.new()
-			kick.text = "✕"
-			kick.flat = true
-			kick.tooltip_text = "Exclure du groupe"
-			var member_id: String = members[i].user_id
-			kick.pressed.connect(func() -> void:
-				var r: Dictionary = await Backend.kick_from_party(member_id)
-				if not r.ok:
-					_show_toast(r.message))
-			line.add_child(kick)
-		grid.add_child(slot)
-	box.add_child(grid)
-	var help := UiTheme.label("Invite tes amis en ligne avec le bouton + de la liste d'amis. Le chef lance la partie, et chacun rejoint le serveur automatiquement.", 14, UiTheme.MUTED)
-	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(help)
-	return panel
+func _on_party_button() -> void:
+	_party_button.disabled = true
+	var r: Dictionary
+	if Backend.party.is_empty():
+		r = await Backend.create_party()
+	else:
+		r = await Backend.leave_party()
+	if not r.ok:
+		_update_party_button()
+		_show_toast(r.message)
 
 
 # --------------------------------------------------------------------------- lancement en ligne

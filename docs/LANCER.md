@@ -319,8 +319,11 @@ $env:GAME_SERVER_SECRET = "<la valeur du .env>"
 3. Ensuite, **CONNEXION** avec l'e-mail **ou** le pseudo, et le mot de passe.
 4. **Amis** (colonne de droite) : chercher un pseudo, **Ajouter** ; l'autre accepte avec ✓
    dans ses demandes reçues. La pastille montre qui est en ligne (vert) ou en partie (jaune).
-5. **Groupe** : le bouton **+** à côté d'un ami en ligne l'invite ; il clique **REJOINDRE**
-   sur le bandeau d'invitation. 8 joueurs au plus.
+5. **Groupe** : **CRÉER UN GROUPE** (à gauche du bouton AMIS), ou directement le bouton **+**
+   à côté d'un ami en ligne, qui l'invite ; il clique **REJOINDRE** sur le bandeau
+   d'invitation. 8 joueurs au plus, chacun affiché avec sa classe sur la page JOUER. Le chef
+   clique sur le personnage d'un membre pour l'exclure (**Kick**) ou lui **donner le lead** ;
+   **QUITTER LE GROUPE** remplace CRÉER UN GROUPE.
 6. Le chef clique **LANCER EN LIGNE** (seul, c'est un groupe d'une personne), choisit le
    nombre de bots et la durée, puis clique **LANCER LA PARTIE** : un serveur libre est
    réservé avec ces réglages (ceux de `--bots` / `--duration` ne servent plus qu'en LAN), tout le groupe s'y connecte automatiquement et la partie démarre dès

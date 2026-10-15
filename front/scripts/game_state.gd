@@ -12,6 +12,21 @@ const CLASSES: Array[ClassData] = [
 ## Classe choisie par le joueur (par défaut : la première).
 var selected_class: ClassData = CLASSES[0]
 
+
+## Identifiant d'une classe, partagé avec le back (classe de chaque membre du groupe) :
+## le nom de son fichier .tres (« tank », « assassin », « tireur »).
+static func class_id(cls: ClassData) -> String:
+	return cls.resource_path.get_file().get_basename()
+
+
+## Classe d'après son identifiant ; la première si inconnu (ou pas encore envoyé).
+static func class_from_id(id: Variant) -> ClassData:
+	for cls in CLASSES:
+		if class_id(cls) == str(id):
+			return cls
+	return CLASSES[0]
+
+
 ## Mode de la prochaine partie : "deathmatch" (bots, chronomètre, scores) ou "training" (mannequins).
 var mode := "deathmatch"
 ## Durée d'une partie (secondes) et nombre de bots pour compléter le serveur.

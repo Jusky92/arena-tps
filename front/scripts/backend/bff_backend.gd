@@ -9,6 +9,7 @@ extends Node
 
 const GET := HTTPClient.METHOD_GET
 const POST := HTTPClient.METHOD_POST
+const PUT := HTTPClient.METHOD_PUT
 const DELETE := HTTPClient.METHOD_DELETE
 const TOKEN_ERRORS := ["invalid_token", "token_expired", "not_authenticated"]
 const PSEUDO_REGEX := "^[A-Za-z0-9_]{3,20}$"
@@ -314,7 +315,8 @@ func _apply_party(data: Dictionary, force := false) -> void:
 	_party_version = version
 	var members := []
 	for m in data.get("members", []):
-		members.append({"user_id": m.user_id, "username": m.username if m.username != null else "?"})
+		members.append({"user_id": m.user_id, "username": m.username if m.username != null else "?",
+			"class_id": m.get("class_id") if m.get("class_id") != null else ""})
 	b.party = {"party_id": data.party_id, "leader_id": data.leader_id, "status": data.status, "members": members}
 	b.party_changed.emit()
 
@@ -365,6 +367,24 @@ func kick_from_party(member_id: String) -> Dictionary:
 		return _err("Tu n'as pas de groupe.")
 	var r := await _call(POST, "/parties/%s/kick" % b.party.party_id, {"user_id": member_id})
 	if r.ok:
+		_reload_party(b.party.party_id)
+	return r
+
+
+func give_lead(member_id: String) -> Dictionary:
+	if b.party.is_empty():
+		return _err("Tu n'as pas de groupe.")
+	var r := await _call(POST, "/parties/%s/leader" % b.party.party_id, {"user_id": member_id})
+	if r.ok:
+		_reload_party(b.party.party_id)
+	return r
+
+
+func set_party_class(class_id: String) -> Dictionary:
+	if b.party.is_empty():
+		return {"ok": true}
+	var r := await _call(PUT, "/parties/%s/class" % b.party.party_id, {"class_id": class_id})
+	if r.ok and not b.party.is_empty():
 		_reload_party(b.party.party_id)
 	return r
 
