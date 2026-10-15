@@ -26,8 +26,9 @@ extends Node
 ##   idle -> reserved -> in_progress -> ending -> idle
 ## En LAN, il n'y a pas de réservation : le premier joueur connecté (le « chef »)
 ## règle la partie et la lance, idle -> in_progress. Avec la Server List, un
-## groupe réserve le serveur et la partie démarre seule quand il est connecté ;
-## à la fin, le serveur renvoie tout le monde au menu et redevient libre.
+## groupe réserve le serveur avec ses réglages ; le chef du groupe est le chef du
+## salon et lance la partie quand il veut, reserved -> in_progress. À la fin, le
+## serveur renvoie tout le monde au menu et redevient libre.
 ##
 ## Protocole (toutes les fonctions marquées @rpc) :
 ##   client -> serveur  hello, set_loadout, request_settings, request_start, state,
@@ -101,10 +102,14 @@ var players := {}
 ## Réglages de la partie, choisis par le chef.
 var settings := {"bots": 2, "duration": 180.0, "map": MapCatalog.DEFAULT_ID}
 ## true en LAN : le chef (premier joueur) règle et lance la partie. false avec
-## la Server List : pas de chef, la partie démarre quand le groupe est connecté.
+## la Server List : le chef du groupe règle et lance la partie, une fois le serveur
+## réservé (réglages de départ : ceux envoyés au lancement).
 var lan_lobby := true
-## Pair qui peut régler et lancer la partie (LAN uniquement, 0 = personne).
+## Pair qui règle et lance la partie, 0 = personne.
 var leader_id := 0
+## Serveur, mode Server List : user_id du chef du groupe qui a réservé le serveur.
+## Il devient chef du salon dès qu'il se connecte.
+var leader_user_id := ""
 ## idle | reserved | in_progress | ending
 var server_status := "idle"
 ## true pendant une partie.
@@ -151,9 +156,40 @@ func is_server() -> bool:
 	return _serving
 
 
-## true si ce client est le chef du salon (LAN uniquement).
+## true si ce client est le chef du salon : il lance la partie.
 func is_leader() -> bool:
-	return online and not _serving and lan_lobby and leader_id == my_id()
+	return online and not _serving and leader_id == my_id()
+
+
+## true si ce client peut changer les réglages et lancer : chef d'un salon LAN libre,
+## ou d'un salon réservé pour son groupe.
+func can_edit_settings() -> bool:
+	return is_leader() and server_status == lobby_status()
+
+
+## État du serveur dans lequel le chef règle et lance la partie.
+func lobby_status() -> String:
+	return "idle" if lan_lobby else "reserved"
+
+
+## Serveur : donne la main à un autre joueur (0 = personne) et prévient.
+func set_leader(id: int) -> void:
+	if not _serving or id == leader_id:
+		return
+	leader_id = id
+	log_line("SERVEUR : %s est le chef du salon" % player_name_of(id) if id != 0 else "SERVEUR : pas de chef")
+	lobby_changed.emit()
+	_send_lobby()
+
+
+## Serveur, mode Server List : le chef du groupe qui a réservé le serveur ("" = aucun).
+## S'il est déjà connecté (arrivé avant le battement qui annonce la réservation),
+## il prend la main tout de suite.
+func set_party_leader(user_id: String) -> void:
+	leader_user_id = user_id
+	for id in players:
+		if not user_id.is_empty() and players[id].get("user_id", "") == user_id:
+			set_leader(id)
 
 
 ## Serveur : ouvre l'écoute. Renvoie "" si tout va bien, sinon l'erreur.
@@ -348,7 +384,7 @@ func _on_peer_disconnected(id: int) -> void:
 	log_line("SERVEUR : %s est parti (pair %d)" % [player_name_of(id), id])
 	players.erase(id)
 	if leader_id == id:
-		leader_id = _first_human()
+		leader_id = first_human()
 	remote_left.emit(id)
 	if in_match:
 		_player_left.rpc(id)
@@ -356,7 +392,9 @@ func _on_peer_disconnected(id: int) -> void:
 	_send_lobby()
 
 
-func _first_human() -> int:
+## Plus petit id de joueur humain connecté, 0 s'il n'y en a pas.
+## Plus petit id de joueur humain connecté, 0 s'il n'y en a pas.
+func first_human() -> int:
 	var ids := players.keys().filter(func(i): return not is_bot(i))
 	ids.sort()
 	return ids[0] if not ids.is_empty() else 0
@@ -438,7 +476,7 @@ func _hello(user_id: String, name: String, class_id: String, ticket: String, ver
 		_kick(id, "La partie est pleine (%d joueurs)." % max_players)
 		return
 	players[id] = _new_player(name.left(16), _valid_class(class_id), verified, loadout)
-	if lan_lobby and leader_id == 0:
+	if leader_id == 0 and (lan_lobby or verified == leader_user_id):
 		leader_id = id
 	player_accepted.emit(id)
 	if in_match:
@@ -520,13 +558,13 @@ func _valid_class(class_id: String) -> String:
 
 ## Chef : règle le nombre de bots, la durée et la map (identifiant de MapCatalog).
 func request_settings(bots: int, duration: float, map_id: String) -> void:
-	if is_leader():
+	if can_edit_settings():
 		_request_settings.rpc_id(1, bots, duration, map_id)
 
 
 @rpc("any_peer", "call_remote", "reliable")
 func _request_settings(bots: int, duration: float, map_id: String) -> void:
-	if not _serving or not lan_lobby or multiplayer.get_remote_sender_id() != leader_id or in_match:
+	if not _serving or multiplayer.get_remote_sender_id() != leader_id or server_status != lobby_status():
 		return
 	settings = {"bots": clampi(bots, 0, max_players - 1), "duration": clampf(duration, 60.0, 600.0),
 		"map": MapCatalog.valid_id(map_id)}
@@ -540,9 +578,12 @@ func request_start() -> void:
 		_request_start.rpc_id(1)
 
 
+## En LAN depuis le salon libre (idle), avec la Server List depuis le salon réservé.
 @rpc("any_peer", "call_remote", "reliable")
 func _request_start() -> void:
-	if _serving and lan_lobby and multiplayer.get_remote_sender_id() == leader_id and server_status == "idle":
+	if not _serving or multiplayer.get_remote_sender_id() != leader_id:
+		return
+	if server_status == lobby_status():
 		start_requested.emit()
 
 

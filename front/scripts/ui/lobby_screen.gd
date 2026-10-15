@@ -5,8 +5,9 @@ extends Control
 ##   CHEF   — le premier joueur connecté : il règle le nombre de bots et la durée,
 ##            puis lance la partie pour tout le monde. S'il part, le suivant prend sa place.
 ##   JOUEUR — il voit les réglages et attend le lancement ; il peut changer de classe.
-## Sur un serveur de la Server List (partie lancée par un groupe), il n'y a pas de
-## chef : la partie démarre seule dès que le groupe est connecté.
+## Sur un serveur de la Server List (partie lancée par un groupe), le chef est celui
+## du groupe : il arrive avec ses derniers réglages (GameState.online_settings), peut
+## les changer ici, puis lance la partie quand tout le monde est prêt.
 ##
 ## Tout passe par l'autoload Net (scripts/net/net.gd) ; le serveur fait foi.
 
@@ -15,7 +16,7 @@ const GAME := "res://scenes/game.tscn"
 const CLASS_SELECT := "res://scenes/class_select.tscn"
 const STATUS_TEXT := {
 	"idle": "En attente du lancement.",
-	"reserved": "Réservé pour ton groupe : la partie démarre dès que tout le monde est connecté.",
+	"reserved": "Réservé pour ton groupe : le chef règle et lance la partie quand tout le monde est prêt.",
 	"in_progress": "Partie en cours.",
 	"ending": "Fin de partie, retour au salon dans quelques secondes.",
 }
@@ -30,6 +31,9 @@ var _duration_slider: HSlider
 var _map_picker: OptionButton
 var _map_label: Label
 var _server_label: Label
+## Les curseurs étaient-ils à nous au dernier rafraîchissement ? Quand ils le
+## deviennent (réservation reçue), ils repartent des réglages du serveur.
+var _was_editable := false
 
 
 func _ready() -> void:
@@ -218,6 +222,10 @@ func _push_settings() -> void:
 	var map_id := _picked_map()
 	_show_settings(int(_bots_slider.value), _duration_slider.value, map_id)
 	Net.request_settings(int(_bots_slider.value), _duration_slider.value, map_id)
+	if not Net.lan_lobby:
+		# Gardés pour le prochain lancement en ligne du groupe.
+		GameState.online_settings.bots = int(_bots_slider.value)
+		GameState.online_settings.duration = int(_duration_slider.value)
 
 
 func _show_settings(bots: int, duration: float, map_id: String) -> void:
@@ -250,30 +258,38 @@ func _refresh() -> void:
 		_players_box.add_child(_player_row(id))
 	var count: int = Net.human_count()
 	var leader := Net.is_leader()
+	var editable := Net.can_edit_settings()
 	# Réglages tenus par le serveur ; le chef garde la main sur ses curseurs.
 	var bots: int = Net.settings.get("bots", 2)
 	var duration: float = Net.settings.get("duration", 180.0)
 	var map_id: String = Net.settings.get("map", MapCatalog.DEFAULT_ID)
-	_bots_slider.editable = leader
-	_duration_slider.editable = leader
-	_map_picker.disabled = not leader
-	if not leader:
+	_bots_slider.editable = editable
+	_duration_slider.editable = editable
+	_map_picker.disabled = not editable
+	if not editable or not _was_editable:
 		_bots_slider.set_value_no_signal(bots)
 		_duration_slider.set_value_no_signal(duration)
 		_map_picker.select(_map_index(map_id))
 		_show_settings(bots, duration, map_id)
 	else:
 		_show_settings(int(_bots_slider.value), _duration_slider.value, _picked_map())
+	_was_editable = editable
 	_server_label.text = "Connecté. %s" % STATUS_TEXT.get(Net.server_status, Net.server_status)
-	var can_start := leader and Net.server_status == "idle"
+	var can_start := editable
 	_start_button.disabled = not can_start
 	_start_button.focus_mode = Control.FOCUS_ALL if can_start else Control.FOCUS_NONE
-	if not Net.lan_lobby:
-		_start_button.text = "DÉMARRAGE AUTOMATIQUE…"
-		_status.text = "%d joueur(s) connecté(s). La partie démarre dès que tout ton groupe est là (30 s au plus)." % count
+	if not Net.lan_lobby and Net.leader_id == 0:
+		_start_button.text = "EN ATTENTE DU CHEF…"
+		_status.text = "%d joueur(s) connecté(s). Le chef du groupe n'est pas encore là." % count
+	elif leader and not can_start and not Net.lan_lobby:
+		# Arrivé avant le battement de cœur qui annonce la réservation au serveur.
+		_start_button.text = "RÉSERVATION EN COURS…"
+		_status.text = "%d joueur(s) connecté(s). Le serveur confirme la réservation de ton groupe…" % count
 	elif leader:
 		_start_button.text = "LANCER LA PARTIE  (Entrée)"
-		_status.text = "%d joueur(s) dans le salon. Tu es le chef : lance dès que tout le monde est là." % count
+		_status.text = "%d joueur(s) dans le salon. Tu es le chef : règle la partie et lance dès que tout le monde est là." % count
+		if not Net.lan_lobby:
+			_status.text += " Les places libres s'ouvrent aux autres joueurs pendant la partie."
 	else:
 		_start_button.text = "EN ATTENTE DU CHEF…"
 		_status.text = "%d joueur(s) dans le salon. %s lancera la partie." % [count, Net.player_name_of(Net.leader_id)]

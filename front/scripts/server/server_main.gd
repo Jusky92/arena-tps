@@ -7,9 +7,9 @@ extends Node
 ##                      premier connecté (le chef) règle et lance la partie.
 ##   Server List        --serverlist-url http://hôte:8002, avec la variable
 ##                      d'environnement GAME_SERVER_SECRET. Le serveur s'enregistre,
-##                      un groupe le réserve, chaque joueur présente son ticket et la
-##                      partie démarre seule quand le groupe est là (ou 30 s après la
-##                      réservation). Les résultats partent au back (match.finished).
+##                      un groupe le réserve, chaque joueur présente son ticket et
+##                      attend dans le salon que le chef du groupe lance la partie.
+##                      Les résultats partent au back (match.finished).
 ##
 ## Arguments (tous facultatifs) :
 ##   --port 24567                      port UDP d'écoute
@@ -31,18 +31,11 @@ const ServerGameScript := preload("res://scripts/server/server_game.gd")
 ## Temps laissé aux joueurs sur l'écran de fin avant le retour au salon.
 const ENDING_DELAY := 10.0
 const HEARTBEAT_INTERVAL := 5.0
-## Mode Server List : délai après la réservation au-delà duquel la partie démarre
-## avec les joueurs déjà là, même si tout le groupe n'est pas connecté.
-const RESERVED_START_DELAY := 30.0
 
 var _link: BackendLink
 var _game: Node3D
 ## Joueurs dans la partie en cours : identifiant réseau -> user_id (pour player.match).
 var _in_match := {}
-## Mode Server List : joueurs attendus (connectés + tickets pas encore utilisés)
-## et temps écoulé depuis la réservation.
-var _expected_players := 0
-var _reserved_for := 0.0
 ## Réglages de la ligne de commande, rétablis après chaque partie d'un groupe.
 var _default_settings := {}
 
@@ -137,19 +130,9 @@ func _exit_tree() -> void:
 
 func _heartbeat() -> void:
 	await _link.report(Net.server_status, Net.human_count(), Net.settings.get("map", MapCatalog.DEFAULT_ID))
-	if Net.server_status == "reserved":
-		# Les tickets expirés ne comptent plus : on n'attend que les joueurs qui peuvent encore venir.
-		_expected_players = Net.human_count() + _link.reserved_slots
-
-
-func _process(delta: float) -> void:
-	if Net.server_status != "reserved":
-		return
-	_reserved_for += delta
-	var connected := Net.human_count()
-	if connected > 0 and (connected >= _expected_players or _reserved_for >= RESERVED_START_DELAY):
-		Net.log_line("SERVEUR : %d/%d joueur(s) du groupe connecté(s), lancement" % [connected, _expected_players])
-		Net.start_match()
+	if Net.server_status == "reserved" and Net.leader_id == 0 and Net.human_count() > 0 and _link.reserved_slots == 0:
+		# Le chef du groupe ne viendra plus (ticket expiré) : un joueur connecté prend la main.
+		Net.set_leader(Net.first_human())
 
 
 # ---------------------------------------------------------------- Réservation (Server List)
@@ -163,14 +146,14 @@ func _on_reserved(_party_id: String) -> void:
 		float(chosen.get("duration_seconds", _default_settings.duration)),
 		str(chosen.get("map", _default_settings.map)))
 	Net.log_line("SERVEUR : réglages du groupe, %d bot(s), %d s, map %s" % [Net.settings.bots, int(Net.settings.duration), Net.settings.map])
-	_reserved_for = 0.0
-	_expected_players = Net.human_count() + _link.reserved_slots
+	Net.set_party_leader(_link.leader_user_id)
 	Net.set_status("reserved")
 
 
 func _on_reservation_ended() -> void:
 	if Net.server_status == "reserved":
 		Net.settings = _default_settings.duplicate()
+		Net.set_party_leader("")
 		Net.set_status("idle")
 
 
@@ -210,6 +193,8 @@ func _on_match_over(_rows: Array) -> void:
 		# serveur redevient libre pour le prochain groupe.
 		_link.party_id = null
 		_link.match_settings = {}
+		_link.leader_user_id = ""
+		Net.set_party_leader("")
 		Net.settings = _default_settings.duplicate()
 		await Net.close_all("Partie terminée : retour au menu.")
 	Net.back_to_lobby()

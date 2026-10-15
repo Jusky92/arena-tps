@@ -36,7 +36,7 @@ Sommaire :
   | À lancer en plus | rien | la stack Docker du back (`backend/`) |
   | Comptes | « Jouer hors ligne » : n'importe quel identifiant | vrais comptes (inscription + code par e-mail) |
   | Rejoindre | par l'adresse IP du serveur | le chef du groupe lance, chacun rejoint seul ; ou la liste des serveurs publics |
-  | Lancement | le premier joueur du salon (le chef) | automatique dès que le groupe est connecté |
+  | Lancement | le premier joueur du salon (le chef) | le chef du groupe, depuis le salon du serveur |
   | Statistiques | rien n'est enregistré | parties, XP, niveaux, succès, classements |
 
 ---
@@ -324,10 +324,11 @@ $env:GAME_SERVER_SECRET = "<la valeur du .env>"
    d'invitation. 16 joueurs au plus, chacun affiché avec sa classe sur la page JOUER. Le chef
    clique sur le personnage d'un membre pour l'exclure (**Kick**) ou lui **donner le lead** ;
    **QUITTER LE GROUPE** remplace CRÉER UN GROUPE.
-6. Le chef clique **LANCER EN LIGNE** (seul, c'est un groupe d'une personne), choisit le
-   nombre de bots et la durée, puis clique **LANCER LA PARTIE** : un serveur libre est
-   réservé avec ces réglages (ceux de `--bots` / `--duration` ne servent plus qu'en LAN), tout le groupe s'y connecte automatiquement et la partie démarre dès
-   que tout le monde est là (30 s au plus).
+6. Le chef clique **LANCER EN LIGNE** (seul, c'est un groupe d'une personne) : un serveur
+   libre est réservé avec ses derniers réglages (ceux de `--bots` / `--duration` ne servent plus
+   qu'en LAN), tout le groupe s'y connecte automatiquement et arrive dans le **salon** du serveur.
+   Le chef y règle les bots, la durée et la map, puis clique **LANCER LA PARTIE** quand tout le
+   monde est là. S'il ne se connecte pas, un autre membre prend la main quand son ticket expire.
 7. **SERVEURS PUBLICS** : les parties en cours qui ont des places libres. **REJOINDRE**
    pour y entrer en cours de route.
 8. À la fin, le serveur renvoie tout le monde au menu ; le groupe reste formé pour

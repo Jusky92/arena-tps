@@ -9,11 +9,12 @@ extends Control
 ##                 demandes d'ami, ajout, invitation dans le groupe
 ## Toutes les données viennent de l'autoload Backend (vrai back, ou simulé hors ligne).
 ##
-## Lancer une partie en ligne : le chef du groupe (ou un joueur seul) choisit les
-## réglages sur la page de lancement (bots, durée ; carte et mode plus tard), puis
-## demande un serveur (Backend.launch_party) qui les appliquera ; chaque membre reçoit son ticket (le chef dans
-## la réponse, les autres par le service temps réel : Backend.match_ready) et se
-## connecte au serveur de jeu avec (Net.join).
+## Lancer une partie en ligne : le chef du groupe (ou un joueur seul) clique LANCER EN
+## LIGNE, qui demande un serveur (Backend.launch_party) avec ses derniers réglages
+## (GameState.online_settings) ; chaque membre reçoit son ticket (le chef dans la
+## réponse, les autres par le service temps réel : Backend.match_ready) et se connecte
+## au serveur de jeu avec (Net.join). Le chef règle la partie et la lance depuis le
+## salon du serveur (lobby_screen.gd).
 
 const GAME := "res://scenes/game.tscn"
 const LOBBY := "res://scenes/lobby.tscn"
@@ -21,9 +22,6 @@ const CLASS_SELECT := "res://scenes/class_select.tscn"
 const AUTH := "res://scenes/auth.tscn"
 ## Dernière adresse de connexion, gardée d'une partie à l'autre.
 const ADDRESS_PATH := "user://reseau.cfg"
-## Joueurs (humains + bots) d'une partie lancée par un groupe : la limite du back
-## (groupe de 16, Server List max_players = 16, Social refuse plus de 15 bots).
-const PARTY_MATCH_PLAYERS := 16
 const BOARDS := [["XP", "xp"], ["VICTOIRES", "wins"], ["ÉLIMINATIONS", "kills"]]
 
 var _page_holder: MarginContainer
@@ -37,7 +35,7 @@ var _overlay: Control
 var _address_field: LineEdit
 var _online_error: Label
 var _launch_button: Button
-## Page affichée : "play", "launch" (réglages avant un lancement en ligne), "stats", "servers".
+## Page affichée : "play", "classes", "stats", "servers".
 var _page := ""
 var _friends_button: Button
 ## « CRÉER UN GROUPE » / « QUITTER LE GROUPE », à gauche du bouton AMIS (page JOUER).
@@ -340,15 +338,13 @@ func _show_page(page: String) -> void:
 	_page = page
 	_update_party_button()
 	for key in _nav_buttons:
-		var active: bool = key == page or (key == "play" and page == "launch")
+		var active: bool = key == page
 		_nav_buttons[key].add_theme_color_override("font_color", UiTheme.CYAN if active else UiTheme.MUTED)
 	for c in _page_holder.get_children():
 		c.queue_free()
 	match page:
 		"play":
 			_page_holder.add_child(_build_play_page())
-		"launch":
-			_page_holder.add_child(_build_launch_page())
 		"stats":
 			_page_holder.add_child(_build_stats_page())
 		"classes":
@@ -473,8 +469,8 @@ func _build_play_page() -> Control:
 	_launch_button = UiTheme.button("LANCER EN LIGNE", true, UiTheme.CYAN, 54)
 	_launch_button.add_theme_font_size_override("font_size", 20)
 	_launch_button.clip_text = true      # le texte ne doit jamais élargir la page
-	_launch_button.tooltip_text = "Choisir les réglages, puis réserver un serveur de jeu pour ton groupe (ou pour toi seul)"
-	_launch_button.pressed.connect(_show_page.bind("launch"))
+	_launch_button.tooltip_text = "Réserve un serveur de jeu pour ton groupe (ou pour toi seul) ; tu règles et lances la partie dans le salon"
+	_launch_button.pressed.connect(_launch_online)
 	play.add_child(_launch_button)
 	_update_launch_button()
 
@@ -698,10 +694,6 @@ func _member_actions(member: Dictionary) -> Control:
 func _refresh_party() -> void:
 	_update_launch_button()
 	_update_party_button()
-	# Plus chef (le groupe a changé) : la page de lancement ne le concerne plus.
-	if _page == "launch" and not Backend.is_party_leader():
-		_show_page("play")
-		return
 	_refresh_lineup()
 	if not is_instance_valid(_party_box):
 		return
@@ -767,109 +759,6 @@ func _on_party_button() -> void:
 
 
 # --------------------------------------------------------------------------- lancement en ligne
-
-## Réglages de la partie en ligne avant de demander un serveur. Les options grisées
-## (carte, mode) arriveront plus tard ; une nouvelle option = une ligne ici, une clé
-## dans GameState.online_settings et son envoi dans Backend.launch_party.
-func _build_launch_page() -> Control:
-	var settings: Dictionary = GameState.online_settings
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	var center := CenterContainer.new()
-	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.add_child(center)
-	var col := VBoxContainer.new()
-	col.custom_minimum_size.x = 720
-	col.add_theme_constant_override("separation", 14)
-	center.add_child(col)
-
-	col.add_child(UiTheme.label("LANCER EN LIGNE", 14, UiTheme.MUTED, true))
-	col.add_child(UiTheme.title("PARAMÈTRES DE LA PARTIE", 30))
-
-	var panel := UiTheme.panel()
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 16)
-	panel.add_child(box)
-	col.add_child(panel)
-
-	var summary := UiTheme.label("", 15, UiTheme.MUTED)
-	summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	var show_summary := func() -> void:
-		var humans: int = Backend.party_members().size()
-		var bots: int = mini(int(settings.bots), PARTY_MATCH_PLAYERS - humans)
-		summary.text = "%d joueur%s du groupe + %d bot%s, %d max. Les places libres s'ouvrent aux autres joueurs pendant la partie." % [
-			humans, "s" if humans > 1 else "", bots, "s" if bots > 1 else "", PARTY_MATCH_PLAYERS]
-
-	# Bots.
-	var bots_value := UiTheme.label("", 18, UiTheme.CYAN, true)
-	var bots_slider := HSlider.new()
-	bots_slider.min_value = 0
-	bots_slider.max_value = PARTY_MATCH_PLAYERS - 1
-	bots_slider.step = 1
-	bots_slider.value = settings.bots
-	bots_slider.custom_minimum_size = Vector2(0, 24)
-	var show_bots := func(v: float) -> void:
-		settings.bots = int(v)
-		bots_value.text = str(int(v))
-		show_summary.call()
-	bots_slider.value_changed.connect(show_bots)
-	box.add_child(_setting_row("Bots", "Ajoutés dans les places libres, ils laissent leur place aux joueurs qui arrivent.", bots_value, bots_slider))
-	show_bots.call(bots_slider.value)
-
-	# Durée.
-	var duration_value := UiTheme.label("", 18, UiTheme.CYAN, true)
-	var duration_slider := HSlider.new()
-	duration_slider.min_value = 60
-	duration_slider.max_value = 600
-	duration_slider.step = 30
-	duration_slider.value = settings.duration
-	duration_slider.custom_minimum_size = Vector2(0, 24)
-	var show_duration := func(v: float) -> void:
-		settings.duration = int(v)
-		duration_value.text = "%d:%02d" % [int(v) / 60, int(v) % 60]
-	duration_slider.value_changed.connect(show_duration)
-	box.add_child(_setting_row("Durée", "Temps de jeu de la partie.", duration_value, duration_slider))
-	show_duration.call(duration_slider.value)
-
-	# À venir.
-	box.add_child(_setting_row("Carte", "D'autres cartes arriveront bientôt.", UiTheme.label("NEO-EDO", 18, UiTheme.MUTED, true), null))
-	box.add_child(_setting_row("Mode de jeu", "D'autres modes arriveront bientôt.", UiTheme.label("MATCH À MORT", 18, UiTheme.MUTED, true), null))
-
-	col.add_child(summary)
-	var buttons := HBoxContainer.new()
-	buttons.add_theme_constant_override("separation", 12)
-	var back := UiTheme.button("RETOUR", false, UiTheme.CYAN, 58)
-	back.custom_minimum_size.x = 200
-	back.pressed.connect(_show_page.bind("play"))
-	buttons.add_child(back)
-	var start := UiTheme.button("LANCER LA PARTIE", true, UiTheme.CYAN, 58)
-	start.add_theme_font_size_override("font_size", 20)
-	start.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	start.tooltip_text = "Réserve un serveur de jeu pour ton groupe (ou pour toi seul)"
-	start.pressed.connect(_launch_online)
-	buttons.add_child(start)
-	col.add_child(buttons)
-	return scroll
-
-
-## Ligne de réglage : titre et aide à gauche, valeur à droite, contrôle (facultatif) en dessous.
-func _setting_row(title: String, help: String, value: Control, control: Control) -> Control:
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 4)
-	var head := HBoxContainer.new()
-	var texts := VBoxContainer.new()
-	texts.add_theme_constant_override("separation", 0)
-	texts.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	texts.add_child(UiTheme.label(title, 18, UiTheme.TEXT, true))
-	texts.add_child(UiTheme.label(help, 14, UiTheme.MUTED))
-	head.add_child(texts)
-	head.add_child(value)
-	box.add_child(head)
-	if control:
-		box.add_child(control)
-	return box
-
 
 ## Chef : réserve un serveur pour le groupe et s'y connecte avec son ticket.
 func _launch_online() -> void:

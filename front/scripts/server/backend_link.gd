@@ -40,6 +40,9 @@ var reserved_slots := 0
 ## Réglages choisis par le chef du groupe qui a réservé le serveur :
 ## {bots, duration_seconds}, vide si aucun (LAN, ou pas de réservation).
 var match_settings := {}
+## user_id du chef du groupe qui a réservé le serveur : il lance la partie depuis
+## le salon. Vide si aucun (LAN, ou pas de réservation).
+var leader_user_id := ""
 
 
 ## true pour le mode LAN : pas de back, le premier joueur règle et lance la partie.
