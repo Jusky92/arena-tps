@@ -4,79 +4,38 @@ extends CanvasLayer
 ##   - fil des éliminations en haut à droite ;
 ##   - bannière "ÉLIMINATION" quand le joueur local élimine quelqu'un ;
 ##   - tableau des scores (maintenir Tab) ;
-##   - écran de fin de partie avec le classement final.
+##   - écran de fin de partie avec podium et classement final.
+## Mise en page dans scenes/ui/match_ui.tscn ; une ligne du fil = kill_feed_entry.tscn,
+## une ligne du tableau = scoreboard_row.tscn.
 
 signal play_again
 signal back_to_menu
 
-var _timer_label: Label
-var _leader_label: Label
-var _feed: VBoxContainer
-var _banner: Label
-var _scoreboard: Control
-var _scoreboard_rows: VBoxContainer
-var _scoreboard_title: Label
-var _end_screen: Control
+const FeedEntryScene := preload("res://scenes/ui/kill_feed_entry.tscn")
+const RowScene := preload("res://scenes/ui/scoreboard_row.tscn")
+const MAX_FEED := 6
+const FEED_TIME := 5.0
+const CELLS := ["Rank", "PlayerName", "ClassName", "Kills", "Deaths", "KD", "Streak", "Ping"]
+const PODIUM_COLORS := [Color(1.0, 0.84, 0.25), Color(0.78, 0.84, 0.92), Color(0.86, 0.55, 0.32)]
+
+@onready var _timer_chip: Control = %TimerChip
+@onready var _timer_label: Label = %Timer
+@onready var _leader_label: Label = %Leader
+@onready var _feed: VBoxContainer = %Feed
+@onready var _banner: Label = %Banner
+@onready var _scoreboard: Control = %Scoreboard
+@onready var _scoreboard_title: Label = %Subtitle
+@onready var _scoreboard_rows: VBoxContainer = %BoardRows
+@onready var _end_screen: Control = %EndScreen
+
+var _banner_tween: Tween
 
 
 func _ready() -> void:
-	layer = 5
-	var root := Control.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.theme = UiTheme.get_theme()
-	add_child(root)
-
-	# Chronomètre.
-	var top := VBoxContainer.new()
-	top.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	top.offset_left = -160
-	top.offset_right = 160
-	top.offset_top = 8
-	top.alignment = BoxContainer.ALIGNMENT_BEGIN
-	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(top)
-	var timer_panel := PanelContainer.new()
-	timer_panel.add_theme_stylebox_override("panel", UiTheme.box(Color(0.02, 0.03, 0.06, 0.75), Color(UiTheme.CYAN, 0.4), 1, 6, 18, 2))
-	timer_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	timer_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_timer_label = UiTheme.title("3:00", 26, Color.WHITE)
-	_timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	timer_panel.add_child(_timer_label)
-	top.add_child(timer_panel)
-	_leader_label = UiTheme.label("", 16, Color(1, 1, 1, 0.9), true)
-	_leader_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_leader_label.add_theme_constant_override("outline_size", 6)
-	_leader_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
-	top.add_child(_leader_label)
-
-	# Fil des éliminations.
-	_feed = VBoxContainer.new()
-	_feed.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_feed.offset_left = -430
-	_feed.offset_right = -16
-	_feed.offset_top = 40
-	_feed.add_theme_constant_override("separation", 4)
-	_feed.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(_feed)
-
-	# Bannière.
-	_banner = UiTheme.title("", 28, UiTheme.MAGENTA)
-	_banner.set_anchors_preset(Control.PRESET_CENTER)
-	_banner.offset_left = -300
-	_banner.offset_right = 300
-	_banner.offset_top = 70
-	_banner.offset_bottom = 120
-	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_banner.add_theme_constant_override("outline_size", 8)
-	_banner.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
-	_banner.modulate.a = 0.0
-	root.add_child(_banner)
-
-	# Tableau des scores.
-	_scoreboard = _build_board_panel()
-	_scoreboard.visible = false
-	root.add_child(_scoreboard)
+	%Again.pressed.connect(func() -> void: play_again.emit())
+	%Menu.pressed.connect(func() -> void: back_to_menu.emit())
+	for b: Button in [%Again, %Menu]:
+		UiTheme.add_hover_feedback(b)
 
 
 ## Affiche le temps restant (secondes) et le meneur.
@@ -88,42 +47,60 @@ func set_time(seconds: float, leader_name: String, leader_kills: int) -> void:
 
 
 func hide_timer() -> void:
-	_timer_label.get_parent().visible = false
+	_timer_chip.visible = false
 	_leader_label.text = "ENTRAÎNEMENT · ÉCHAP POUR QUITTER"
 
 
-## Ajoute une ligne "tueur [arme] victime" au fil des éliminations.
-func add_kill(killer: String, victim: String, weapon: String, killer_local: bool, victim_local: bool) -> void:
-	var panel := PanelContainer.new()
-	var border := UiTheme.CYAN if killer_local else (UiTheme.RED if victim_local else Color(1, 1, 1, 0.1))
-	panel.add_theme_stylebox_override("panel", UiTheme.box(Color(0.02, 0.03, 0.06, 0.7), border, 1, 4, 10, 3))
-	panel.size_flags_horizontal = Control.SIZE_SHRINK_END
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	panel.add_child(row)
-	row.add_child(UiTheme.label(killer, 17, UiTheme.CYAN if killer_local else Color.WHITE, true))
-	row.add_child(UiTheme.label("[%s]" % weapon, 15, UiTheme.MUTED))
-	row.add_child(UiTheme.label(victim, 17, UiTheme.RED if victim_local else Color.WHITE, true))
-	_feed.add_child(panel)
-	if _feed.get_child_count() > 6:
+## Ajoute une ligne "tueur [arme] (tête) victime" au fil des éliminations.
+func add_kill(killer: String, victim: String, weapon: String, killer_local: bool, victim_local: bool, headshot := false) -> void:
+	var entry: PanelContainer = FeedEntryScene.instantiate()
+	_feed.add_child(entry)
+	if _feed.get_child_count() > MAX_FEED:
 		_feed.get_child(0).queue_free()
-	var tween := panel.create_tween()
-	tween.tween_interval(5.0)
-	tween.tween_property(panel, "modulate:a", 0.0, 0.6)
-	tween.tween_callback(panel.queue_free)
+	var border := UiTheme.CYAN if killer_local else (UiTheme.RED if victim_local else Color(1, 1, 1, 0.12))
+	var style: StyleBoxFlat = entry.get_theme_stylebox("panel").duplicate()
+	style.border_color = border
+	if killer_local:
+		style.bg_color = Color(UiTheme.CYAN, 0.14)
+	entry.add_theme_stylebox_override("panel", style)
+
+	var killer_label: Label = entry.get_node("%Killer")
+	killer_label.text = killer
+	killer_label.add_theme_color_override("font_color", UiTheme.CYAN if killer_local else Color.WHITE)
+	var victim_label: Label = entry.get_node("%Victim")
+	victim_label.text = victim
+	victim_label.add_theme_color_override("font_color", UiTheme.RED if victim_local else Color.WHITE)
+	# Icône de l'arme si on la connaît, sinon le nom (ex. "Arène").
+	var icon := UiIcons.weapon_by_name(weapon)
+	var icon_rect: TextureRect = entry.get_node("%WeaponIcon")
+	icon_rect.texture = icon if icon else UiIcons.SKULL
+	icon_rect.custom_minimum_size = Vector2(44, 22) if icon else Vector2(22, 22)
+	icon_rect.modulate = Color(UiTheme.CYAN, 0.9) if killer_local else Color(1, 1, 1, 0.8)
+	var weapon_text: Label = entry.get_node("%WeaponText")
+	weapon_text.text = "[%s]" % weapon
+	weapon_text.visible = icon == null
+	var head_icon: TextureRect = entry.get_node("%HeadshotIcon")
+	head_icon.visible = headshot
+	# Arrive en glissant depuis la droite, puis s'efface.
+	entry.modulate.a = 0.0
+	var tween := entry.create_tween()
+	tween.tween_property(entry, "modulate:a", 1.0, 0.15)
+	tween.tween_interval(FEED_TIME)
+	tween.tween_property(entry, "modulate:a", 0.0, 0.6)
+	tween.tween_callback(entry.queue_free)
 
 
 func show_banner(text: String, color := UiTheme.MAGENTA) -> void:
 	_banner.text = text
 	_banner.add_theme_color_override("font_color", color)
 	_banner.modulate.a = 1.0
-	_banner.scale = Vector2.ONE * 1.25
-	_banner.pivot_offset = Vector2(300, 25)
-	var tween := _banner.create_tween().set_parallel()
-	tween.tween_property(_banner, "scale", Vector2.ONE, 0.2)
-	tween.chain().tween_interval(1.0)
-	tween.chain().tween_property(_banner, "modulate:a", 0.0, 0.4)
+	_banner.scale = Vector2.ONE * 1.3
+	if _banner_tween:
+		_banner_tween.kill()
+	_banner_tween = _banner.create_tween()
+	_banner_tween.tween_property(_banner, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_banner_tween.tween_interval(1.0)
+	_banner_tween.tween_property(_banner, "modulate:a", 0.0, 0.4)
 
 
 ## Tableau des scores pendant la partie.
@@ -134,114 +111,121 @@ func show_scoreboard(rows: Array, visible_now: bool, subtitle: String) -> void:
 		_fill_rows(_scoreboard_rows, rows)
 
 
-## Écran de fin : classement final, place du joueur, boutons.
+## Écran de fin : podium, classement final, place du joueur, boutons.
 func show_end_screen(rows: Array, local_rank: int, subtitle: String) -> void:
 	_scoreboard.visible = false
-	_end_screen = ColorRect.new()
-	(_end_screen as ColorRect).color = Color(0.01, 0.015, 0.03, 0.82)
-	_end_screen.set_anchors_preset(Control.PRESET_FULL_RECT)
-	get_child(0).add_child(_end_screen)
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_end_screen.add_child(center)
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 10)
-	center.add_child(col)
-
+	_end_screen.visible = true
 	var won := local_rank == 1
-	var headline := UiTheme.title("VICTOIRE" if won else "PARTIE TERMINÉE", 52, UiTheme.YELLOW if won else UiTheme.CYAN)
-	headline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	col.add_child(headline)
-	var place := UiTheme.label("Tu termines %s sur %d · Vainqueur : %s" % [_ordinal(local_rank), rows.size(), rows[0].name], 22, Color.WHITE, true)
+	var headline: Label = %Headline
+	headline.text = "VICTOIRE" if won else "PARTIE TERMINÉE"
+	headline.add_theme_color_override("font_color", UiTheme.YELLOW if won else UiTheme.CYAN)
+	(%Place as Label).text = "Tu termines %s sur %d · Vainqueur : %s" % [_ordinal(local_rank), rows.size(), rows[0].name]
+	(%EndSubtitle as Label).text = subtitle
+	_fill_podium(rows)
+	var end_rows: VBoxContainer = %EndRows
+	_fill_rows(end_rows, rows)
+
+	# Entrée animée : le titre puis les lignes, une à une.
+	_end_screen.modulate.a = 0.0
+	var tween := create_tween()
+	tween.tween_property(_end_screen, "modulate:a", 1.0, 0.3)
+	headline.pivot_offset = headline.size / 2.0
+	headline.scale = Vector2.ONE * 1.2
+	tween.parallel().tween_property(headline, "scale", Vector2.ONE, 0.4).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	for row: Control in end_rows.get_children():
+		row.modulate.a = 0.0
+		tween.tween_property(row, "modulate:a", 1.0, 0.08)
+	%Again.grab_focus()
+
+
+func _fill_podium(rows: Array) -> void:
+	var podium: HBoxContainer = %Podium
+	for c in podium.get_children():
+		podium.remove_child(c)
+		c.queue_free()
+	# Ordre d'affichage : 2e, 1er, 3e (le premier au centre, plus haut).
+	for rank in [2, 1, 3]:
+		if rank > rows.size():
+			continue
+		_podium_card(rows[rank - 1], rank)
+
+
+## Carte du podium, ajoutée directement dans %Podium.
+func _podium_card(data, rank: int) -> void:
+	var color: Color = PODIUM_COLORS[rank - 1]
+	var card := PanelContainer.new()
+	card.theme_type_variation = &"HudChip"
+	%Podium.add_child(card)
+	var style: StyleBoxFlat = card.get_theme_stylebox("panel").duplicate()
+	style.border_color = color
+	style.shadow_color = Color(color, 0.25)
+	style.bg_color = Color(0.03, 0.04, 0.08, 0.92).lerp(UiTheme.CYAN if data.local else color, 0.12)
+	style.content_margin_top = 10
+	style.content_margin_bottom = 10
+	card.add_theme_stylebox_override("panel", style)
+	card.custom_minimum_size = Vector2(200, 130 if rank == 1 else 104)
+	card.size_flags_vertical = Control.SIZE_SHRINK_END
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var col := VBoxContainer.new()
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 2)
+	card.add_child(col)
+	var place := UiTheme.title(_ordinal(rank).to_upper(), 30 if rank == 1 else 22, color)
 	place.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(place)
-	var sub := UiTheme.label(subtitle, 16, UiTheme.MUTED)
-	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	col.add_child(sub)
-
-	var board := UiTheme.panel()
-	board.custom_minimum_size = Vector2(760, 0)
-	var rows_box := VBoxContainer.new()
-	rows_box.add_theme_constant_override("separation", 3)
-	board.add_child(rows_box)
-	_fill_rows(rows_box, rows)
-	col.add_child(board)
-
-	var buttons := HBoxContainer.new()
-	buttons.add_theme_constant_override("separation", 12)
-	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
-	var again := UiTheme.button("REJOUER", true, UiTheme.CYAN, 48)
-	again.custom_minimum_size.x = 220
-	again.pressed.connect(func() -> void: play_again.emit())
-	buttons.add_child(again)
-	var menu := UiTheme.button("MENU PRINCIPAL", false, UiTheme.CYAN, 48)
-	menu.custom_minimum_size.x = 220
-	menu.pressed.connect(func() -> void: back_to_menu.emit())
-	buttons.add_child(menu)
-	col.add_child(buttons)
-	again.grab_focus()
+	var name_label := UiTheme.label(data.name, 20, UiTheme.CYAN if data.local else Color.WHITE, true)
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	col.add_child(name_label)
+	var kills := UiTheme.label("%d élim. · %s" % [data.kills, data.cls], 14, UiTheme.MUTED)
+	kills.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(kills)
 
 
-func _build_board_panel() -> Control:
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var board := UiTheme.panel(Color(0.03, 0.04, 0.08, 0.92), Color(UiTheme.CYAN, 0.45))
-	board.custom_minimum_size = Vector2(780, 0)
-	center.add_child(board)
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 6)
-	board.add_child(col)
-	var header := HBoxContainer.new()
-	header.add_child(UiTheme.title("TABLEAU DES SCORES", 22))
-	header.add_child(UiTheme.spacer(Vector2.ZERO, true))
-	_scoreboard_title = UiTheme.label("", 16, UiTheme.MUTED, true)
-	header.add_child(_scoreboard_title)
-	col.add_child(header)
-	col.add_child(UiTheme.neon_line(UiTheme.CYAN, 1))
-	_scoreboard_rows = VBoxContainer.new()
-	_scoreboard_rows.add_theme_constant_override("separation", 3)
-	col.add_child(_scoreboard_rows)
-	return center
-
-
-const COLUMNS := [["#", 0.5], ["JOUEUR", 2.6], ["CLASSE", 1.3], ["ÉLIM.", 0.9], ["MORTS", 0.9], ["K/D", 0.8], ["SÉRIE", 0.8], ["PING", 0.8]]
-
-
+## Remplit un tableau (en-tête + une ligne par joueur). Les lignes existantes sont
+## réutilisées : le tableau est rafraîchi à chaque image tant que Tab est maintenu.
 func _fill_rows(box: VBoxContainer, rows: Array) -> void:
-	for c in box.get_children():
-		c.queue_free()
-	box.add_child(_row(COLUMNS.map(func(c): return c[0]), true, null))
+	while box.get_child_count() > rows.size() + 1:
+		var extra := box.get_child(box.get_child_count() - 1)
+		box.remove_child(extra)
+		extra.queue_free()
+	while box.get_child_count() < rows.size() + 1:
+		box.add_child(RowScene.instantiate())
+	_apply_row(box.get_child(0), ["#", "JOUEUR", "CLASSE", "ÉLIM.", "MORTS", "K/D", "SÉRIE", "PING"], null)
 	for i in rows.size():
-		box.add_child(_row([str(i + 1), rows[i].name, rows[i].cls, str(rows[i].kills), str(rows[i].deaths),
-			"%.2f" % (float(rows[i].kills) / maxf(rows[i].deaths, 1)), str(rows[i].best_streak), rows[i].ping], false, rows[i]))
+		_apply_row(box.get_child(i + 1), [str(i + 1), rows[i].name, rows[i].cls, str(rows[i].kills), str(rows[i].deaths),
+			"%.2f" % (float(rows[i].kills) / maxf(rows[i].deaths, 1)), str(rows[i].best_streak), rows[i].ping], rows[i])
 
 
-func _row(values: Array, header: bool, data) -> Control:
-	var panel := PanelContainer.new()
+## Met à jour une ligne du tableau (data = null pour l'en-tête).
+func _apply_row(row: PanelContainer, values: Array, data) -> void:
+	var header: bool = data == null
+	var local: bool = data != null and data.local
 	var bg := Color(0, 0, 0, 0)
 	var border := Color(0, 0, 0, 0)
-	if data and data.local:
+	if local:
 		bg = Color(UiTheme.CYAN, 0.16)
 		border = UiTheme.CYAN
 	elif not header:
 		bg = Color(1, 1, 1, 0.035)
-	panel.add_theme_stylebox_override("panel", UiTheme.box(bg, border, 1 if border.a > 0 else 0, 4, 12, 4))
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	panel.add_child(row)
-	for i in values.size():
+	var style := UiTheme.box(bg, border, 1 if border.a > 0 else 0, 3, 12, 4)
+	if local:
+		style.border_width_left = 3
+	row.add_theme_stylebox_override("panel", style)
+	for i in CELLS.size():
+		var l: Label = row.get_node("%" + CELLS[i])
+		l.text = str(values[i])
 		var color := UiTheme.MUTED if header else Color.WHITE
-		if data and i == 2:
+		if not header and i == 2:
 			color = data.class_color
-		if data and i == 0 and int(values[0]) == 1:
-			color = UiTheme.YELLOW
-		var l := UiTheme.label(str(values[i]), 13 if header else 18, color, header or i == 1)
-		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		l.size_flags_stretch_ratio = COLUMNS[i][1]
-		row.add_child(l)
-	return panel
+		if not header and i == 0 and int(values[0]) <= 3:
+			color = PODIUM_COLORS[int(values[0]) - 1]
+		l.add_theme_color_override("font_color", color)
+		l.add_theme_font_size_override("font_size", 13 if header else 18)
+		if header or i == 1:
+			l.add_theme_font_override("font", UiTheme.FONT_BOLD)
+		else:
+			l.remove_theme_font_override("font")
 
 
 func _ordinal(rank: int) -> String:

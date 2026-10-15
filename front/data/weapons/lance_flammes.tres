@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_w"]
+
+[resource]
+script = ExtResource("1_w")
+id = "flamer"
+display_name = "Lance-flammes"
+model = 4
+slot = 0
+kind = 3
+damage = 6
+pellets = 1
+max_range = 9.0
+headshot_multiplier = 1.0
+fire_rate = 12.0
+automatic = true
+mag_size = 100
+reload_time = 2.5
+spread_deg = 0.0
+aim_spread_deg = 0.0
+aim_fov = 62.0
+recoil_deg = 0.05
+arc_deg = 30.0
+burn_dps = 4.0
+burn_time = 3.0
+tracer_color = Color(1, 0.5, 0.15, 1)

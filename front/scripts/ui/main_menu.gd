@@ -1,7 +1,9 @@
 extends Control
 ## Menu principal (après connexion).
-##   JOUER         classe, groupe, lancement en ligne, serveurs publics, LAN (hors ligne seulement), bots
-##   CLASSES       ouvre l'écran de choix de classe
+##   JOUER         personnages du groupe, spécialiste et classe choisis, groupe, lancement
+##                 en ligne, serveurs publics, LAN (hors ligne seulement), solo et entraînement
+##   SPÉCIALISTES  ouvre l'écran de choix du spécialiste (personnage + capacité)
+##   CLASSES       éditeur de classes (équipements : 2 armes + 2 grenades), LoadoutEditor
 ##   STATISTIQUES  stats et succès du joueur, classements (XP, victoires, éliminations)
 ##   AMIS          tiroir à droite (bouton sous la barre de navigation) : présence,
 ##                 demandes d'ami, ajout, invitation dans le groupe
@@ -19,6 +21,9 @@ const CLASS_SELECT := "res://scenes/class_select.tscn"
 const AUTH := "res://scenes/auth.tscn"
 ## Dernière adresse de connexion, gardée d'une partie à l'autre.
 const ADDRESS_PATH := "user://reseau.cfg"
+## Joueurs (humains + bots) d'une partie lancée par un groupe : la limite du back
+## (groupe de 8, Server List max_players = 8, Social refuse plus de 7 bots).
+const PARTY_MATCH_PLAYERS := 8
 const BOARDS := [["XP", "xp"], ["VICTOIRES", "wins"], ["ÉLIMINATIONS", "kills"]]
 
 var _page_holder: MarginContainer
@@ -106,6 +111,7 @@ func _ready() -> void:
 	Net.joined.connect(_on_net_joined)
 	Net.connection_failed.connect(_on_net_failed)
 	_refresh_profile()
+	_sync_loadouts()
 	_refresh_friends()
 	_refresh_services()
 	Backend.refresh_friends()
@@ -120,7 +126,7 @@ func _build_top_bar() -> Control:
 	var bar := PanelContainer.new()
 	bar.add_theme_stylebox_override("panel", UiTheme.box(Color(0.02, 0.03, 0.05, 0.9), Color(0, 0, 0, 0), 0, 0, 24, 10))
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 22)
+	row.add_theme_constant_override("separation", 14)
 	bar.add_child(row)
 
 	var logo := HBoxContainer.new()
@@ -131,15 +137,20 @@ func _build_top_bar() -> Control:
 	logo.add_child(kana)
 	logo.add_child(UiTheme.title("TPS", 24, UiTheme.CYAN))
 	row.add_child(logo)
-	row.add_child(UiTheme.spacer(Vector2(16, 0)))
 
-	for page in [["JOUER", "play"], ["CLASSES", "classes"], ["STATISTIQUES", "stats"]]:
+	for page in [["JOUER", "play"], ["SPÉCIALISTES", "specialists"], ["CLASSES", "classes"], ["STATISTIQUES", "stats"]]:
 		var b := Button.new()
 		b.text = page[0]
 		b.flat = true
 		b.add_theme_font_override("font", UiTheme.title_font())
-		b.add_theme_font_size_override("font_size", 15)
+		b.add_theme_font_size_override("font_size", 13)
 		b.add_theme_color_override("font_color", UiTheme.MUTED)
+		# Onglet plat : petites marges (les marges des boutons du thème sont larges).
+		var tab_style := StyleBoxEmpty.new()
+		tab_style.content_margin_left = 6
+		tab_style.content_margin_right = 6
+		for state in ["normal", "hover", "pressed", "focus", "hover_pressed"]:
+			b.add_theme_stylebox_override(state, tab_style)
 		b.add_theme_color_override("font_hover_color", Color.WHITE)
 		b.pressed.connect(_show_page.bind(page[1]))
 		row.add_child(b)
@@ -307,10 +318,23 @@ func _on_session_lost(reason: String) -> void:
 	get_tree().change_scene_to_file(AUTH)
 
 
+## Récupère les classes enregistrées sur le compte. Première fois (compte vide) :
+## on y enregistre celles du PC, pour que le joueur les retrouve ailleurs.
+func _sync_loadouts() -> void:
+	var r: Dictionary = await Backend.get_loadouts()
+	if not r.ok or not is_inside_tree():
+		return
+	if (r.loadouts as Array).is_empty():
+		if not Backend.is_simulated():
+			Backend.save_loadouts(GameState.loadouts)
+		return
+	GameState.set_loadouts(r.loadouts)
+
+
 # =========================================================================== pages
 
 func _show_page(page: String) -> void:
-	if page == "classes":
+	if page == "specialists":
 		get_tree().change_scene_to_file(CLASS_SELECT)
 		return
 	_page = page
@@ -327,6 +351,8 @@ func _show_page(page: String) -> void:
 			_page_holder.add_child(_build_launch_page())
 		"stats":
 			_page_holder.add_child(_build_stats_page())
+		"classes":
+			_page_holder.add_child(LoadoutEditor.new())
 		"servers":
 			_page_holder.add_child(_build_server_page())
 
@@ -367,14 +393,63 @@ func _build_play_page() -> Control:
 	play.custom_minimum_size.x = PLAY_WIDTH
 	page.add_child(play)
 
-	# LAN par adresse, en bas à gauche, sur une ligne : seulement hors ligne (back
-	# simulé) ; avec le vrai back on passe par les tickets.
+	# --- En bas à gauche : classe (équipement), map hors ligne, LAN ---
+	var left := VBoxContainer.new()
+	left.add_theme_constant_override("separation", 4)
+	left.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	left.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	left.custom_minimum_size.x = 400
+	page.add_child(left)
+
+	# Classe (2 armes + 2 grenades) pour la prochaine partie.
+	var class_row := HBoxContainer.new()
+	class_row.add_theme_constant_override("separation", 8)
+	class_row.add_child(_side_label("CLASSE"))
+	var picker := OptionButton.new()
+	picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	picker.fit_to_longest_item = false
+	picker.clip_text = true
+	_compact(picker)
+	for i in GameState.loadouts.size():
+		var l: Dictionary = GameState.loadouts[i]
+		var p := WeaponCatalog.find(l.primary)
+		var sec := WeaponCatalog.find(l.secondary)
+		picker.add_item("%s  ·  %s + %s" % [l.name, p.display_name if p else "?", sec.display_name if sec else "?"], i)
+	picker.select(GameState.selected_loadout)
+	picker.item_selected.connect(func(index: int) -> void:
+		GameState.select_loadout(index)
+		_lineup_key = ""            # l'arme du personnage change
+		_refresh_lineup())
+	class_row.add_child(picker)
+	var edit := UiTheme.button("MODIFIER", false, UiTheme.MAGENTA, 34)
+	_compact(edit)
+	edit.tooltip_text = "Modifier mes classes"
+	edit.pressed.connect(_show_page.bind("classes"))
+	class_row.add_child(edit)
+	left.add_child(class_row)
+
+	# Map de la partie solo et de l'entraînement.
+	var map_row := HBoxContainer.new()
+	map_row.add_theme_constant_override("separation", 8)
+	map_row.add_child(_side_label("MAP HORS LIGNE"))
+	var map_picker := OptionButton.new()
+	map_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	map_picker.fit_to_longest_item = false
+	map_picker.clip_text = true
+	_compact(map_picker)
+	for i in MapCatalog.MAPS.size():
+		var m: Dictionary = MapCatalog.MAPS[i]
+		map_picker.add_item("%s  ·  %s" % [m.name, m.subtitle], i)
+		if m.id == GameState.map_id:
+			map_picker.select(i)
+	map_picker.tooltip_text = "Map de la partie solo et de l'entraînement (en LAN, c'est le chef du salon qui choisit)"
+	map_picker.item_selected.connect(func(index: int) -> void: GameState.map_id = MapCatalog.MAPS[index].id)
+	map_row.add_child(map_picker)
+	left.add_child(map_row)
+
+	# LAN par adresse : seulement hors ligne (back simulé) ; avec le vrai back on
+	# passe par les tickets.
 	if Backend.is_simulated():
-		var online := VBoxContainer.new()
-		online.add_theme_constant_override("separation", 4)
-		online.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-		online.grow_vertical = Control.GROW_DIRECTION_BEGIN
-		online.custom_minimum_size.x = 380
 		var join_row := HBoxContainer.new()
 		join_row.add_theme_constant_override("separation", 8)
 		_address_field = LineEdit.new()
@@ -383,20 +458,21 @@ func _build_play_page() -> Control:
 		_address_field.text = _saved_address()
 		_address_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_address_field.text_submitted.connect(func(_t: String) -> void: _join_online())
+		_compact(_address_field)
 		join_row.add_child(_address_field)
-		var join_button := UiTheme.button("REJOINDRE (LAN)", true, UiTheme.MAGENTA, 44)
-		join_button.add_theme_font_size_override("font_size", 14)
+		var join_button := UiTheme.button("REJOINDRE (LAN)", true, UiTheme.MAGENTA, 34)
+		_compact(join_button)
 		join_button.pressed.connect(_join_online)
 		join_row.add_child(join_button)
 		_online_error = UiTheme.label("", 14, UiTheme.RED)
 		_online_error.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		online.add_child(_online_error)
-		online.add_child(join_row)
-		page.add_child(online)
+		left.add_child(_online_error)
+		left.add_child(join_row)
 
 	# En ligne, avec le back : groupe -> serveur dédié.
 	_launch_button = UiTheme.button("LANCER EN LIGNE", true, UiTheme.CYAN, 54)
 	_launch_button.add_theme_font_size_override("font_size", 20)
+	_launch_button.clip_text = true      # le texte ne doit jamais élargir la page
 	_launch_button.tooltip_text = "Choisir les réglages, puis réserver un serveur de jeu pour ton groupe (ou pour toi seul)"
 	_launch_button.pressed.connect(_show_page.bind("launch"))
 	play.add_child(_launch_button)
@@ -426,13 +502,35 @@ func _build_play_page() -> Control:
 	return page
 
 
+## Contrôle plus bas que ceux du thème (lignes du bas à gauche).
+func _compact(control: Control) -> void:
+	control.add_theme_font_size_override("font_size", 14)
+	for state in ["normal", "hover", "pressed", "focus", "disabled", "read_only"]:
+		var style := control.get_theme_stylebox(state)
+		if style:
+			style = style.duplicate()
+			style.content_margin_top = 5
+			style.content_margin_bottom = 5
+			control.add_theme_stylebox_override(state, style)
+
+
+## Petit titre de ligne, de largeur fixe pour aligner les listes du bas à gauche.
+func _side_label(text: String) -> Label:
+	var l := UiTheme.label(text, 13, UiTheme.MUTED, true)
+	l.custom_minimum_size.x = 120
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	return l
+
+
 func _update_launch_button() -> void:
 	if not is_instance_valid(_launch_button):
 		return
 	var leader := Backend.is_party_leader()
 	_launch_button.disabled = not leader or Backend.is_simulated()
 	if Backend.is_simulated():
-		_launch_button.text = "LANCER EN LIGNE (connecte-toi au back)"
+		# Texte court : un texte long élargissait toute la page (liste d'amis coupée).
+		_launch_button.text = "EN LIGNE : BACK REQUIS"
+		_launch_button.tooltip_text = "Hors ligne : connecte-toi au back depuis l'écran de connexion pour jouer en ligne"
 	elif not leader:
 		_launch_button.text = "LE CHEF LANCE LA PARTIE…"
 	else:
@@ -476,7 +574,7 @@ func _refresh_lineup() -> void:
 		else:
 			order.push_front(others[i])
 
-	var change := UiTheme.button("CHANGER DE CLASSE", false, UiTheme.CYAN, 36)
+	var change := UiTheme.button("CHANGER DE SPÉCIALISTE", false, UiTheme.CYAN, 36)
 	change.add_theme_font_size_override("font_size", 14)
 	change.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	change.pressed.connect(func() -> void: get_tree().change_scene_to_file(CLASS_SELECT))
@@ -540,7 +638,13 @@ func _lineup_figure(member: Dictionary, size: Vector2i, cell: int, leader: bool,
 	preview.pose_names = ["Repos", "Visée", "Marche", "Accroupi"]
 	preview.show_pose_label = false
 	stage.add_child(preview)
-	preview.setup(cls.character_design, cls.weapon.model, size, 4.2, 1.0)
+	# Le joueur tient l'arme principale de sa classe ; les autres, celle de leur spécialiste.
+	var weapon_model: int = cls.weapon.model
+	if is_me:
+		var primary := WeaponCatalog.find(GameState.current_loadout().primary)
+		if primary:
+			weapon_model = primary.model
+	preview.setup(cls.character_design, weapon_model, size, 4.2, 1.0)
 	if selected:
 		var actions := _member_actions(member)
 		actions.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -693,15 +797,15 @@ func _build_launch_page() -> Control:
 	summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	var show_summary := func() -> void:
 		var humans: int = Backend.party_members().size()
-		var bots: int = mini(int(settings.bots), Net.MAX_PLAYERS - humans)
+		var bots: int = mini(int(settings.bots), PARTY_MATCH_PLAYERS - humans)
 		summary.text = "%d joueur%s du groupe + %d bot%s, %d max. Les places libres s'ouvrent aux autres joueurs pendant la partie." % [
-			humans, "s" if humans > 1 else "", bots, "s" if bots > 1 else "", Net.MAX_PLAYERS]
+			humans, "s" if humans > 1 else "", bots, "s" if bots > 1 else "", PARTY_MATCH_PLAYERS]
 
 	# Bots.
 	var bots_value := UiTheme.label("", 18, UiTheme.CYAN, true)
 	var bots_slider := HSlider.new()
 	bots_slider.min_value = 0
-	bots_slider.max_value = Net.MAX_PLAYERS - 1
+	bots_slider.max_value = PARTY_MATCH_PLAYERS - 1
 	bots_slider.step = 1
 	bots_slider.value = settings.bots
 	bots_slider.custom_minimum_size = Vector2(0, 24)

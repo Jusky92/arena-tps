@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_w"]
+
+[resource]
+script = ExtResource("1_w")
+id = "laser_rifle"
+display_name = "Fusil laser"
+model = 10
+slot = 3
+damage = 40
+max_range = 120.0
+headshot_multiplier = 2.0
+fire_rate = 3.0
+automatic = false
+mag_size = 15
+reload_time = 0.0
+spread_deg = 0.6
+aim_spread_deg = 0.0
+aim_fov = 40.0
+recoil_deg = 1.5
+pierce_always = true
+tracer_color = Color(0.3, 1, 1, 1)

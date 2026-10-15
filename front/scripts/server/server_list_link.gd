@@ -48,7 +48,7 @@ func _register() -> String:
 		"port": _info.get("port", Net.DEFAULT_PORT),
 		"region": _info.get("region", "eu"),
 		"map": _info.get("map", MatchRules.MAP_ID),
-		"max_players": _info.get("max_players", Net.MAX_PLAYERS),
+		"max_players": _info.get("max_players", Net.max_players),
 		"build_version": _info.get("build_version", Backend.BUILD_VERSION),
 	}
 	var r := await _api.request(HTTPClient.METHOD_POST, "/servers", body, ApiClient.bearer(_secret))

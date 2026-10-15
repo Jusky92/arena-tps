@@ -1,0 +1,55 @@
+[gd_scene format=3]
+
+[ext_resource type="Texture2D" path="res://assets/ui/icons/headshot.svg" id="1_head"]
+
+[node name="KillFeedEntry" type="PanelContainer"]
+size_flags_horizontal = 8
+mouse_filter = 2
+theme_type_variation = &"FeedEntry"
+
+[node name="Row" type="HBoxContainer" parent="."]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 10
+
+[node name="Killer" type="Label" parent="Row"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudLabel"
+theme_override_font_sizes/font_size = 17
+text = "Tueur"
+
+[node name="WeaponIcon" type="TextureRect" parent="Row"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(44, 22)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="WeaponText" type="Label" parent="Row"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"MutedLabel"
+theme_override_font_sizes/font_size = 15
+text = "[arme]"
+
+[node name="HeadshotIcon" type="TextureRect" parent="Row"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+modulate = Color(1, 0.84, 0.25, 1)
+texture = ExtResource("1_head")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Victim" type="Label" parent="Row"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudLabel"
+theme_override_font_sizes/font_size = 17
+text = "Victime"

@@ -50,7 +50,7 @@ text = "← Retour"
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 30
-text = "CHOISIS TA CLASSE"
+text = "CHOISIS TON SPÉCIALISTE"
 horizontal_alignment = 1
 
 [node name="Spacer" type="Control" parent="Margin/VBox/TopBar"]
@@ -60,5 +60,5 @@ layout_mode = 2
 [node name="Cards" type="HBoxContainer" parent="Margin/VBox"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/separation = 28
+theme_override_constants/separation = 14
 alignment = 1

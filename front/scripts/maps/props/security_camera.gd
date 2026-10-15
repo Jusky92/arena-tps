@@ -15,6 +15,7 @@ var _phase := 0.0
 
 
 func _ready() -> void:
+	add_to_group("security_camera")     # compté par l'écran de supervision du labo
 	for child in get_children():
 		child.queue_free()
 	_phase = randf() * TAU

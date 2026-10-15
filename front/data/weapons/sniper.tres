@@ -1,14 +1,15 @@
-[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="WeaponData" format=3 uid="uid://cgm0rylfnwje7"]
 
-[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_w"]
+[ext_resource type="Script" uid="uid://c1eue6wr0lwki" path="res://scripts/data/weapon_data.gd" id="1_w"]
 
 [resource]
 script = ExtResource("1_w")
-model = 2
+id = "sniper"
 display_name = "Fusil de précision"
+model = 2
 damage = 70
-pellets = 1
 max_range = 200.0
+headshot_multiplier = 2.5
 fire_rate = 0.9
 automatic = false
 mag_size = 5

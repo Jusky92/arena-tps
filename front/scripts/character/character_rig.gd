@@ -43,6 +43,8 @@ var tails: Array[Node3D] = []   # pièces souples (écharpe, pans de manteau) qu
 var shoulder_half_width := 0.22
 ## Distance entre la poignée et la main gauche sur l'arme.
 var foregrip := 0.3
+var design_id := ""
+var _weapon_grips := {}     # nœud d'arme -> distance de la main gauche
 
 # --- État d'entrée (rempli par set_state) ---
 var move_velocity := Vector3.ZERO   # vitesse dans le repère du personnage
@@ -75,7 +77,9 @@ var _tail_angles: Array[float] = []
 
 ## Construit le squelette, l'apparence (design) et le modèle d'arme.
 ## weapon_node : nœud de l'arme (avec son script et son Muzzle), rattaché à la main droite.
-func build(design_id: String, weapon_kind: int, weapon_node: Node3D = null) -> void:
+func build(id: String, weapon_kind: int, weapon_node: Node3D = null) -> void:
+	design_id = id
+	_weapon_grips.clear()
 	for child in get_children():
 		child.queue_free()
 	_parts.clear()
@@ -108,6 +112,7 @@ func build(design_id: String, weapon_kind: int, weapon_node: Node3D = null) -> v
 	foregrip = weapon_info.foregrip
 	_merge_parts()
 	if weapon_node:
+		_weapon_grips[weapon_node] = foregrip
 		weapon_node.reparent(gun_mount, false)
 		weapon_node.transform = Transform3D.IDENTITY
 	_update_pose(0.0)
@@ -125,7 +130,8 @@ func _bone(parent: Node3D, bone_name: String, offset: Vector3) -> Node3D:
 func add_part(bone: Node3D, size: Vector3, roundness: float, offset: Vector3, material: Material,
 		rotation_deg := Vector3.ZERO, taper := Vector2.ONE, vertical := -1.0) -> MeshInstance3D:
 	var part := MeshInstance3D.new()
-	part.mesh = PartMesh.shape(size, roundness, vertical, taper)
+	var r := PartMesh.smooth(roundness, vertical, PartMesh.SMOOTH_GEAR)
+	part.mesh = PartMesh.shape(size, r.x, r.y, taper)
 	part.material_override = material
 	bone.add_child(part)
 	part.position = offset
@@ -136,9 +142,14 @@ func add_part(bone: Node3D, size: Vector3, roundness: float, offset: Vector3, ma
 
 ## Optimisation : les pièces accrochées au même pivot avec la même matière sont
 ## fusionnées en un seul maillage (environ 65 pièces -> une trentaine d'appels de rendu).
-func _merge_parts() -> void:
+func _merge_parts(from_index := 0) -> void:
 	var groups := {}
-	for part in _parts:
+	var kept: Array[MeshInstance3D] = []
+	for i in _parts.size():
+		var part := _parts[i]
+		if i < from_index:
+			kept.append(part)
+			continue
 		var key := "%d|%d" % [part.get_parent().get_instance_id(), part.material_override.get_instance_id()]
 		if not groups.has(key):
 			groups[key] = []
@@ -160,7 +171,27 @@ func _merge_parts() -> void:
 		for part in group:
 			part.free()
 		merged.append(combined)
-	_parts = merged
+	kept.append_array(merged)
+	_parts = kept
+
+
+## Ajoute une arme de plus (classes : principale + secondaire). Son modèle est
+## construit dans `weapon_node`, accroché à la main ; show_weapon() choisit celle en main.
+func add_weapon(weapon_kind: int, weapon_node: Node3D) -> void:
+	var first_new := _parts.size()
+	var weapon_info := CharacterDesigns.build_weapon(self, weapon_kind, design_id, weapon_node)
+	_weapon_grips[weapon_node] = weapon_info.foregrip
+	_merge_parts(first_new)
+	weapon_node.reparent(gun_mount, false)
+	weapon_node.transform = Transform3D.IDENTITY
+
+
+## Affiche l'arme en main et cache les autres ; la main gauche se place sur elle.
+func show_weapon(weapon_node: Node3D) -> void:
+	for node in _weapon_grips:
+		if is_instance_valid(node):
+			node.visible = node == weapon_node
+	foregrip = _weapon_grips.get(weapon_node, foregrip)
 
 
 ## Ajoute un pivot souple (écharpe, pan de manteau) qui réagit au mouvement.
@@ -336,3 +367,8 @@ func _orient_segment(segment: Node3D, from: Vector3, to: Vector3) -> void:
 	var x := y.cross(hint).normalized()
 	var z := x.cross(y).normalized()
 	segment.transform = Transform3D(Basis(x, y, z), from)
+
+
+## Retire une arme ajoutée par add_weapon (arme spéciale perdue).
+func remove_weapon(weapon_node: Node3D) -> void:
+	_weapon_grips.erase(weapon_node)

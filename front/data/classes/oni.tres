@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="ClassData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/class_data.gd" id="1_c"]
+[ext_resource type="Resource" path="res://data/weapons/roquettes.tres" id="2_w"]
+
+[resource]
+script = ExtResource("1_c")
+weapon = ExtResource("2_w")
+character_design = "oni"
+display_name = "Oni"
+description = "Oni — Démolisseur en armure lourde. Fonce dans la mêlée et renverse tout sur son passage."
+color = Color(0.45, 0.95, 0.3, 1)
+max_health = 130
+walk_speed = 4.4
+sprint_speed = 6.8
+jump_velocity = 4.8
+ability = 3
+ability_name = "Charge"
+ability_description = "Ruée de 0,35 s : les ennemis percutés prennent 30 dégâts et sont projetés."
+ability_cooldown = 9.0
+ability_duration = 0.35
+ability_strength = 15.0

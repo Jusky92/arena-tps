@@ -1,19 +1,20 @@
 extends Control
-## Écran de choix de classe : une carte par classe avec le personnage en 3D animé,
-## ses statistiques, son arme et sa capacité.
+## Écran de choix du spécialiste : une carte par spécialiste avec le personnage en
+## 3D animé, ses statistiques et sa capacité. Les armes viennent de la classe
+## (équipement) choisie dans l'accueil : n'importe quel spécialiste peut les porter.
 ## Les cartes sont générées depuis GameState.CLASSES : ajouter une classe
 ## l'ajoute automatiquement ici.
 ## Souris ou touches 1, 2, 3 pour choisir (retour au menu principal). Échap pour revenir.
 
-const CARD_WIDTH := 340.0
-const PREVIEW_SIZE := Vector2i(296, 230)
+const CARD_WIDTH := 270.0
+const PREVIEW_SIZE := Vector2i(224, 200)
 const BG_CARD := Color(0.05, 0.065, 0.1, 0.92)
 
 # Valeurs de référence pour remplir les barres de stats.
 const MAX_HEALTH_REF := 150.0
 const MAX_SPEED_REF := 9.5
-const MAX_DPS_REF := 120.0
-const MAX_RANGE_REF := 200.0
+const MAX_JUMP_REF := 6.0
+const MAX_COOLDOWN_REF := 14.0
 
 @onready var cards_box: HBoxContainer = %Cards
 @onready var back_button: Button = %BackButton
@@ -42,8 +43,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _choose(class_data: ClassData) -> void:
-	GameState.selected_class = class_data
-	Net.set_class(class_data.resource_path)
+	GameState.select_specialist(class_data)
+	var loadout := GameState.current_loadout()
+	Net.set_loadout(class_data.resource_path, loadout.primary, loadout.secondary)
 	_go_back()
 
 
@@ -86,7 +88,8 @@ func _make_card(data: ClassData, index: int) -> Control:
 	preview_holder.add_child(glow)
 	var preview := CharacterPreview.new()
 	preview_holder.add_child(preview)
-	preview.setup(data.character_design, data.weapon.model, PREVIEW_SIZE)
+	var primary := WeaponCatalog.find(GameState.current_loadout().primary)
+	preview.setup(data.character_design, primary.model if primary else data.weapon.model, PREVIEW_SIZE)
 	var name_label := _label(data.display_name.to_upper(), 26, Color.WHITE)
 	name_label.add_theme_font_override("font", UiTheme.title_font())
 	name_label.position = Vector2(10, 4)
@@ -102,21 +105,14 @@ func _make_card(data: ClassData, index: int) -> Control:
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(desc)
 
-	# Statistiques.
-	var w := data.weapon
-	var dps := w.damage * w.pellets * w.fire_rate
+	# Statistiques du spécialiste (les armes viennent de la classe choisie dans l'accueil).
 	box.add_child(_stat_bar("Points de vie", data.max_health / MAX_HEALTH_REF, str(data.max_health), data.color))
 	box.add_child(_stat_bar("Vitesse", data.sprint_speed / MAX_SPEED_REF, "%.1f m/s" % data.sprint_speed, data.color))
-	box.add_child(_stat_bar("Dégâts / s", dps / MAX_DPS_REF, str(int(dps)), data.color))
-	box.add_child(_stat_bar("Portée", w.max_range / MAX_RANGE_REF, "%d m" % int(w.max_range), data.color))
+	box.add_child(_stat_bar("Saut", data.jump_velocity / MAX_JUMP_REF, "%.1f m/s" % data.jump_velocity, data.color))
+	box.add_child(_stat_bar("Recharge de la capacité", 1.0 - data.ability_cooldown / MAX_COOLDOWN_REF,
+		"%d s" % int(data.ability_cooldown), data.color))
 
 	box.add_child(HSeparator.new())
-
-	# Arme.
-	var pellets_text := " x%d" % w.pellets if w.pellets > 1 else ""
-	box.add_child(_label("ARME  ·  %s" % w.display_name, 15, Color.WHITE))
-	box.add_child(_label("%d dégâts%s · chargeur %d · %s" % [w.damage, pellets_text, w.mag_size,
-		"automatique" if w.automatic else "coup par coup"], 12, Color(1, 1, 1, 0.6)))
 
 	# Capacité.
 	box.add_child(_label("CAPACITÉ [E]  ·  %s" % data.ability_name, 15, data.color.lightened(0.35)))
@@ -129,7 +125,7 @@ func _make_card(data: ClassData, index: int) -> Control:
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_child(spacer)
 	var button := Button.new()
-	button.text = "%s %s" % ["CLASSE ACTUELLE ·" if data == GameState.selected_class else "CHOISIR", data.display_name.to_upper()]
+	button.text = "%s %s" % ["SPÉCIALISTE ACTUEL ·" if data == GameState.selected_class else "CHOISIR", data.display_name.to_upper()]
 	button.add_theme_font_override("font", UiTheme.title_font())
 	button.add_theme_font_size_override("font_size", 14)
 	button.custom_minimum_size = Vector2(0, 42)
@@ -138,6 +134,7 @@ func _make_card(data: ClassData, index: int) -> Control:
 	button.add_theme_stylebox_override("pressed", _button_style(data.color.lightened(0.2)))
 	button.add_theme_stylebox_override("focus", _button_style(data.color))
 	button.pressed.connect(_choose.bind(data))
+	UiTheme.add_hover_feedback(button)
 	box.add_child(button)
 	return card
 
@@ -157,44 +154,32 @@ func _stat_bar(title: String, ratio: float, value_text: String, color: Color) ->
 	bar.custom_minimum_size = Vector2(0, 7)
 	bar.max_value = 1.0
 	bar.value = clampf(ratio, 0.05, 1.0)
-	bar.add_theme_stylebox_override("background", _flat(Color(1, 1, 1, 0.08), 4))
-	bar.add_theme_stylebox_override("fill", _flat(color, 4))
+	bar.add_theme_stylebox_override("background", _flat(Color(1, 1, 1, 0.08), 2))
+	bar.add_theme_stylebox_override("fill", _flat(color, 2))
 	row.add_child(bar)
 	return row
 
 
 func _label(text: String, size: int, color: Color) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.add_theme_font_size_override("font_size", size)
-	label.add_theme_color_override("font_color", color)
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return label
+	return UiTheme.label(text, size, color)
 
 
+## Carte biseautée comme le reste de l'interface ; bordure et halo à la couleur de la classe au survol.
 func _card_style(color: Color, hovered: bool) -> StyleBoxFlat:
-	var style := _flat(BG_CARD, 14)
-	style.set_border_width_all(3 if hovered else 1)
-	style.border_color = color if hovered else Color(1, 1, 1, 0.08)
-	style.content_margin_left = 22
-	style.content_margin_right = 22
-	style.content_margin_top = 14
-	style.content_margin_bottom = 14
+	var style := UiTheme.box(BG_CARD, color if hovered else Color(1, 1, 1, 0.08), 2 if hovered else 1, 8, 22, 14)
 	if hovered:
+		style.border_width_left = 4
 		style.shadow_color = Color(color, 0.35)
 		style.shadow_size = 18
 	return style
 
 
 func _button_style(color: Color) -> StyleBoxFlat:
-	return _flat(color, 8)
+	return UiTheme.box(color, Color(1, 1, 1, 0.12), 1, 5, 16, 8)
 
 
 func _flat(color: Color, radius: int) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = color
-	style.set_corner_radius_all(radius)
-	return style
+	return UiTheme.box(color, Color(0, 0, 0, 0), 0, radius, 0, 0)
 
 
 func _animate_scale(node: Control, target: float) -> void:

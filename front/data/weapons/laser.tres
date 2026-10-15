@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_w"]
+
+[resource]
+script = ExtResource("1_w")
+id = "laser"
+display_name = "Pistolet laser"
+model = 5
+slot = 1
+kind = 0
+damage = 22
+pellets = 1
+max_range = 70.0
+headshot_multiplier = 2.0
+fire_rate = 4.0
+automatic = false
+mag_size = 12
+reload_time = 1.2
+spread_deg = 0.8
+aim_spread_deg = 0.0
+aim_fov = 55.0
+recoil_deg = 0.9
+tracer_color = Color(0.25, 0.95, 1, 1)

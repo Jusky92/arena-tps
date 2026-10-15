@@ -1,7 +1,8 @@
 class_name HumanDesigns
 extends RefCounted
 ## Chara design des personnages (corps Quaternius, CC0), thème « néo-Edo » :
-## armure de samouraï, tenue de shinobi et archer de kyūdō, revisités en cyberpunk.
+## armure de samouraï, tenue de shinobi, archer de kyūdō et démon oni, revisités
+## en cyberpunk.
 ##
 ## Chaque classe = un corps (homme / femme), une coupe de cheveux teinte, les
 ## couleurs de sa combinaison et de l'équipement accroché aux os (plastron,
@@ -49,6 +50,12 @@ const DESIGNS := {
 		"body": "male", "hair": ["Hair_SimpleParted"], "hair_color": Color(0.09, 0.08, 0.08),
 		"primary": Color(0.88, 0.88, 0.9), "secondary": Color(0.11, 0.18, 0.4),
 		"dark": Color(0.07, 0.08, 0.12), "neon": Color(0.3, 0.8, 1.0),
+	},
+	# 鬼 — oni : démon en armure lourde, masque à cornes, néon vert acide.
+	"oni": {
+		"body": "male", "hair": ["Hair_Buzzed"], "hair_color": Color(0.06, 0.06, 0.05),
+		"primary": Color(0.08, 0.09, 0.07), "secondary": Color(0.22, 0.42, 0.1),
+		"dark": Color(0.04, 0.05, 0.04), "neon": Color(0.55, 1.0, 0.25),
 	},
 }
 
@@ -170,6 +177,30 @@ static func build_gear(rig: HumanRig, design_id: String) -> void:
 			# Étui à shuriken sur la cuisse.
 			rig.attach("thigh_r", Vector3(0.1 * w, -0.14, 0), Vector3(0.05, 0.14, 0.11), 0.3, m.armor2)
 			rig.attach("thigh_r", Vector3(0.125 * w, -0.14, 0), Vector3(0.012, 0.09, 0.09), 0.2, m.glow)
+		"oni":
+			# 鬼 ONI : grosse cuirasse bombée, épaulières massives, masque à crocs et
+			# cornes, kanabō (massue cloutée) dans le dos.
+			rig.attach("spine_03", Vector3(0, -0.01, -0.115 * w), Vector3(0.36 * w, 0.34, 0.11), 0.75, m.armor, Vector3(-5, 0, 0), Vector2(0.88, 1.0))
+			rig.attach("spine_03", Vector3(0, -0.04, 0.13 * w), Vector3(0.32 * w, 0.32, 0.1), 0.75, m.armor)
+			rig.attach("spine_03", Vector3(0, 0.07, -0.172 * w), Vector3(0.14 * w, 0.025, 0.012), 0.6, m.glow)
+			for side in [-1.0, 1.0]:
+				var s := "r" if side > 0 else "l"
+				# Épaulières massives et gantelets lourds.
+				rig.attach("upperarm_" + s, Vector3(side * 0.07, 0.08, 0), Vector3(0.21, 0.13, 0.27), 0.8, m.armor, Vector3(0, 0, side * -14.0))
+				rig.attach("upperarm_" + s, Vector3(side * 0.13, 0.1, 0), Vector3(0.025, 0.025, 0.22), 0.8, m.glow, Vector3(0, 0, side * -14.0))
+				rig.attach("lowerarm_" + s, Vector3(side * 0.13, 0.0, 0), Vector3(0.18, 0.12 * w + 0.01, 0.12 * w + 0.01), 0.75, m.armor)
+				# Cornes : coniques, légèrement écartées vers l'arrière.
+				rig.attach("Head", Vector3(side * 0.08, 0.2, -0.01), Vector3(0.05, 0.2, 0.05), 0.9, m.trim, Vector3(-12, 0, side * -24.0), Vector2(1.0, 0.12))
+				# Yeux lumineux et crocs du masque.
+				rig.attach("Head", Vector3(side * 0.045, 0.045, -0.135), Vector3(0.05, 0.02, 0.02), 0.9, m.glow, Vector3(0, 0, side * 10.0))
+				rig.attach("Head", Vector3(side * 0.035, -0.05, -0.135), Vector3(0.022, 0.05, 0.022), 0.8, m.trim, Vector3.ZERO, Vector2(0.25, 1.0))
+			# Casque arrondi et masque d'oni.
+			rig.attach("Head", Vector3(0, 0.11, 0.0), Vector3(0.235, 0.15, 0.255), 0.9, m.armor, Vector3.ZERO, Vector2(1.0, 0.85))
+			rig.attach("Head", Vector3(0, 0.01, -0.09), Vector3(0.2, 0.18, 0.1), 0.75, m.armor2, Vector3(4, 0, 0))
+			# Kanabō dans le dos : massue cloutée, clous lumineux.
+			rig.attach("spine_03", Vector3(0.1, 0.0, 0.2), Vector3(0.08, 0.7, 0.08), 0.8, m.armor2, Vector3(0, 0, 24), Vector2(0.6, 1.25))
+			for i in 3:
+				rig.attach("spine_03", Vector3(0.1 - 0.06 * i, 0.12 + 0.11 * i, 0.25), Vector3(0.03, 0.03, 0.03), 1.0, m.glow, Vector3(0, 0, 24))
 		"tireur":
 			# 弓 ARCHER : plastron en diagonale, hakama, carquois et viseur.
 			rig.attach("spine_03", Vector3(0, -0.02, -0.1 * w), Vector3(0.28 * w, 0.24, 0.05), 0.3, m.armor, Vector3(-6, 0, 0), Vector2(0.85, 1.0))

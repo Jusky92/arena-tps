@@ -1,0 +1,222 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/match_ui.gd" id="1_ui"]
+[ext_resource type="Theme" path="res://ui/theme/neon_theme.tres" id="2_theme"]
+
+[node name="MatchUI" type="CanvasLayer"]
+layer = 5
+script = ExtResource("1_ui")
+
+[node name="Root" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme = ExtResource("2_theme")
+
+[node name="Top" type="VBoxContainer" parent="Root"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -220.0
+offset_top = 10.0
+offset_right = 220.0
+offset_bottom = 80.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="TimerChip" type="PanelContainer" parent="Root/Top"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+mouse_filter = 2
+theme_type_variation = &"HudChip"
+
+[node name="Timer" type="Label" parent="Root/Top/TimerChip"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudTitle"
+theme_override_font_sizes/font_size = 26
+text = "3:00"
+horizontal_alignment = 1
+
+[node name="Leader" type="Label" parent="Root/Top"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudLabel"
+theme_override_font_sizes/font_size = 16
+text = "MATCH À MORT"
+horizontal_alignment = 1
+
+[node name="Feed" type="VBoxContainer" parent="Root"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -460.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = 16.0
+grow_horizontal = 0
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="Banner" type="Label" parent="Root"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0)
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -420.0
+offset_top = 70.0
+offset_right = 420.0
+offset_bottom = 124.0
+grow_horizontal = 2
+grow_vertical = 2
+pivot_offset = Vector2(420, 27)
+theme_type_variation = &"HudTitle"
+theme_override_colors/font_color = Color(0.95, 0.27, 0.78, 1)
+theme_override_font_sizes/font_size = 30
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Scoreboard" type="CenterContainer" parent="Root"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Board" type="PanelContainer" parent="Root/Scoreboard"]
+custom_minimum_size = Vector2(820, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"BoardPanel"
+
+[node name="VBox" type="VBoxContainer" parent="Root/Scoreboard/Board"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="Header" type="HBoxContainer" parent="Root/Scoreboard/Board/VBox"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Title" type="Label" parent="Root/Scoreboard/Board/VBox/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"TitleLabel"
+theme_override_font_sizes/font_size = 22
+text = "TABLEAU DES SCORES"
+
+[node name="Subtitle" type="Label" parent="Root/Scoreboard/Board/VBox/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"MutedLabel"
+
+[node name="Separator" type="HSeparator" parent="Root/Scoreboard/Board/VBox"]
+layout_mode = 2
+
+[node name="BoardRows" type="VBoxContainer" parent="Root/Scoreboard/Board/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 3
+
+[node name="EndScreen" type="ColorRect" parent="Root"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.01, 0.015, 0.03, 0.85)
+
+[node name="Center" type="CenterContainer" parent="Root/EndScreen"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Col" type="VBoxContainer" parent="Root/EndScreen/Center"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 12
+
+[node name="Headline" type="Label" parent="Root/EndScreen/Center/Col"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"TitleLabel"
+theme_override_font_sizes/font_size = 56
+text = "PARTIE TERMINÉE"
+horizontal_alignment = 1
+
+[node name="Place" type="Label" parent="Root/EndScreen/Center/Col"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudLabel"
+theme_override_font_sizes/font_size = 22
+horizontal_alignment = 1
+
+[node name="EndSubtitle" type="Label" parent="Root/EndScreen/Center/Col"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"MutedLabel"
+horizontal_alignment = 1
+
+[node name="Podium" type="HBoxContainer" parent="Root/EndScreen/Center/Col"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 14
+alignment = 1
+
+[node name="EndBoard" type="PanelContainer" parent="Root/EndScreen/Center/Col"]
+custom_minimum_size = Vector2(820, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"BoardPanel"
+
+[node name="EndRows" type="VBoxContainer" parent="Root/EndScreen/Center/Col/EndBoard"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 3
+
+[node name="Buttons" type="HBoxContainer" parent="Root/EndScreen/Center/Col"]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="Again" type="Button" parent="Root/EndScreen/Center/Col/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 48)
+layout_mode = 2
+theme_type_variation = &"PrimaryButton"
+text = "REJOUER"
+
+[node name="Menu" type="Button" parent="Root/EndScreen/Center/Col/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 48)
+layout_mode = 2
+text = "MENU PRINCIPAL"

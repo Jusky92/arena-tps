@@ -6,8 +6,10 @@ extends CanvasLayer
 ## Le menu se contente de couper les commandes du joueur (géré par la scène de jeu).
 ##
 ## Pages :
-##   - principale : Reprendre, Changer de classe, Paramètres, Quitter la partie ;
-##   - classes : choix de la classe utilisée à la prochaine apparition ;
+##   - principale : Reprendre, Changer de spécialiste, Changer de classe, Paramètres,
+##     Quitter la partie ;
+##   - spécialistes : choix du personnage utilisé à la prochaine apparition ;
+##   - classes : choix de l'équipement (armes) utilisé à la prochaine apparition ;
 ##   - paramètres : volumes (général, effets, interface), sensibilité de la souris ;
 ##   - confirmation avant de quitter.
 ## Échap : revient à la page principale, puis ferme le menu.
@@ -15,6 +17,8 @@ extends CanvasLayer
 signal resumed
 signal quit_requested
 signal class_selected(class_data: ClassData)
+## Classe (équipement) choisie : indice dans GameState.loadouts.
+signal loadout_selected(index: int)
 
 const PANEL_BG := Color(0.03, 0.04, 0.075, 0.94)
 const LEFT_WIDTH := 400.0
@@ -28,6 +32,8 @@ var _info_label: Label
 var _class_cards := []           # [ClassData, bouton, style normal, carte]
 var _current_class: ClassData
 var _pending_class: ClassData
+var _pending_loadout := false
+var _loadouts_box: GridContainer
 var _setting_values := {}        # clé de réglage -> Label de la valeur
 var _setting_sliders := {}       # clé de réglage -> HSlider
 var _invert_button: Button
@@ -45,10 +51,13 @@ func is_open() -> bool:
 	return _open
 
 
-## Ouvre le menu. current : classe jouée ; pending : classe prévue pour la prochaine apparition (ou null).
-func open(current: ClassData, pending: ClassData) -> void:
+## Ouvre le menu. current : spécialiste joué ; pending : spécialiste prévu pour la
+## prochaine apparition (ou null) ; pending_loadout : la classe change à la prochaine apparition.
+func open(current: ClassData, pending: ClassData, pending_loadout := false) -> void:
 	_current_class = current
 	_pending_class = pending
+	_pending_loadout = pending_loadout
+	_refresh_loadouts()
 	_open = true
 	_root.visible = true
 	_show_page("")
@@ -120,8 +129,10 @@ func _build() -> void:
 	_resume_button = _menu_button("REPRENDRE", "▶", true)
 	_resume_button.pressed.connect(func() -> void: resumed.emit())
 	col.add_child(_resume_button)
-	_menu_buttons["classes"] = _menu_button("CHANGER DE CLASSE", "◆")
+	_menu_buttons["classes"] = _menu_button("CHANGER DE SPÉCIALISTE", "◆")
 	col.add_child(_menu_buttons["classes"])
+	_menu_buttons["loadouts"] = _menu_button("CHANGER DE CLASSE", "▣")
+	col.add_child(_menu_buttons["loadouts"])
 	_menu_buttons["settings"] = _menu_button("PARAMÈTRES", "⚙")
 	col.add_child(_menu_buttons["settings"])
 	_menu_buttons["quit"] = _menu_button("QUITTER LA PARTIE", "⏻", false, UiTheme.RED)
@@ -147,6 +158,7 @@ func _build() -> void:
 	_content.offset_bottom = -48
 	_root.add_child(_content)
 	_pages["classes"] = _build_classes_page()
+	_pages["loadouts"] = _build_loadouts_page()
 	_pages["settings"] = _build_settings_page()
 	_pages["quit"] = _build_quit_page()
 	for page in _pages.values():
@@ -171,7 +183,6 @@ func _menu_button(text: String, icon: String, primary := false, accent := UiThem
 		b.add_theme_color_override("font_hover_color", accent.lightened(0.2))
 		if accent != UiTheme.CYAN:
 			b.add_theme_color_override("font_color", accent.lightened(0.15))
-	b.mouse_entered.connect(func() -> void: Sfx.ui("ui_click", -14.0))
 	return b
 
 
@@ -213,8 +224,8 @@ func _page_header(title: String, subtitle: String) -> VBoxContainer:
 # ---------------------------------------------------------------- Page : classes
 
 func _build_classes_page() -> Control:
-	var page := _page_header("CHANGER DE CLASSE",
-		"La nouvelle classe sera utilisée à ta prochaine apparition. Ton score dans la partie est conservé.")
+	var page := _page_header("CHANGER DE SPÉCIALISTE",
+		"Le nouveau spécialiste sera utilisé à ta prochaine apparition. Ton score dans la partie est conservé.")
 	var cards := HBoxContainer.new()
 	cards.add_theme_constant_override("separation", 14)
 	cards.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -245,7 +256,7 @@ func _class_card(data: ClassData) -> Control:
 
 	box.add_child(UiTheme.title(data.display_name.to_upper(), 20, data.color.lightened(0.35)))
 	box.add_child(_info_row("Points de vie", str(data.max_health)))
-	box.add_child(_info_row("Arme", data.weapon.display_name))
+	box.add_child(_info_row("Vitesse", "%.1f m/s" % data.sprint_speed))
 	box.add_child(_info_row("Capacité", data.ability_name))
 	box.add_child(UiTheme.spacer(Vector2.ZERO, false, true))
 
@@ -295,6 +306,47 @@ func _refresh_class_cards() -> void:
 		card.add_theme_stylebox_override("panel", UiTheme.box(
 			Color(data.color, 0.12) if highlight else Color(0.05, 0.065, 0.1, 0.95),
 			data.color if highlight else Color(data.color, 0.35), 2 if highlight else 1, 6, 12, 12))
+
+
+# ---------------------------------------------------------------- Page : classes (équipement)
+
+func _build_loadouts_page() -> Control:
+	var page := _page_header("CHANGER DE CLASSE",
+		"Arme principale, arme secondaire et 2 grenades. La classe choisie sera utilisée à ta prochaine apparition. Tes classes se créent dans l'accueil.")
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	page.add_child(scroll)
+	_loadouts_box = GridContainer.new()
+	_loadouts_box.columns = 2
+	_loadouts_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_loadouts_box.add_theme_constant_override("h_separation", 12)
+	_loadouts_box.add_theme_constant_override("v_separation", 12)
+	scroll.add_child(_loadouts_box)
+	return page
+
+
+## Une carte par classe du joueur ; celle choisie est marquée.
+func _refresh_loadouts() -> void:
+	if _loadouts_box == null:
+		return
+	for c in _loadouts_box.get_children():
+		c.queue_free()
+	for i in GameState.loadouts.size():
+		var l: Dictionary = GameState.loadouts[i]
+		var selected := i == GameState.selected_loadout
+		var primary := WeaponCatalog.find(l.primary)
+		var secondary := WeaponCatalog.find(l.secondary)
+		var b := UiTheme.button("", selected, UiTheme.CYAN, 74)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.text = "%s%s\n%s  ·  %s  ·  2 grenades" % ["✓ " if selected else "", l.name.to_upper(),
+			primary.display_name if primary else "?", secondary.display_name if secondary else "?"]
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.pressed.connect(func() -> void:
+			Sfx.ui("ui_click")
+			loadout_selected.emit(i)
+			_refresh_loadouts())
+		_loadouts_box.add_child(b)
 
 
 # ---------------------------------------------------------------- Page : paramètres

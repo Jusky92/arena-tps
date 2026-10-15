@@ -27,8 +27,38 @@ var invert_y := false
 func _ready() -> void:
 	_ensure_bus(SFX_BUS)
 	_ensure_bus(UI_BUS)
+	_add_mastering()
 	load_settings()
 	apply()
+
+
+## Traitement du son (pas sur le serveur dédié) :
+##   - Master : compresseur (les tirs et explosions claquent sans écraser le reste)
+##     puis limiteur (jamais de saturation, même avec beaucoup de sons d'un coup) ;
+##   - Effets : réverbération courte et discrète (ruelles en béton de NEO-EDO).
+func _add_mastering() -> void:
+	if Effects.headless():
+		return
+	var master := AudioServer.get_bus_index("Master")
+	if AudioServer.get_bus_effect_count(master) == 0:
+		var compressor := AudioEffectCompressor.new()
+		compressor.threshold = -14.0
+		compressor.ratio = 4.0
+		compressor.attack_us = 5000.0
+		compressor.release_ms = 180.0
+		compressor.gain = 2.0
+		AudioServer.add_bus_effect(master, compressor)
+		var limiter := AudioEffectHardLimiter.new()
+		limiter.ceiling_db = -0.5
+		AudioServer.add_bus_effect(master, limiter)
+	var sfx := AudioServer.get_bus_index(SFX_BUS)
+	if AudioServer.get_bus_effect_count(sfx) == 0:
+		var reverb := AudioEffectReverb.new()
+		reverb.room_size = 0.35
+		reverb.damping = 0.7
+		reverb.wet = 0.08
+		reverb.dry = 1.0
+		AudioServer.add_bus_effect(sfx, reverb)
 
 
 ## Sensibilité réelle utilisée par la caméra.

@@ -18,6 +18,10 @@ extends Node
 ##   --region eu                       région annoncée à la Server List
 ##   --bots 2 --duration 180           réglages des parties (modifiables par le chef en LAN ;
 ##                                     en mode Server List, le chef du groupe choisit les siens)
+##   --map neo-edo                     map des parties : neo-edo ou hikari-mall (voir MapCatalog ;
+##                                     en LAN, le chef peut en changer dans le salon)
+##   --max-players 16                  joueurs humains maximum par partie (1 à 16 ; par défaut 16
+##                                     en LAN, 8 en mode Server List, sa limite)
 ##   --serverlist-url http://…:8002    active le mode Server List
 ##
 ## Le serveur tourne sans fin, d'une partie à l'autre :
@@ -50,6 +54,15 @@ func _ready() -> void:
 	Engine.max_fps = 60
 	var args := _parse_args()
 	var port := int(args.get("port", Net.DEFAULT_PORT))
+	# La Server List n'accepte pas plus de 8 joueurs (taille d'un groupe) : 8 par
+	# défaut dans ce mode, 16 en LAN.
+	var default_max := 16 if str(args.get("serverlist-url", "")).is_empty() else 8
+	Net.max_players = clampi(int(args.get("max-players", default_max)), 1, 16)
+
+	var map_id := str(args.get("map", MapCatalog.DEFAULT_ID))
+	if not MapCatalog.is_valid(map_id):
+		_fail("Map inconnue : %s. Maps possibles : %s." % [map_id, ", ".join(MapCatalog.MAPS.map(func(m): return m.id))])
+		return
 
 	var serverlist_url := str(args.get("serverlist-url", ""))
 	if serverlist_url.is_empty():
@@ -71,8 +84,8 @@ func _ready() -> void:
 		"address": args.get("public-address", _first_address()),
 		"port": port,
 		"region": args.get("region", "eu"),
-		"map": MatchRules.MAP_ID,
-		"max_players": Net.MAX_PLAYERS,
+		"map": map_id,
+		"max_players": Net.max_players,
 		"build_version": Backend.BUILD_VERSION,
 	})
 	if not error.is_empty():
@@ -81,7 +94,7 @@ func _ready() -> void:
 		return
 
 	Net.lan_lobby = _link.is_lan()
-	_default_settings = _clamped_settings(int(args.get("bots", 2)), float(args.get("duration", 180.0)))
+	_default_settings = _clamped_settings(int(args.get("bots", 2)), float(args.get("duration", 180.0)), map_id)
 	Net.settings = _default_settings.duplicate()
 	Net.ticket_verifier = _link.verify
 	Net.start_requested.connect(Net.start_match)
@@ -101,6 +114,7 @@ func _ready() -> void:
 
 	print("")
 	print("=== Arena TPS — serveur dédié (version %s) ===" % Backend.BUILD_VERSION)
+	print("Map : %s (%s), %d joueurs maximum." % [MapCatalog.name_of(map_id), map_id, Net.max_players])
 	if _link.is_lan():
 		print("Mode LAN. Les joueurs se connectent avec REJOINDRE et une de ces adresses :")
 		for address in Net.local_addresses():
@@ -126,7 +140,7 @@ func _exit_tree() -> void:
 
 
 func _heartbeat() -> void:
-	await _link.report(Net.server_status, Net.human_count(), MatchRules.MAP_ID)
+	await _link.report(Net.server_status, Net.human_count(), Net.settings.get("map", MapCatalog.DEFAULT_ID))
 	if Net.server_status == "reserved":
 		# Les tickets expirés ne comptent plus : on n'attend que les joueurs qui peuvent encore venir.
 		_expected_players = Net.human_count() + _link.reserved_slots
@@ -150,8 +164,9 @@ func _on_reserved(_party_id: String) -> void:
 	# Réglages choisis par le chef du groupe (ceux du serveur s'il n'en a pas envoyé).
 	var chosen := _link.match_settings
 	Net.settings = _clamped_settings(int(chosen.get("bots", _default_settings.bots)),
-		float(chosen.get("duration_seconds", _default_settings.duration)))
-	Net.log_line("SERVEUR : réglages du groupe, %d bot(s), %d s" % [Net.settings.bots, int(Net.settings.duration)])
+		float(chosen.get("duration_seconds", _default_settings.duration)),
+		str(chosen.get("map", _default_settings.map)))
+	Net.log_line("SERVEUR : réglages du groupe, %d bot(s), %d s, map %s" % [Net.settings.bots, int(Net.settings.duration), Net.settings.map])
 	_reserved_for = 0.0
 	_expected_players = Net.human_count() + _link.reserved_slots
 	Net.set_status("reserved")
@@ -163,8 +178,13 @@ func _on_reservation_ended() -> void:
 		Net.set_status("idle")
 
 
-func _clamped_settings(bots: int, duration: float) -> Dictionary:
-	return {"bots": clampi(bots, 0, Net.MAX_PLAYERS - 1), "duration": clampf(duration, 60.0, 600.0)}
+## Réglages valides ; une map inconnue devient la map par défaut.
+func _clamped_settings(bots: int, duration: float, map_id: String) -> Dictionary:
+	return {
+		"bots": clampi(bots, 0, Net.max_players - 1),
+		"duration": clampf(duration, 60.0, 600.0),
+		"map": MapCatalog.valid_id(map_id),
+	}
 
 
 # ---------------------------------------------------------------- Partie

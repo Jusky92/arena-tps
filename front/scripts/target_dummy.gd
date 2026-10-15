@@ -37,7 +37,7 @@ func _process(_delta: float) -> void:
 
 
 ## Inflige des dégâts. Renvoie true si ce coup a éliminé la cible.
-func take_damage(amount: int, _from: Node) -> bool:
+func take_damage(amount: int, _from: Node, _headshot := false) -> bool:
 	if health <= 0:
 		return false
 	health = max(health - amount, 0)

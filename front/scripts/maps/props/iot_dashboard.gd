@@ -48,25 +48,18 @@ func _process(delta: float) -> void:
 
 
 func _refresh() -> void:
-	var temps: Array[float] = []
-	var co2 := 0.0
-	var drones := 0
 	var players := 0
+	var cameras := 0
 	if is_inside_tree():
-		for s in get_tree().get_nodes_in_group("iot_sensor"):
-			if s.kind == IotSensor.Kind.TEMPERATURE:
-				temps.append(s.value)
-			elif s.kind == IotSensor.Kind.CO2:
-				co2 = s.value
-		drones = get_tree().get_nodes_in_group("iot_drone").size()
+		cameras = get_tree().get_nodes_in_group("security_camera").size()
 		if not Engine.is_editor_hint():
 			players = get_tree().get_nodes_in_group("players").filter(func(p): return p.alive).size()
-	var avg := 21.5
-	if not temps.is_empty():
-		avg = temps.reduce(func(a, b): return a + b, 0.0) / temps.size()
-	_lines[0].text = "T° moyenne  %.1f °C" % avg
-	_lines[1].text = "CO2  %d ppm" % int(co2 if co2 > 0 else 620)
-	_lines[2].text = "Drones en vol  %d / %d" % [drones, drones]
+	# Mesures simulées : elles varient doucement pour que l'écran vive.
+	var temperature := 21.5 + sin(_time * 0.05) * 1.8
+	var co2 := 620.0 + sin(_time * 0.11) * 60.0
+	_lines[0].text = "T° extérieure  %.1f °C" % temperature
+	_lines[1].text = "CO2  %d ppm" % int(co2)
+	_lines[2].text = "Caméras en ligne  %d / %d" % [cameras, cameras]
 	_lines[3].text = "Joueurs détectés  %d" % players
 	_footer.text = "MQTT · lab-iot.cfa-insta.local · %d msg/min" % int(_messages)
 

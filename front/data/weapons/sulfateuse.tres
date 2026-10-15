@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_w"]
+
+[resource]
+script = ExtResource("1_w")
+id = "minigun"
+display_name = "Sulfateuse"
+model = 9
+slot = 3
+damage = 8
+max_range = 45.0
+headshot_multiplier = 1.5
+fire_rate = 22.0
+mag_size = 150
+reload_time = 0.0
+spread_deg = 3.5
+aim_spread_deg = 2.2
+aim_fov = 62.0
+recoil_deg = 0.25
+tracer_color = Color(1, 0.6, 0.25, 1)

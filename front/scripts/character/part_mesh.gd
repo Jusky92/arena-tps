@@ -9,8 +9,18 @@ extends RefCounted
 ##
 ## Les maillages sont mis en cache : une forme identique n'est calculée qu'une fois.
 
-const RINGS := 14
-const SEGMENTS := 20
+const RINGS := 20
+const SEGMENTS := 28
+
+## Arrondis minimaux du style « lisse » : l'équipement des personnages n'a plus
+## d'angles vifs, les armes gardent une silhouette un peu plus nette.
+const SMOOTH_GEAR := 0.55
+const SMOOTH_WEAPON := 0.4
+
+
+## Arrondi relevé au minimum `floor` (vertical = -1 garde « même valeur que roundness »).
+static func smooth(roundness: float, vertical: float, floor_value: float) -> Vector2:
+	return Vector2(maxf(roundness, floor_value), vertical if vertical < 0.0 else maxf(vertical, floor_value))
 
 static var _cache := {}
 
