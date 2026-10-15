@@ -72,8 +72,8 @@ sans lancer le back.
 Touches par défaut. Elles se changent dans **PARAMÈTRES**, onglet **COMMANDES** (roue crantée
 en haut du menu principal, ou menu pause en partie) : clic sur une touche puis appui sur la
 nouvelle, clic droit pour l'effacer. Échap reste fixe. Les autres onglets sont **VIDÉO**
-(qualité, affichage, résolution ; un changement d'affichage est annulé au bout de 15 s s'il
-n'est pas confirmé) et **SON**.
+(qualité, affichage, résolution, pris en compte avec **APPLIQUER** ; un changement d'affichage
+est annulé au bout de 15 s s'il n'est pas confirmé) et **SON**.
 
 | Touche | Action |
 |---|---|

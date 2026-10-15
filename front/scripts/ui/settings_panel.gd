@@ -8,8 +8,9 @@ extends VBoxContainer
 ## Touches : autoload Inputs (user://touches.cfg). Clic sur une touche, puis appui
 ## sur la nouvelle touche ou le nouveau bouton de souris ; Échap annule, clic droit
 ## sur une touche l'efface. Une touche déjà prise est retirée de l'autre action.
-## Affichage et résolution : appliqués tout de suite, puis à confirmer ; sans
-## réponse avant CONFIRM_SECONDS, l'affichage précédent revient.
+## Vidéo : les choix restent en attente jusqu'à APPLIQUER. Un changement d'affichage
+## ou de résolution est alors à confirmer ; sans réponse avant CONFIRM_SECONDS,
+## l'affichage précédent revient.
 
 const TABS := [["video", "VIDÉO"], ["audio", "SON"], ["controls", "COMMANDES"]]
 const CONFIRM_SECONDS := 15
@@ -29,6 +30,10 @@ var _resolution_picker: OptionButton
 var _resolution_help: Label
 ## Résolutions de la liste, dans l'ordre des entrées.
 var _resolutions: Array[Vector2i] = []
+## Choix vidéo pas encore appliqués : clé de Settings -> valeur.
+var _pending := {}
+var _apply_button: Button
+var _apply_status: Label
 var _key_buttons := {}           # action -> [Button, Button]
 var _keys_status: Label
 ## Saisie en cours : action et emplacement qui attendent une touche ("" = aucune).
@@ -72,6 +77,7 @@ func _ready() -> void:
 		if not is_visible_in_tree():
 			_stop_listening()
 			_revert_display()          # masqué sans réponse : l'ancien affichage revient
+			_pending = {}
 			Settings.save_settings())
 	refresh()
 	_show_tab(_last_tab)
@@ -92,6 +98,7 @@ func refresh() -> void:
 		(entry[0] as Label).text = (entry[1] as Callable).call(value)
 	_invert_button.set_pressed_no_signal(Settings.invert_y)
 	_invert_button.text = "OUI" if Settings.invert_y else "NON"
+	_pending = {}
 	_refresh_video()
 	_stop_listening()
 
@@ -99,6 +106,9 @@ func refresh() -> void:
 func _show_tab(tab: String) -> void:
 	_last_tab = tab
 	_stop_listening()
+	if not _pending.is_empty():
+		_pending = {}             # choix vidéo pas appliqués : abandonnés
+		_refresh_video()
 	for key in _tab_pages:
 		_tab_pages[key].visible = key == tab
 		_tab_buttons[key].set_pressed_no_signal(key == tab)
@@ -135,18 +145,31 @@ func _build_video_tab() -> ScrollContainer:
 	for i in Settings.QUALITY_NAMES.size():
 		_quality_picker.add_item(Settings.QUALITY_NAMES[i], i)
 	_quality_picker.item_selected.connect(func(index: int) -> void:
-		Settings.set_value("quality", index)
-		_refresh_video())
+		_set_pending("quality", index))
 	_quality_help = _help_label(list)
 	_mode_picker = _picker_row(list, "Affichage")
 	for i in Settings.WINDOW_MODES.size():
 		_mode_picker.add_item(Settings.WINDOW_MODES[i][1], i)
 	_mode_picker.item_selected.connect(func(index: int) -> void:
-		_change_display("window_mode", Settings.WINDOW_MODES[index][0]))
+		_set_pending("window_mode", Settings.WINDOW_MODES[index][0]))
 	_resolution_picker = _picker_row(list, "Résolution")
 	_resolution_picker.item_selected.connect(func(index: int) -> void:
-		_change_display("resolution", _resolutions[index]))
+		_set_pending("resolution", _resolutions[index]))
 	_resolution_help = _help_label(list)
+
+	list.add_child(UiTheme.spacer(Vector2(0, 4)))
+	var apply_row := HBoxContainer.new()
+	apply_row.add_theme_constant_override("separation", 14)
+	_apply_button = UiTheme.button("APPLIQUER", true, UiTheme.CYAN, 44)
+	_apply_button.custom_minimum_size.x = 220
+	_apply_button.pressed.connect(func() -> void:
+		Sfx.ui("ui_click")
+		_apply_video())
+	apply_row.add_child(_apply_button)
+	_apply_status = UiTheme.label("", 14, UiTheme.YELLOW)
+	_apply_status.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	apply_row.add_child(_apply_status)
+	list.add_child(apply_row)
 	return parts[0]
 
 
@@ -170,35 +193,61 @@ func _help_label(list: VBoxContainer) -> Label:
 	return help
 
 
+## Valeur affichée : le choix en attente, sinon le réglage en cours.
+func _video_value(key: String) -> Variant:
+	return _pending.get(key, Settings.get(key))
+
+
+func _set_pending(key: String, value: Variant) -> void:
+	if Settings.get(key) == value:
+		_pending.erase(key)
+	else:
+		_pending[key] = value
+	_refresh_video()
+
+
 func _refresh_video() -> void:
-	_quality_picker.select(Settings.quality)
-	_quality_help.text = Settings.QUALITY_HELP[Settings.quality]
+	var quality: int = _video_value("quality")
+	var mode: String = _video_value("window_mode")
+	var resolution: Vector2i = _video_value("resolution")
+	_quality_picker.select(quality)
+	_quality_help.text = Settings.QUALITY_HELP[quality]
 	for i in Settings.WINDOW_MODES.size():
-		if Settings.WINDOW_MODES[i][0] == Settings.window_mode:
+		if Settings.WINDOW_MODES[i][0] == mode:
 			_mode_picker.select(i)
 	# La liste dépend de l'écran où se trouve la fenêtre.
 	_resolutions = Settings.available_resolutions()
-	if not Settings.resolution in _resolutions:
-		_resolutions.append(Settings.resolution)
+	if not resolution in _resolutions:
+		_resolutions.append(resolution)
 	_resolution_picker.clear()
 	for i in _resolutions.size():
 		var r := _resolutions[i]
 		_resolution_picker.add_item("%d × %d" % [r.x, r.y], i)
-		if r == Settings.resolution:
+		if r == resolution:
 			_resolution_picker.select(i)
-	_resolution_help.text = "Taille de la fenêtre." if Settings.window_mode == "windowed" \
+	_resolution_help.text = "Taille de la fenêtre." if mode == "windowed" \
 		else "Résolution du rendu 3D : l'écran garde la sienne et l'interface reste nette."
+	_apply_button.disabled = _pending.is_empty()
+	_apply_status.text = "Modifications pas encore appliquées." if not _pending.is_empty() else ""
 
 
-## Affichage ou résolution : appliqué tout de suite, à confirmer avant CONFIRM_SECONDS.
-func _change_display(key: String, value: Variant) -> void:
-	if Settings.get(key) == value:
+## APPLIQUER : tous les choix en attente d'un coup. Si l'affichage ou la résolution
+## change, il faut confirmer avant CONFIRM_SECONDS.
+func _apply_video() -> void:
+	if _pending.is_empty():
 		return
-	if _confirm_previous.is_empty():
+	var display_changed := _pending.has("window_mode") or _pending.has("resolution")
+	if display_changed and _confirm_previous.is_empty():
 		_confirm_previous = {"window_mode": Settings.window_mode, "resolution": Settings.resolution}
-	Settings.set_value(key, value)
+	for key in _pending:
+		Settings.set(key, _pending[key])
+	_pending = {}
+	Settings.apply_video()
 	_refresh_video()
-	_show_confirm()
+	if display_changed:
+		_show_confirm()
+	else:
+		Settings.save_settings()
 
 
 func _show_confirm() -> void:
