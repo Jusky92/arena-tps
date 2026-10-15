@@ -29,6 +29,14 @@ const PODIUM_COLORS := [Color(1.0, 0.84, 0.25), Color(0.78, 0.84, 0.92), Color(0
 @onready var _end_screen: Control = %EndScreen
 
 var _banner_tween: Tween
+## Listes du tableau des scores et de l'écran de fin, dans une zone qui défile : avec
+## 16 joueurs, elles pousseraient les boutons hors de l'écran.
+var _board_scroll: ScrollContainer
+var _end_scroll: ScrollContainer
+var _end_rows: VBoxContainer
+## Place laissée autour des listes (titres, podium, boutons), en pixels.
+const BOARD_MARGIN := 170.0
+const END_MARGIN := 430.0
 
 
 func _ready() -> void:
@@ -36,6 +44,31 @@ func _ready() -> void:
 	%Menu.pressed.connect(func() -> void: back_to_menu.emit())
 	for b: Button in [%Again, %Menu]:
 		UiTheme.add_hover_feedback(b)
+	_board_scroll = _wrap_in_scroll(_scoreboard_rows)
+	_end_rows = %EndRows
+	_end_scroll = _wrap_in_scroll(_end_rows)
+
+
+## Met `rows` dans une ScrollContainer à sa place (défilement vertical seulement).
+func _wrap_in_scroll(rows: Control) -> ScrollContainer:
+	var parent := rows.get_parent()
+	var index := rows.get_index()
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_horizontal = rows.size_flags_horizontal
+	parent.remove_child(rows)
+	parent.add_child(scroll)
+	parent.move_child(scroll, index)
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(rows)
+	return scroll
+
+
+## Hauteur de la liste : toutes les lignes si elles tiennent, sinon ce qui reste à
+## l'écran (on fait défiler le reste à la molette).
+func _fit_scroll(scroll: ScrollContainer, rows: Control, margin: float) -> void:
+	var available := maxf(get_viewport().get_visible_rect().size.y - margin, 120.0)
+	scroll.custom_minimum_size.y = minf(rows.get_combined_minimum_size().y, available)
 
 
 ## Affiche le temps restant (secondes) et le meneur.
@@ -109,6 +142,7 @@ func show_scoreboard(rows: Array, visible_now: bool, subtitle: String) -> void:
 	if visible_now:
 		_scoreboard_title.text = subtitle
 		_fill_rows(_scoreboard_rows, rows)
+		_fit_scroll(_board_scroll, _scoreboard_rows, BOARD_MARGIN)
 
 
 ## Écran de fin : podium, classement final, place du joueur, boutons.
@@ -122,8 +156,10 @@ func show_end_screen(rows: Array, local_rank: int, subtitle: String) -> void:
 	(%Place as Label).text = "Tu termines %s sur %d · Vainqueur : %s" % [_ordinal(local_rank), rows.size(), rows[0].name]
 	(%EndSubtitle as Label).text = subtitle
 	_fill_podium(rows)
-	var end_rows: VBoxContainer = %EndRows
+	var end_rows: VBoxContainer = _end_rows
 	_fill_rows(end_rows, rows)
+	_fit_scroll(_end_scroll, end_rows, END_MARGIN)
+	_end_scroll.scroll_vertical = 0
 
 	# Entrée animée : le titre puis les lignes, une à une.
 	_end_screen.modulate.a = 0.0
