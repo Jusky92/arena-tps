@@ -69,9 +69,11 @@ sans lancer le back.
 
 ### Commandes
 
-Touches par défaut. Elles se changent dans **PARAMÈTRES** (roue crantée en haut du menu
-principal, ou menu pause en partie) : clic sur une touche puis appui sur la nouvelle, clic
-droit pour l'effacer. Échap reste fixe.
+Touches par défaut. Elles se changent dans **PARAMÈTRES**, onglet **COMMANDES** (roue crantée
+en haut du menu principal, ou menu pause en partie) : clic sur une touche puis appui sur la
+nouvelle, clic droit pour l'effacer. Échap reste fixe. Les autres onglets sont **VIDÉO**
+(qualité, affichage, résolution ; un changement d'affichage est annulé au bout de 15 s s'il
+n'est pas confirmé) et **SON**.
 
 | Touche | Action |
 |---|---|
@@ -94,7 +96,7 @@ droit pour l'effacer. Échap reste fixe.
 
 - **Reprendre** ;
 - **Changer de classe** : la classe choisie est utilisée à la prochaine apparition, le score de la partie est conservé ;
-- **Paramètres** : les mêmes que la page PARAMÈTRES du menu principal (`SettingsPanel`) : volume général, effets, interface, sensibilité de la souris, inversion de l'axe vertical (`user://parametres.cfg`, autoload `Settings`) et touches (`user://touches.cfg`, autoload `Inputs`) ;
+- **Paramètres** : les mêmes que la page PARAMÈTRES du menu principal (`SettingsPanel`) : vidéo (qualité Basse / Moyenne / Haute, plein écran / fenêtré / fenêtré sans bordures, résolution), volume général, effets, interface, sensibilité de la souris, inversion de l'axe vertical (`user://parametres.cfg`, autoload `Settings`) et touches (`user://touches.cfg`, autoload `Inputs`) ;
 - **Quitter la partie** (avec confirmation).
 
 ### Protection d'apparition

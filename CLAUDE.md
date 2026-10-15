@@ -49,7 +49,7 @@ There are no automated tests. Verifying a change means running the game in the e
 
 The central design idea, used everywhere a character is controlled: a character never reads the keyboard/mouse directly. Every frame, something fills a `PlayerCommands` object (`front/scripts/player_commands.gd`) — move vector, look delta, jump/crouch/sprint/fire/aim/reload/ability — and the character (`front/scripts/player.gd`) simulates from that struct alone.
 
-- The local human player fills it from `Inputs` (autoload, `front/scripts/inputs.gd`). `Inputs` declares the default keys and applies the player's own (`user://touches.cfg`, edited in `SettingsPanel`, `front/scripts/ui/settings_panel.gd`, shown on the main menu's PARAMÈTRES page and in the pause menu). Show a key in the UI with `Inputs.hint(action)`, never a hard-coded letter.
+- The local human player fills it from `Inputs` (autoload, `front/scripts/inputs.gd`). `Inputs` declares the default keys and applies the player's own (`user://touches.cfg`, edited in the COMMANDES tab of `SettingsPanel`, `front/scripts/ui/settings_panel.gd`: tabs VIDÉO / SON / COMMANDES, shown on the main menu's PARAMÈTRES page and in the pause menu; a window mode or resolution change reverts after 15 s unless confirmed). Show a key in the UI with `Inputs.hint(action)`, never a hard-coded letter.
 - A bot fills it from its AI (`front/scripts/bots/bot_brain.gd`).
 
 This split exists so the dedicated server can later drive the simulation from commands sent over the network (full server authority) without touching the character code. Keep this separation when adding new controllable behavior — don't branch on "is this a bot" inside `player.gd`.
@@ -123,7 +123,7 @@ Animated/interactive IoT-themed props live under `front/scripts/maps/props/` (se
 
 ### Autoloads (global singletons)
 
-Defined in `front/project.godot` under `[autoload]`: `Inputs`, `GameState`, `Backend`, `Settings`, `Sfx`, `Net`. Any script can reference these by name directly (no explicit import). They also load on the dedicated server, so they must work headless (`Effects` and `Sfx` skip their work when `Effects.headless()`). When introducing new cross-screen state or services, check whether it belongs in an existing autoload before adding a new one.
+Defined in `front/project.godot` under `[autoload]`: `Inputs`, `GameState`, `Backend`, `Settings`, `Sfx`, `Net`. Any script can reference these by name directly (no explicit import). `Settings` also holds the video options (quality preset, window mode, resolution): it applies the quality to every `DirectionalLight3D` (shadows) and `WorldEnvironment` (glow) as they enter the tree, keeping the map's own values in metadata, so maps don't need to know about it. They also load on the dedicated server, so they must work headless (`Effects` and `Sfx` skip their work when `Effects.headless()`). When introducing new cross-screen state or services, check whether it belongs in an existing autoload before adding a new one.
 
 ## Working conventions (from README)
 
