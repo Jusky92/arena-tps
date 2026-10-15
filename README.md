@@ -40,18 +40,18 @@ Les micro-services (Auth, Social, Server List, Stats, Real-time, BFF) sont dans 
 1. Installer **Godot 4.7.2** (version imposée pour toute l'équipe).
 2. Dans le gestionnaire de projets de Godot, cliquer sur **Importer** et choisir `front/project.godot`. Le premier import des modèles et textures prend quelques dizaines de secondes.
 3. Lancer avec **F5**.
-4. Sur l'écran de connexion : se connecter avec un compte (back lancé), ou cliquer sur **« Jouer hors ligne »** pour jouer sans back (n'importe quel identifiant convient).
+4. Sur l'écran de connexion : se connecter avec un compte (back lancé), ou cliquer sur **« Jouer hors ligne »** pour jouer sans back (n'importe quel identifiant convient). Hors ligne, l'accueil n'affiche que ce qui sert sans back : spécialiste et classe, rejoindre un serveur LAN, partie solo et entraînement.
 
 ### Parcours
 
 | Écran | Contenu |
 |---|---|
 | Connexion / inscription | Connexion, création de compte, vérification de l'e-mail par code à 6 chiffres, mot de passe oublié, adresse du back |
-| Accueil — JOUER | Spécialiste et classe choisis (aperçu 3D), groupe, lancement en ligne, serveurs publics, rejoindre par adresse (LAN), partie solo et entraînement avec choix de la map |
+| Accueil — JOUER | Spécialiste et classe choisis (aperçu 3D), groupe, lancement en ligne, serveurs publics, rejoindre par adresse (LAN), partie solo (panneau : map, nombre et niveau des bots, durée) et entraînement |
 | Accueil — SPÉCIALISTES | Choix du personnage (Samouraï, Shinobi, Archer, Oni) avec aperçu 3D animé |
 | Accueil — CLASSES | Jusqu'à 10 classes personnalisées : arme principale + arme secondaire (+ 2 grenades) |
 | Accueil — STATISTIQUES | Statistiques du joueur, classements mondial et entre amis |
-| Salon (LAN) | Joueurs connectés ; le chef choisit la map, le nombre de bots et la durée |
+| Salon (LAN) | Joueurs connectés ; le chef choisit la map, le nombre et le niveau des bots, et la durée |
 | Partie | HUD (vie, armure, munitions, bonus, super-pouvoir), fil des éliminations, tableau des scores (Tab), écran de fin avec podium |
 
 ## Jouer en ligne
@@ -62,7 +62,7 @@ Le jeu se joue à plusieurs **en vrai réseau**, sur un **serveur dédié** : un
 
 1. Le PC serveur lance `ArenaTPS_Server`, qui affiche ses adresses.
 2. Chaque joueur saisit l'adresse dans le cadre « Rejoindre par adresse » de la page JOUER, puis clique **REJOINDRE**.
-3. Le premier joueur connecté (le chef) choisit la map, le nombre de bots et la durée, puis lance la partie. On peut aussi rejoindre une partie en cours.
+3. Le premier joueur connecté (le chef) choisit la map, le nombre et le niveau des bots, et la durée, puis lance la partie. On peut aussi rejoindre une partie en cours.
 
 **Avec le vrai back** : le chef d'un groupe clique **LANCER EN LIGNE**. La Server List réserve un serveur libre, tout le groupe s'y connecte automatiquement, et les résultats partent aux statistiques à la fin de la partie. La liste **SERVEURS PUBLICS** permet de rejoindre une partie en cours.
 
@@ -83,6 +83,8 @@ Le serveur est **l'arbitre** : le jeu de chaque joueur lui envoie des **actions*
 | Vie, armure, éliminations, score, réapparitions, chronomètre | **le serveur** |
 | Roquettes, grenades et explosions | **le serveur** (les jeux ne font qu'afficher) |
 | Bonus ramassés, réapparition des bonus, super-pouvoirs | **le serveur** |
+| Capacités des spécialistes (garde, balles perforantes) | le jeu les annonce, **le serveur** les vérifie et les applique |
+| Arme légendaire : moment, endroit, pause de la partie | **le serveur** |
 | Bots | **le serveur** |
 
 Le protocole est décrit en tête de `front/scripts/net/net.gd`, et le serveur se trouve dans `front/scripts/server/`.
@@ -125,7 +127,8 @@ Pendant **3 secondes** après chaque apparition, le joueur ne prend aucun dégâ
 
 - **Match à mort** (chacun pour soi) : 3 minutes par défaut (de 1 à 10 minutes), avec fil des éliminations, séries, meneur, tableau des scores, écran de fin et podium.
   - **En ligne**, sur un serveur dédié : de 1 à 16 joueurs, complétés par des bots. Le serveur envoie le résultat au back (`match.finished`), qui calcule XP, niveaux, succès et classements.
-  - **« Partie solo »** hors ligne, contre 5 bots : rien n'est compté.
+  - **« Partie solo »** hors ligne : un panneau permet de choisir la map, de 1 à 15 bots, leur niveau (faible, moyen, élevé) et la durée. Rien n'est compté.
+  - **Arme légendaire** : une fois par match, entre 50 et 80 % de la durée, le **Canon du Shōgun** apparaît (voir plus bas).
 - **Entraînement** : le joueur seul avec des mannequins-robots (dont certains accroupis), sans limite de temps.
 
 Pour les parties hors ligne, la map se choisit sur la page JOUER (« Map hors ligne ») ; en LAN, c'est le chef du salon qui la choisit.
@@ -140,6 +143,7 @@ Chaque arme à balles a un multiplicateur de dégâts pour la tête (×1,5 au fu
 
 - repèrent les ennemis (champ de vision, murs bloquants) et réagissent quand on leur tire dessus ;
 - visent avec un temps de réaction et une erreur qui diminue, et tirent selon leur arme (rafales, coup par coup, corps à corps) ;
+- ont trois niveaux (faible, moyen, élevé : réflexes, précision de visée, usage de la capacité), choisis dans le panneau Partie solo, dans le salon LAN ou avec `--bot-level` ;
 - se déplacent grâce à un maillage de navigation calculé au chargement à partir des collisions de la map, sur les deux niveaux du mall comme dans les ruelles de NEO-EDO ;
 - utilisent leur capacité, ramassent les bonus et déclenchent leur super-pouvoir.
 
@@ -154,21 +158,23 @@ Le joueur choisit un **spécialiste** (le personnage, sa vie et sa capacité), p
 
 | Spécialiste | PV | Capacité (E) |
 |---|---|---|
-| Samouraï 侍 | 150 | Garde de fer : −70 % de dégâts reçus pendant 3 s |
+| Samouraï 侍 | 150 | Garde de fer : −70 % de dégâts reçus pendant 5 s (recharge 12 s) |
 | Shinobi 忍 | 80 | Pas éclair : bond fulgurant dans la direction du déplacement |
-| Archer 弓 | 100 | Flèche perforante : les balles traversent les ennemis pendant 6 s |
+| Archer 弓 | 100 | Flèche perforante : pendant 6 s, les balles traversent les ennemis et jusqu'à 2 murs ou obstacles |
 | Oni 鬼 | 130 | Ruée : charge de 0,35 s, les ennemis percutés prennent 30 dégâts et sont projetés |
 
 ### Classes
 
-Une classe = **une arme principale + une arme secondaire + 2 grenades**. Chaque joueur peut en créer **jusqu'à 10** (page CLASSES). Avec le vrai back, elles sont enregistrées sur son compte (service Social, `GET`/`PUT /loadouts/me`) ; hors ligne, dans `user://loadouts.cfg`. Cinq classes sont proposées au départ : Assaut, Corps à corps, Précision, Démolition et Incendiaire.
+En ligne, le jeu annonce au serveur chaque capacité utilisée (`Net.use_ability`) ; le serveur vérifie qu'elle est rechargée et l'applique de son côté (dégâts réduits par la garde, tirs à travers les murs acceptés pendant la Flèche perforante).
+
+Une classe = **une arme principale + une arme secondaire + 2 grenades**. Chaque joueur peut en créer **jusqu'à 10** (page CLASSES). Avec le vrai back, elles sont enregistrées sur son compte (service Social, `GET`/`PUT /loadouts/me`) ; hors ligne, dans `user://loadouts.cfg`. Cinq classes sont proposées au départ : Assaut (fusil d'assaut), Corps à corps, Précision, Démolition et Incendiaire.
 
 | Emplacement | Armes |
 |---|---|
-| Principale | Mitraillette, Fusil à pompe (9 plombs), Fusil de précision (200 m), Lance-roquettes (explosion de 6 m), Lance-flammes (brûlure) |
+| Principale | Mitraillette, Fusil d'assaut (polyvalent, 90 m), Fusil à pompe (9 plombs), Fusil de précision (200 m), Lance-roquettes (explosion de 6 m), Lance-flammes (brûlure) |
 | Secondaire | Pistolet laser, Katana (corps à corps), Lance-caca (ralentit et tache l'écran de la cible) |
 | Équipement | 2 grenades par vie (rebondissent, explosent au bout de quelques secondes) |
-| Spéciale (bonus) | Sulfateuse, Fusil laser (balles perforantes), Poing puissant (30 s) |
+| Spéciale (bonus) | Sulfateuse, Fusil laser (balles perforantes), Poing puissant (30 s), Canon du Shōgun (arme légendaire) |
 
 Les **munitions** sont tenues par le serveur : un chargeur vide ou une cadence trop rapide fait refuser le tir.
 
@@ -189,7 +195,17 @@ Super-pouvoirs :
 
 - **Surcharge néon** : dégâts ×1,5 et +25 % de vitesse pendant 12 s ;
 - **Onde de choc** : explosion autour du joueur (8 m), qui repousse les ennemis ;
-- **Invisibilité** : 10 s presque invisible, avec une courte apparition à chaque tir.
+- **Invisibilité** : 10 s presque invisible, avec une courte apparition à chaque tir. Le HUD le montre clairement : voile bleuté sur les bords de l'écran et « INVISIBLE » sous le réticule, qui passe en orange « DÉCOUVERT » quand on tire.
+
+### Arme légendaire : le Canon du Shōgun 将軍
+
+Une fois par match à mort, à un moment tiré au hasard entre 50 et 80 % de la durée, la partie **se fige pendant 6 s** (personnages, bots, projectiles et chronomètre compris) et tous les joueurs regardent la même cinématique : bandes noires, caméra qui descend du ciel en tournant, colonne de lumière dorée, l'arme qui se forme. Elle apparaît ensuite sur un socle doré, à un emplacement dégagé de la map, loin des joueurs.
+
+- **Un tir élimine** n'importe qui ; la balle traverse les ennemis et jusqu'à 3 murs.
+- **Visée facilitée** : le tir se colle sur l'ennemi le plus proche du réticule (à moins de 6°) ; le réticule devient doré et grossit quand un ennemi est accroché.
+- **6 tirs**, pas de rechargement : l'arme disparaît une fois vide, ou à la mort du porteur.
+- Le porteur est **signalé à tous** : lumière dorée et kanji 将軍 au-dessus de lui, visibles à travers les murs.
+- En ligne, c'est le serveur qui choisit le moment et l'endroit, fige la partie (il ignore les tirs pendant la pause) et pose l'arme (`Net.push_legendary`). Code : `scripts/shared/legendary_event.gd`, `scripts/ui/legendary_cinematic.gd`.
 
 ## Les maps
 
@@ -231,7 +247,7 @@ On monte à l'étage par 6 escalators. Les points d'apparition (8 au rez-de-chau
 
 ## Sons
 
-Tous les sons sont **générés par synthèse** (`tools/generate_sounds.py`, aucun son externe, donc aucune question de licence) : 36 sons, 52 fichiers avec leurs variantes.
+Tous les sons sont **générés par synthèse** (`tools/generate_sounds.py`, aucun son externe, donc aucune question de licence) : 39 sons, 57 fichiers avec leurs variantes (dont le tir du fusil d'assaut, celui du Canon du Shōgun et la musique de sa cinématique).
 
 - Tirs propres à chaque arme ; impacts sur le décor et sur les corps ; « tic » de touche ; son distinct pour un tir à la tête ; élimination ; explosions ; pas (on entend un ennemi approcher) ; capacités ; bonus ; interface ; ambiance de la ville.
 - Les sons joués souvent ont plusieurs variantes, tirées au hasard avec une légère variation de hauteur.
@@ -250,7 +266,7 @@ Tout est dans `front/` (projet Godot). Les grandes idées :
 | `scripts/game.gd` | La partie côté joueur : hors ligne, elle fait foi ; en ligne, elle affiche ce que décide le serveur |
 | `scripts/net/net.gd` (autoload `Net`) | Toute la couche réseau (ENet, UDP 24567), commune au jeu et au serveur : tous les RPC y sont déclarés |
 | `scripts/server/` | Serveur dédié : `server_main.gd` (cycle salon → partie → fin), `server_game.gd` (arbitrage), `backend_link.gd` (lien avec la Server List) |
-| `scripts/shared/` | Règles partagées entre le serveur et le jeu hors ligne : `MatchRules`, `PickupDirector` (bonus) |
+| `scripts/shared/` | Règles partagées entre le serveur et le jeu hors ligne : `MatchRules`, `PickupDirector` (bonus), `LegendaryEvent` (arme légendaire) |
 | `scripts/backend/` (autoload `Backend`) | Façade unique vers le back : `bff_backend.gd` (HTTP vers le BFF + WebSocket temps réel) ou `simulated_backend.gd` (hors ligne) |
 | `scripts/maps/` | Maps construites par code (`arena_map.gd`, `mall_map.gd`), catalogue des maps, décor animé |
 | `scripts/character/` | Personnages humains animés (mélange d'animations, cinématique inverse pour la visée) et mannequins-robots |
@@ -264,14 +280,15 @@ Côté back, le jeu ne parle qu'au **BFF** (HTTP) et au service **Real-time** (W
 - **En ligne de commande**, depuis `front/` :
 
   ```bash
-  godot --headless -- --server --bots 4 --duration 120 --map hikari-mall   # serveur
+  godot --headless -- --server --bots 4 --duration 120 --map hikari-mall --bot-level eleve   # serveur
   godot                                                                     # un joueur (répéter)
   ```
 
   Les joueurs rejoignent `127.0.0.1`.
 - **À vérifier à la main** à chaque version :
   - une partie solo sur chaque map ;
-  - une partie LAN à deux (changement de map par le chef, tirs, tirs à la tête, bonus, explosions) ;
+  - une partie LAN à deux (changement de map par le chef, tirs, tirs à la tête, bonus, explosions, capacités) ;
+  - l'arme légendaire (match de 1 à 2 min pour la voir vite) : cinématique, ramassage, tir à travers un mur ;
   - l'écran de fin ;
   - l'entraînement.
 - Le serveur écrit chaque connexion, chaque tir refusé (avec sa raison) et chaque fin de partie dans sa console et dans `reseau.log` (voir [docs/RESEAU.md](docs/RESEAU.md)).
@@ -328,9 +345,11 @@ docs: complète le README
 - [x] Accueil multijoueur (profil, groupe, amis, serveurs publics, statistiques)
 - [x] Personnages humains cyberpunk animés (4 spécialistes) et mannequins-robots
 - [x] Déplacement, course, saut, accroupissement, caméra à la troisième personne
-- [x] Classes personnalisables (10 au plus), 8 armes, grenades, capacités
+- [x] Classes personnalisables (10 au plus), 9 armes, grenades, capacités vérifiées par le serveur
 - [x] Tirs à la tête et munitions arbitrés par le serveur, indicateur de provenance
 - [x] Bonus sur la map : soin, armure, mobilité, armes spéciales, super-pouvoirs
+- [x] Arme légendaire avec cinématique (partie figée pour tous)
+- [x] Bots de trois niveaux, partie solo configurable
 - [x] Deux maps : NEO-EDO (120 × 120 m) et Hikari Mall (100 × 100 m, 2 niveaux), choix de la map
 - [x] Match à mort contre des bots, tableau des scores, écran de fin
 - [x] Menu pause local, protection d'apparition, sons générés avec variantes

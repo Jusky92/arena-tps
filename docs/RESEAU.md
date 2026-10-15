@@ -56,6 +56,8 @@ Qui décide de quoi :
 | Points de vie, éliminations, score | **le serveur** | idem |
 | Roquettes, grenades, explosions | **le serveur** | il simule les projectiles, les jeux les affichent |
 | Bonus de la map et super-pouvoirs | **le serveur** | le jeu demande, le serveur applique |
+| Capacités (garde, balles perforantes) | le jeu annonce, **le serveur** vérifie | recharge respectée, dégâts et murs traversés décidés par le serveur |
+| Arme légendaire (moment, endroit, pause) | **le serveur** | tout le monde voit la même cinématique au même moment |
 | Chronomètre, réapparitions, fin de match | **le serveur** | tout le monde reste synchronisé |
 | Bots | **le serveur** | il les fait jouer et diffuse leur position |
 | Map, bots, durée et lancement (LAN) | **le chef** (premier joueur connecté) | avec le vrai back, la partie démarre seule |
@@ -131,6 +133,7 @@ Options (toutes facultatives) :
 | `--duration 180` | 180 | durée du match en secondes (le chef peut changer) |
 | `--map neo-edo` | neo-edo | map : `neo-edo` ou `hikari-mall` (le chef peut changer) |
 | `--max-players 16` | 16 | joueurs humains au plus par partie (1 à 16) |
+| `--bot-level moyen` | moyen | niveau des bots : `faible`, `moyen` ou `eleve` (le chef peut changer) |
 | `--name "Arena TPS"` | Arena TPS | nom du serveur |
 
 Au démarrage, le serveur affiche les **adresses à donner aux joueurs**, par exemple

@@ -190,6 +190,12 @@ func _process(delta: float) -> void:
 	_crosshair.visible = _player.alive and not _player.is_sprinting()
 	if _crosshair.visible:
 		_crosshair.set_spread(_spread_pixels(data))
+		# Arme légendaire : réticule doré, qui grossit quand un ennemi est accroché.
+		var legendary: bool = weapon.data != null and weapon.data.legendary
+		var locked: bool = legendary and weapon.assist_target() != null
+		_crosshair.modulate = LegendaryEvent.GOLD if legendary else Color.WHITE
+		_crosshair.pivot_offset = _crosshair.size / 2.0
+		_crosshair.scale = Vector2.ONE * (1.45 if locked else 1.0)
 
 	_status.visible = _player.alive and _player.is_slowed()
 	_update_bonuses()

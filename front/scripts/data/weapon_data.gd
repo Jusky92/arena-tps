@@ -6,7 +6,7 @@ extends Resource
 
 ## Apparence 3D (modèle procédural, voir CharacterDesigns.build_weapon).
 ## Nouveaux modèles toujours ajoutés à la fin : les .tres stockent le numéro.
-enum Model { SHOTGUN, SMG, SNIPER, ROCKET, FLAMER, LASER, KATANA, POOP, GRENADE, MINIGUN, LASER_RIFLE, FIST, ASSAULT }
+enum Model { SHOTGUN, SMG, SNIPER, ROCKET, FLAMER, LASER, KATANA, POOP, GRENADE, MINIGUN, LASER_RIFLE, FIST, ASSAULT, SHOGUN }
 ## Emplacement : arme principale ou secondaire d'une classe, équipement (grenade),
 ## ou arme spéciale ramassée sur la map (bonus, touche 3).
 enum Slot { PRIMARY, SECONDARY, EQUIPMENT, SPECIAL }
@@ -61,6 +61,8 @@ enum Kind { HITSCAN, PROJECTILE, MELEE, FLAME, THROWN }
 @export var special_duration: float = 0.0     ## > 0 : l'arme disparaît après ce délai (s) ; sinon quand elle est vide
 @export var pierce_always: bool = false       ## balles toujours perforantes (fusil laser)
 @export var pierce_walls: int = 0             ## murs ou obstacles qu'une balle traverse (0 = aucun)
+@export var aim_assist_deg: float = 0.0       ## visée facilitée : le tir se colle sur un ennemi à moins de ces degrés du réticule
+@export var legendary: bool = false           ## arme légendaire (porteur signalé à tous, voir LegendaryEvent)
 
 @export_group("Effets sur la cible")
 @export var slow_factor: float = 0.0          ## 0.4 = 40 % plus lent

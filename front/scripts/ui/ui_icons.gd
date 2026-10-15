@@ -23,6 +23,7 @@ const WEAPONS := {
 	WeaponData.Model.LASER_RIFLE: preload("res://assets/ui/icons/laser_rifle.svg"),
 	WeaponData.Model.FIST: preload("res://assets/ui/icons/fist.svg"),
 	WeaponData.Model.ASSAULT: preload("res://assets/ui/icons/assault.svg"),
+	WeaponData.Model.SHOGUN: preload("res://assets/ui/icons/shogun.svg"),
 }
 
 const ABILITIES := {

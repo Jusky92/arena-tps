@@ -53,6 +53,7 @@ func _ready() -> void:
 func _wrap_in_scroll(rows: Control) -> ScrollContainer:
 	var parent := rows.get_parent()
 	var index := rows.get_index()
+	var scene_owner := rows.owner         # garde l'accès par nom unique (%BoardRows…)
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.size_flags_horizontal = rows.size_flags_horizontal
@@ -61,6 +62,8 @@ func _wrap_in_scroll(rows: Control) -> ScrollContainer:
 	parent.move_child(scroll, index)
 	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(rows)
+	scroll.owner = scene_owner
+	rows.owner = scene_owner
 	return scroll
 
 

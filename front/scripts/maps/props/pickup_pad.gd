@@ -91,6 +91,28 @@ static func _build_item(kind: int, color: Color) -> Node3D:
 			parts = [[Vector3(0.14, 0.4, 0.14), Vector3(-0.06, 0.15, 0)], [Vector3(0.14, 0.4, 0.14), Vector3(0.06, -0.15, 0)]]
 		Pickups.Kind.SUPER:         # étoile : trois anneaux croisés
 			parts = [[Vector3(0.42, 0.42, 0.42), Vector3.ZERO]]
+		Pickups.Kind.LEGENDARY:     # le Canon du Shōgun lui-même, en grand, et un rayon doré
+			var cannon := Node3D.new()
+			LegendaryEvent.build_cannon(cannon)
+			cannon.scale = Vector3.ONE * 1.6
+			cannon.position.z = 0.6
+			root.add_child(cannon)
+			var beam := MeshInstance3D.new()
+			var cylinder := CylinderMesh.new()
+			cylinder.top_radius = 0.5
+			cylinder.bottom_radius = 0.5
+			cylinder.height = 30.0
+			beam.mesh = cylinder
+			var beam_mat := StandardMaterial3D.new()
+			beam_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			beam_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			beam_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+			beam_mat.albedo_color = Color(color, 0.25)
+			beam.material_override = beam_mat
+			beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			beam.position.y = 14.0
+			root.add_child(beam)
+			return root
 		_:                          # arme spéciale : caisse lumineuse
 			parts = [[Vector3(0.7, 0.3, 0.3), Vector3.ZERO], [Vector3(0.2, 0.2, 0.32), Vector3(0.28, 0, 0)]]
 	for p in parts:

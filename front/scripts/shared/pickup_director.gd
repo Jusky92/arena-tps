@@ -62,6 +62,20 @@ func set_available(id: int, value: bool) -> void:
 	state_changed.emit(id, value)
 
 
+## Ajoute un socle en cours de partie (arme légendaire) et renvoie son identifiant.
+## Même ordre d'ajout sur le serveur et chez les clients : mêmes identifiants.
+func add_pad(kind: int, pos: Vector3) -> int:
+	var id := _pads.size()
+	_pads[id] = {"kind": kind, "pos": pos, "available": true, "respawn": 0.0}
+	if not Effects.headless() and _snapped:
+		var visual := PickupPad.new()
+		visual.kind = kind
+		add_child(visual)
+		visual.global_position = pos
+		_visuals[id] = visual
+	return id
+
+
 ## État de tous les socles (envoyé à un joueur qui rejoint la partie en cours).
 func snapshot() -> Dictionary:
 	var out := {}

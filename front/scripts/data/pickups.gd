@@ -5,7 +5,8 @@ extends RefCounted
 ## Les bonus sont décidés par la partie qui fait foi : le serveur dédié en ligne,
 ## la partie locale hors ligne (PickupDirector). Les clients ne font qu'afficher.
 
-enum Kind { HEAL, ARMOR, DOUBLE_JUMP, SPEED, MINIGUN, LASER_RIFLE, POWER_FIST, SUPER }
+## LEGENDARY : arme légendaire, posée une seule fois par match (voir LegendaryEvent).
+enum Kind { HEAL, ARMOR, DOUBLE_JUMP, SPEED, MINIGUN, LASER_RIFLE, POWER_FIST, SUPER, LEGENDARY }
 ## Super-pouvoirs (bonus SUPER : l'un des trois, tiré au hasard, déclenché avec F).
 enum Super { OVERLOAD, SHOCKWAVE, INVISIBILITY }
 
@@ -32,6 +33,7 @@ const INFO := {
 	Kind.LASER_RIFLE: {"name": "Fusil laser", "color": Color(0.25, 0.95, 1.0), "respawn": 60.0, "weapon": "laser_rifle"},
 	Kind.POWER_FIST: {"name": "Poing puissant", "color": Color(1.0, 0.3, 0.75), "respawn": 60.0, "weapon": "power_fist"},
 	Kind.SUPER: {"name": "Super-pouvoir", "color": Color(0.95, 0.27, 0.78), "respawn": 90.0},
+	Kind.LEGENDARY: {"name": "Canon du Shōgun", "color": Color(1.0, 0.78, 0.28), "respawn": 1.0e9, "weapon": "shogun_cannon"},
 }
 
 const SUPER_INFO := {

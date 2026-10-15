@@ -24,7 +24,7 @@ const VARIANTS := {
 	"step": 4, "land": 1, "switch": 1, "reload": 1,
 	"ability_shield": 1, "ability_dash": 1, "ability_pierce": 1, "ability_charge": 1,
 	"pickup": 1, "powerup": 1, "spawn": 1, "deflect": 1,
-	"ui_click": 1, "ui_open": 1, "ui_close": 1, "ambience": 1, "shot_rifle": 3,
+	"ui_click": 1, "ui_open": 1, "ui_close": 1, "ambience": 1, "shot_rifle": 3, "shot_shogun": 1, "legendary": 1,
 }
 
 ## Sons dont la hauteur varie un peu à chaque lecture (moins répétitif).
@@ -35,10 +35,10 @@ const PITCH_VARIATION := {
 }
 
 ## Son de tir selon le modèle d'arme (WeaponData.Model : SHOTGUN, SMG, SNIPER, ROCKET,
-## FLAMER, LASER, KATANA, POOP, GRENADE, MINIGUN, LASER_RIFLE, FIST, ASSAULT).
+## FLAMER, LASER, KATANA, POOP, GRENADE, MINIGUN, LASER_RIFLE, FIST, ASSAULT, SHOGUN).
 const SHOT_BY_MODEL := ["shot_shotgun", "shot_smg", "shot_sniper", "shot_rocket", "shot_flame",
 	"shot_laser", "katana_swing", "poop_launch", "grenade_throw", "shot_smg", "shot_laser", "katana_hit",
-	"shot_rifle"]
+	"shot_rifle", "shot_shogun"]
 ## Son de capacité selon ClassData.Ability (SHIELD, DASH, PIERCE, CHARGE).
 const ABILITY_SOUNDS := ["ability_shield", "ability_dash", "ability_pierce", "ability_charge"]
 

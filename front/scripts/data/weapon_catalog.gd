@@ -24,6 +24,7 @@ const SPECIALS: Array[WeaponData] = [
 	preload("res://data/weapons/fusil_laser.tres"),
 	preload("res://data/weapons/poing_puissant.tres"),
 	preload("res://data/weapons/onde_de_choc.tres"),
+	preload("res://data/weapons/canon_shogun.tres"),
 ]
 const GRENADES_PER_LIFE := 2
 const MAX_LOADOUTS := 10

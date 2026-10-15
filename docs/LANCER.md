@@ -104,7 +104,7 @@ Sinon, sur un PC qui a le code et **Godot 4.7.2** :
    Avec des options (toutes facultatives) :
 
    ```bash
-   ./ArenaTPS_Server.x86_64 --port 24567 --bots 2 --duration 180 --map hikari-mall --name "Arena TPS"
+   ./ArenaTPS_Server.x86_64 --port 24567 --bots 2 --duration 180 --map hikari-mall --bot-level moyen --name "Arena TPS"
    ```
 
    | Option | Défaut | Rôle |
@@ -113,13 +113,14 @@ Sinon, sur un PC qui a le code et **Godot 4.7.2** :
    | `--bots` | 2 | bots pour compléter la partie (le chef peut changer) |
    | `--duration` | 180 | durée d'une partie en secondes, de 60 à 600 (le chef peut changer) |
    | `--map` | `neo-edo` | map des parties : `neo-edo` ou `hikari-mall` (le chef peut changer) |
+   | `--bot-level` | `moyen` | niveau des bots : `faible`, `moyen` ou `eleve` (le chef peut changer) |
    | `--max-players` | 16 | joueurs humains au plus par partie (1 à 16) |
    | `--name` | Arena TPS | nom du serveur dans la liste des serveurs publics |
 
 5. **Noter les adresses affichées**, par exemple :
 
    ```
-   === Arena TPS — serveur dédié (version 0.11.0-alpha) ===
+   === Arena TPS — serveur dédié (version 0.13.0-alpha) ===
    Map : NEO-EDO (neo-edo), 16 joueurs maximum.
    Mode LAN. Les joueurs se connectent avec REJOINDRE et une de ces adresses :
        192.168.1.20:24567
@@ -251,7 +252,7 @@ L'adresse est retenue pour la prochaine fois.
 ## 6. Jouer une partie (LAN)
 
 1. Le **premier joueur arrivé dans le salon est le chef** (étiquette « chef »).
-2. Le chef choisit **la map**, **les bots** et **la durée**. Les autres voient les réglages
+2. Le chef choisit **la map**, **le nombre et le niveau des bots** et **la durée**. Les autres voient les réglages
    changer, sans pouvoir y toucher.
 3. Chacun peut **CHANGER DE CLASSE** avant le lancement.
 4. Le chef clique **LANCER LA PARTIE** (ou Entrée) : la partie démarre chez tout le monde.

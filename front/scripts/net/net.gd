@@ -73,6 +73,9 @@ signal special_given(peer_id: int, weapon_id: String)
 signal aura_started(peer_id: int, kind: int, duration: float)
 signal player_respawned(peer_id: int, position: Vector3, yaw: float, class_id: String, loadout: Dictionary)
 signal match_over(rows: Array)
+## Arme légendaire : phase 0 = cinématique (partie figée, `time_left` s restantes),
+## phase 1 = fin de la pause, l'arme est sur son socle à `position`.
+signal legendary(phase: int, position: Vector3, time_left: float)
 ## Serveur : un joueur a passé la vérification d'accès / est parti.
 signal player_accepted(peer_id: int)
 ## Serveur : le chef demande le lancement.
@@ -118,6 +121,9 @@ var pickup_states := {}
 ## Serveur : vérifie le ticket d'un joueur. Reçoit (ticket, user_id annoncé) et
 ## renvoie le user_id vérifié, ou "" si l'accès est refusé. Peut être une coroutine.
 var ticket_verifier: Callable = Callable()
+## true pendant la cinématique de l'arme légendaire : partie figée, le serveur ignore
+## les tirs, impacts, capacités et super-pouvoirs.
+var frozen := false
 ## Serveur : la partie en cours (server_game.gd), qui arbitre tirs, munitions et
 ## impacts : resolve_hit(cible, tireur, point relatif, arme), on_fire(tireur,
 ## emplacement) -> bool, on_reload(tireur, emplacement).
@@ -252,6 +258,7 @@ func leave() -> void:
 	online = false
 	_serving = false
 	in_match = false
+	frozen = false
 	server_status = "idle"
 	leader_id = 0
 	players = {}
@@ -741,7 +748,7 @@ func _hit(target_id: int, hit_offset: Vector3, weapon: String) -> void:
 
 
 func _resolve_hit(target_id: int, shooter_id: int, hit_offset: Vector3, weapon: String) -> void:
-	if _serving and in_match and arbiter:
+	if _serving and in_match and arbiter and not frozen:
 		arbiter.resolve_hit(target_id, shooter_id, hit_offset, weapon)
 
 
@@ -760,7 +767,7 @@ func fire(shooter_id: int, slot: int) -> void:
 @rpc("any_peer", "call_remote", "reliable")
 func _fire(slot: int) -> void:
 	var shooter := multiplayer.get_remote_sender_id()
-	if _serving and in_match and arbiter and players.has(shooter):
+	if _serving and in_match and arbiter and players.has(shooter) and not frozen:
 		arbiter.on_fire(shooter, slot)
 
 
@@ -810,7 +817,7 @@ func fire_projectile(shooter_id: int, slot: int, origin: Vector3, velocity: Vect
 @rpc("any_peer", "call_remote", "reliable")
 func _fire_projectile(slot: int, origin: Vector3, velocity: Vector3) -> void:
 	var shooter := multiplayer.get_remote_sender_id()
-	if _serving and in_match and arbiter and players.has(shooter):
+	if _serving and in_match and arbiter and players.has(shooter) and not frozen:
 		arbiter.on_fire_projectile(shooter, slot, origin, velocity)
 
 
@@ -834,7 +841,7 @@ func use_ability() -> void:
 @rpc("any_peer", "call_remote", "reliable")
 func _use_ability() -> void:
 	var id := multiplayer.get_remote_sender_id()
-	if _serving and in_match and arbiter and players.has(id):
+	if _serving and in_match and arbiter and players.has(id) and not frozen:
 		arbiter.on_use_ability(id)
 
 
@@ -847,7 +854,7 @@ func use_super() -> void:
 @rpc("any_peer", "call_remote", "reliable")
 func _use_super() -> void:
 	var id := multiplayer.get_remote_sender_id()
-	if _serving and in_match and arbiter and players.has(id):
+	if _serving and in_match and arbiter and players.has(id) and not frozen:
 		arbiter.activate_super_of(id)
 
 
@@ -919,6 +926,16 @@ func push_match_over(rows: Array) -> void:
 	if _serving:
 		server_status = "ending"
 	match_over.emit(rows)
+
+
+# =========================================================================== arme légendaire
+
+## Serveur -> clients : début (phase 0) ou fin (phase 1) de la cinématique de l'arme
+## légendaire (voir LegendaryEvent).
+@rpc("authority", "call_remote", "reliable")
+func push_legendary(phase: int, position: Vector3, time_left: float) -> void:
+	frozen = phase == 0
+	legendary.emit(phase, position, time_left)
 
 
 # =========================================================================== adresses

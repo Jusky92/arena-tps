@@ -68,6 +68,11 @@ var pickups: PickupDirector
 var _charges := {}                      # tireur -> {start: début de sa dernière charge (s), hits: cibles touchées}
 var _pierce_until := {}                 # tireur -> fin (s, avec marge) de sa Flèche perforante
 var _next_projectile_id := 1
+## Arme légendaire : moment de l'apparition (secondes de jeu, < 0 = passée), position
+## choisie, et true pendant la cinématique (partie figée).
+var _legendary_at := -1.0
+var _legendary_pos := Vector3.INF
+var _legendary_frozen := false
 
 
 func _ready() -> void:
@@ -80,6 +85,7 @@ func _ready() -> void:
 	_match_id = Uuid.v4()
 	_started_at = _now_iso()
 	_running = true
+	_legendary_at = LegendaryEvent.trigger_time(float(Net.settings.get("duration", 180.0)))
 
 	Net.arbiter = self
 	add_to_group("projectile_host")
@@ -104,6 +110,8 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	Net.arbiter = null
+	Net.frozen = false
+	Engine.time_scale = 1.0
 
 
 func _process(delta: float) -> void:
@@ -117,6 +125,10 @@ func _process(delta: float) -> void:
 			_respawns.erase(id)
 			_respawn(id)
 	Net.match_time_left -= delta
+	var elapsed := float(Net.settings.get("duration", 180.0)) - Net.match_time_left
+	if _legendary_at >= 0.0 and elapsed >= _legendary_at:
+		_legendary_at = -1.0
+		_start_legendary()
 	if Net.match_time_left <= 0.0:
 		_end_match()
 
@@ -175,6 +187,9 @@ func _on_joined(id: int, _info: Dictionary) -> void:
 		return
 	_spawn(id)
 	if not Net.is_bot(id):
+		# Arme légendaire déjà posée (ou cinématique en cours) : le nouveau la voit aussi.
+		if _legendary_pos != Vector3.INF:
+			Net.push_legendary.rpc_id(id, 0 if _legendary_frozen else 1, _legendary_pos, 1.0)
 		Net.push_pickups.rpc_id(id, pickups.snapshot())     # état des bonus pour le nouveau
 	if _nodes.size() > Net.max_players:
 		var bots := _nodes.keys().filter(func(i): return Net.is_bot(i))
@@ -446,8 +461,10 @@ func _reject_reason(node: Node3D, shooter: Node3D, hit_offset: Vector3, weapon_d
 			return "cible derrière le tireur"
 	var height := MatchRules.body_height(node)
 	var radius: float = (node.collision.shape as CapsuleShape3D).radius
-	if Vector2(hit_offset.x, hit_offset.z).length() > radius + HITBOX_MARGIN \
-			or hit_offset.y < -HITBOX_MARGIN or hit_offset.y > height + HITBOX_MARGIN:
+	# Visée facilitée (arme légendaire) : marge plus large.
+	var hitbox_margin := HITBOX_MARGIN + (0.6 if weapon_data.aim_assist_deg > 0.0 else 0.0)
+	if Vector2(hit_offset.x, hit_offset.z).length() > radius + hitbox_margin \
+			or hit_offset.y < -hitbox_margin or hit_offset.y > height + hitbox_margin:
 		return "point d'impact hors de la cible"
 	# Ligne de vue : des yeux du tireur au point touché, seul le décor peut bloquer.
 	# Une balle perforante (Archer, certaines armes) traverse quelques murs.
@@ -708,3 +725,30 @@ func activate_super(node: Node) -> void:
 			var center: Vector3 = node.chest_position()
 			_explode(center, Pickups.SHOCKWAVE, node, id, null)
 			Net.push_explosion.rpc(0, center, Pickups.SHOCKWAVE.id)
+
+
+# ---------------------------------------------------------------- Arme légendaire
+
+## L'arme légendaire va apparaître : partie figée (Engine.time_scale = 0, chronomètre
+## compris) pendant que tous les joueurs regardent la cinématique. Les actions reçues
+## pendant ce temps sont ignorées (Net.frozen). La fin est minutée en temps réel.
+func _start_legendary() -> void:
+	_legendary_pos = LegendaryEvent.pick_point(map.target_points(), players)
+	_legendary_frozen = true
+	Net.frozen = true
+	Engine.time_scale = 0.0
+	Net.log_line("SERVEUR : arme légendaire en %s, partie figée %.0f s" % [str(_legendary_pos.snapped(Vector3.ONE * 0.1)), LegendaryEvent.CINEMATIC_TIME])
+	Net.push_legendary.rpc(0, _legendary_pos, LegendaryEvent.CINEMATIC_TIME)
+	get_tree().create_timer(LegendaryEvent.CINEMATIC_TIME, true, false, true).timeout.connect(_end_legendary)
+
+
+## Fin de la cinématique : la partie reprend et l'arme est posée sur son socle.
+func _end_legendary() -> void:
+	if not is_inside_tree():
+		return
+	_legendary_frozen = false
+	Net.frozen = false
+	Engine.time_scale = 1.0
+	pickups.add_pad(Pickups.Kind.LEGENDARY, _legendary_pos)
+	Net.push_legendary.rpc(1, _legendary_pos, 0.0)
+

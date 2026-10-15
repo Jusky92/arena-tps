@@ -328,6 +328,29 @@ static func build_weapon(rig, kind: int, design_id: String, weapon_node: Node3D)
 			rig.add_part(g, Vector3(0.022, 0.022, 0.006), 1.0, Vector3(0, 0.125, -0.146), m.glow)
 			muzzle = Vector3(0, 0.05, -0.62)
 			foregrip = 0.36
+		WeaponData.Model.SHOGUN:
+			# Canon du Shōgun (arme légendaire) : canon à rail doré, deux rails néon,
+			# bobines lumineuses, crosse laquée noire.
+			var gold := _pbr(Color(1.0, 0.76, 0.3), 1.0, 0.22)
+			var lacquer := _pbr(Color(0.07, 0.05, 0.05), 0.4, 0.3)
+			var neon := StandardMaterial3D.new()
+			neon.albedo_color = Color(1.0, 0.85, 0.4)
+			neon.emission_enabled = true
+			neon.emission = Color(1.0, 0.7, 0.2)
+			neon.emission_energy_multiplier = 3.0
+			rig.add_part(g, Vector3(0.11, 0.15, 0.5), 0.5, Vector3(0, 0.03, -0.1), gold)
+			for side in [-1.0, 1.0]:
+				rig.add_part(g, Vector3(0.03, 0.05, 0.85), 0.4, Vector3(0.045 * side, 0.05, -0.62), gold)
+				rig.add_part(g, Vector3(0.012, 0.012, 0.8), 1.0, Vector3(0.045 * side, 0.085, -0.62), neon)
+			for i in 4:
+				rig.add_part(g, Vector3(0.15, 0.15, 0.04), 1.0, Vector3(0, 0.05, -0.32 - i * 0.16), neon)
+			rig.add_part(g, Vector3(0.07, 0.07, 0.07), 1.0, Vector3(0, 0.05, -1.06), neon)
+			rig.add_part(g, Vector3(0.07, 0.14, 0.32), 0.5, Vector3(0, -0.01, 0.3), lacquer, Vector3.ZERO, Vector2(0.8, 1.0))
+			rig.add_part(g, Vector3(0.05, 0.12, 0.07), 0.5, Vector3(0, -0.08, 0.04), lacquer, Vector3(20, 0, 0))
+			rig.add_part(g, Vector3(0.06, 0.06, 0.16), 0.8, Vector3(0, 0.15, -0.08), lacquer)
+			rig.add_part(g, Vector3(0.04, 0.04, 0.01), 1.0, Vector3(0, 0.15, -0.165), neon)
+			muzzle = Vector3(0, 0.05, -1.1)
+			foregrip = 0.45
 		WeaponData.Model.FIST:
 			# Poing puissant : gantelet énorme avec jointures lumineuses.
 			rig.add_part(g, Vector3(0.24, 0.22, 0.3), 0.85, Vector3(0, 0.0, -0.16), m.armor)
