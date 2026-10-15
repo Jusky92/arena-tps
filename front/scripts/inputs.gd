@@ -154,6 +154,9 @@ func event_label(event: InputEvent) -> String:
 			KEY_DOWN: return "↓"
 			KEY_LEFT: return "←"
 			KEY_RIGHT: return "→"
+		# Rangée des chiffres : le chiffre, même en AZERTY où la touche donne & é " ' …
+		if physical >= KEY_0 and physical <= KEY_9:
+			return str(physical - KEY_0)
 		var local := DisplayServer.keyboard_get_keycode_from_physical(physical)
 		return OS.get_keycode_string(local if local != KEY_NONE else physical)
 	if event is InputEventMouseButton:
@@ -169,10 +172,15 @@ func event_label(event: InputEvent) -> String:
 	return "?"
 
 
-## Rappel de touche pour l'interface, par exemple "[E]" (première touche de l'action).
-func hint(action: String) -> String:
+## Nom de la première touche de l'action, par exemple "E" ("—" si aucune).
+func key_name(action: String) -> String:
 	var events := events_of(action)
-	return "[%s]" % (event_label(events[0]) if not events.is_empty() else "—")
+	return event_label(events[0]) if not events.is_empty() else "—"
+
+
+## Rappel de touche pour l'interface, par exemple "[E]".
+func hint(action: String) -> String:
+	return "[%s]" % key_name(action)
 
 
 func _set_events(action: String, events: Array) -> void:
