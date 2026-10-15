@@ -173,6 +173,8 @@ func _fire_pellet(spread_deg: float) -> Dictionary:
 			var headshot := MatchRules.is_headshot(target, offset)
 			Effects.impact(_world(), hit.position, Color(1, 0.85, 0.2) if headshot else Color(1, 0.25, 0.2), 0.12 if headshot else 0.09)
 			var killed := _deal(target, offset, MatchRules.hit_damage(data, headshot), headshot)
+			if _hears_impacts():
+				Sfx.play_at("impact_body", hit.position, -8.0, 1.0, 40.0)
 			result.hit = true
 			result.killed = result.killed or killed
 			result.headshot = result.headshot or headshot
@@ -180,6 +182,8 @@ func _fire_pellet(spread_deg: float) -> Dictionary:
 			pierce_left -= 1
 		else:
 			Effects.impact(_world(), hit.position, data.tracer_color)
+			if _hears_impacts():
+				Sfx.play_at("impact_world", hit.position, -10.0, 1.0, 40.0)
 			break  # un mur arrête toujours la balle
 
 	if data.model == WeaponData.Model.LASER:
@@ -201,6 +205,8 @@ func _swing() -> Dictionary:
 	for target in _targets_in_cone(center, forward, data.max_range, data.arc_deg):
 		var killed := _deal(target, _body_offset(target), data.damage, false)
 		_push(target, (target.global_position - _shooter.global_position).normalized(), data.knockback)
+		if not result.hit:
+			Sfx.play_at("katana_hit", (target as Node3D).global_position + Vector3.UP, -2.0, 1.0, 40.0)
 		result.hit = true
 		result.killed = result.killed or killed
 	return result
@@ -344,6 +350,12 @@ func _raycast(space: PhysicsDirectSpaceState3D, from: Vector3, to: Vector3, extr
 	exclude.append_array(extra_exclude)
 	query.exclude = exclude
 	return space.intersect_ray(query)
+
+
+## Impacts de balles audibles seulement pour le joueur local (sinon, avec 16 joueurs
+## et leurs rafales, ils satureraient le mixage).
+func _hears_impacts() -> bool:
+	return _shooter.get("is_local") == true and _shooter.get("is_remote") == false
 
 
 ## true si ce tir doit être annoncé au serveur (partie en ligne, personnage réseau).

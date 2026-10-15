@@ -58,6 +58,13 @@ const CHARGE_DAMAGE := 30
 const CHARGE_KNOCKBACK := 10.0
 const CHARGE_REACH := 1.3
 
+## Pas : un son tous les STRIDE mètres (plus longs en courant). Ceux des autres
+## personnages sont placés dans le monde et portent à STEP_RANGE mètres.
+const STRIDE_WALK := 1.9
+const STRIDE_SPRINT := 2.4
+const STEP_RANGE := 35.0
+const LAND_SPEED := 6.0               # vitesse de chute au-delà de laquelle on entend l'atterrissage
+
 ## Temps pour changer d'arme (on ne peut pas tirer pendant ce délai).
 const SWITCH_TIME := 0.4
 
@@ -126,6 +133,9 @@ var _ability_cooldown: float = 0.0
 var _ability_time: float = 0.0       # temps restant de l'effet en cours
 var _dash_direction := Vector3.ZERO
 var _charge_hits: Array = []           # ennemis déjà percutés pendant la charge en cours
+var _stride := 0.0                      # distance parcourue depuis le dernier pas
+var _was_on_floor := true
+var _fall_speed := 0.0                  # vitesse de chute max depuis qu'on a quitté le sol
 var _shake: float = 0.0
 var _spawn_shield: MeshInstance3D
 var _spawn_shield_mat: ShaderMaterial
@@ -215,6 +225,7 @@ func _physics_process(delta: float) -> void:
 	_update_ability(delta)
 	_update_spawn_protection(delta)
 	_update_effects(delta)
+	_update_footsteps(delta)
 	if is_remote:
 		_follow_net_state(delta)
 		return
@@ -442,8 +453,8 @@ func _on_weapon_fired(recoil_deg: float) -> void:
 	# Tirer met fin à la protection d'apparition.
 	if spawn_protection > 0.0:
 		end_spawn_protection()
-	# Lance-flammes : un son pour quelques ticks seulement, sinon c'est un vacarme continu.
-	if weapon.data.kind != WeaponData.Kind.FLAME or randf() < 0.25:
+	# Lance-flammes : un son tous les 3 ticks environ (ses bouffées durent plus qu'un tick).
+	if weapon.data.kind != WeaponData.Kind.FLAME or randf() < 0.34:
 		_play_sound(Sfx.shot_sound(weapon.data.model), -3.0, randf_range(0.95, 1.05))
 	# Le recul fait remonter la visée : au joueur de compenser (moins en visant ou accroupi).
 	var steady := (0.5 if _aiming else 1.0) * (0.7 if crouching else 1.0)
@@ -741,7 +752,7 @@ func switch_weapon(slot: int) -> void:
 	weapon.cancel_reload()
 	_select_weapon(slot)
 	_switch_time = SWITCH_TIME
-	_play_sound("ui_click", -10.0, 0.8)
+	_play_sound("switch", -6.0)
 
 
 func _select_weapon(slot: int) -> void:
@@ -775,7 +786,7 @@ func throw_grenade() -> bool:
 	var direction := (aim + Vector3.UP * 0.35).normalized()
 	var origin := chest_position() + Vector3.UP * 0.3 + (-global_basis.z) * 0.4
 	Projectile.launch(self, data, self, 2, origin, direction * data.projectile_speed + velocity * 0.5)
-	_play_sound("ui_open", -4.0, 0.7)
+	_play_sound("grenade_throw", -2.0)
 	return true
 
 
@@ -816,3 +827,42 @@ func _update_effects(delta: float) -> void:
 			var amount := int(_burn_pending)
 			_burn_pending -= amount
 			take_damage(amount, _burn_source if is_instance_valid(_burn_source) else null)
+
+
+# ---------------------------------------------------------------- Pas
+
+## Pas et atterrissages, pour tous les personnages (joueur local, bots, joueurs
+## distants) : on entend arriver les autres. Rien sur le serveur dédié.
+func _update_footsteps(delta: float) -> void:
+	if Effects.headless() or not alive or not is_inside_tree():
+		return
+	var grounded := _net_floor if is_remote else is_on_floor()
+	if not grounded:
+		_fall_speed = maxf(_fall_speed, -velocity.y)
+	elif not _was_on_floor:
+		if _fall_speed > LAND_SPEED:
+			_step_sound("land", 0.0)
+		_fall_speed = 0.0
+		_stride = 0.0
+	_was_on_floor = grounded
+	if not grounded or is_dashing() or is_charging():
+		return
+	var speed := Vector2(velocity.x, velocity.z).length()
+	if speed < 1.0:
+		_stride = 0.0
+		return
+	_stride += speed * delta
+	var running := speed > class_data.walk_speed + 0.5
+	if _stride >= (STRIDE_SPRINT if running else STRIDE_WALK):
+		_stride = 0.0
+		var volume := 0.0 if running else -5.0
+		if crouching:
+			volume -= 8.0           # accroupi : presque silencieux
+		_step_sound("step", volume)
+
+
+func _step_sound(sound: String, volume_db: float) -> void:
+	if is_local and not is_remote:
+		Sfx.play(sound, volume_db - 14.0)          # ses propres pas : discrets
+	else:
+		Sfx.play_at(sound, global_position, volume_db - 2.0, 1.0, STEP_RANGE)

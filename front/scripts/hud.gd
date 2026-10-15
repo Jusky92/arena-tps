@@ -11,6 +11,7 @@ const HEALTH_LOW := Color(1.0, 0.33, 0.36)
 const LOW_HEALTH_RATIO := 0.35
 const HP_PER_TICK := 25            # un repère sur la barre de vie tous les 25 PV
 const KEY_HELP_TIME := 10.0        # l'aide des touches s'efface après ce délai
+const HEARTBEAT_INTERVAL := 0.9    # battement de cœur quand la vie est basse
 
 @onready var _vignette: ColorRect = %Vignette
 @onready var _crosshair: Crosshair = %Crosshair
@@ -56,6 +57,7 @@ var _ammo_tween: Tween
 var _was_low_ammo := false
 var _key_help_started := false
 var _splat_tween: Tween
+var _heartbeat := 0.0
 
 
 func _ready() -> void:
@@ -108,7 +110,7 @@ func bind(player: Node) -> void:
 	_start_key_help_fade()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if _player == null or not is_instance_valid(_player):
 		return
 	var data: ClassData = _player.class_data
@@ -137,6 +139,15 @@ func _process(_delta: float) -> void:
 		_crosshair.set_spread(_spread_pixels(data))
 
 	_status.visible = _player.alive and _player.is_slowed()
+
+	# Vie basse : battement de cœur.
+	if _player.alive and float(_player.health) / data.max_health <= LOW_HEALTH_RATIO:
+		_heartbeat -= delta
+		if _heartbeat <= 0.0:
+			_heartbeat = HEARTBEAT_INTERVAL
+			Sfx.play("heartbeat", -6.0)
+	else:
+		_heartbeat = 0.0
 
 	# Protection d'apparition.
 	var protect: float = _player.spawn_protection
@@ -196,6 +207,7 @@ func _on_health_changed(health: int, max_health: int, animate := true) -> void:
 
 func _on_damaged(_amount: int, source: Vector3) -> void:
 	_damage_indicator.add(source)
+	Sfx.play("hurt", -7.0)
 	var mat := _vignette.material as ShaderMaterial
 	if _vignette_tween:
 		_vignette_tween.kill()
@@ -261,12 +273,14 @@ func _on_fired(_recoil_deg: float) -> void:
 
 
 ## Marque de touche sur le réticule (jaune à la tête, rouge quand on élimine), avec un
-## son de confirmation (plus aigu à la tête).
+## son de confirmation : « tic » pour une touche, « ting » métallique pour la tête.
 func _on_hit_confirmed(killed: bool, headshot: bool) -> void:
+	if headshot:
+		Sfx.play("headshot", -3.0)
 	if killed:
 		Sfx.play("kill", -2.0)
-	else:
-		Sfx.play("hit", -3.0 if headshot else -6.0, 1.45 if headshot else 1.0)
+	elif not headshot:
+		Sfx.play("hit", -5.0)
 	_crosshair.hit(killed, headshot)
 
 

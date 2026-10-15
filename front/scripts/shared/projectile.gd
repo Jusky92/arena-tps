@@ -52,13 +52,17 @@ func _physics_process(delta: float) -> void:
 	var from := global_position
 	var to := from + velocity * delta
 
-	if authoritative:
+	var bounces := data.fuse_time > 0.0 and data.bounce > 0.0
+	# Grenade : rebonds calculés aussi pour l'affichage (même trajectoire, et le son du
+	# rebond) ; l'explosion, elle, reste décidée par la version qui fait foi.
+	if authoritative or bounces:
 		var hit := _cast(from, to)
 		if not hit.is_empty():
 			var target: Object = hit.collider
-			if data.fuse_time > 0.0 and data.bounce > 0.0:
-				# Grenade : rebondit sur tout, explosera au bout de son délai.
+			if bounces:
 				var normal: Vector3 = hit.normal
+				if velocity.length() > 2.0:
+					Sfx.play_at("grenade_bounce", hit.position, -4.0, 1.0, 50.0)
 				velocity = velocity.bounce(normal) * data.bounce
 				to = (hit.position as Vector3) + normal * RADIUS
 			else:

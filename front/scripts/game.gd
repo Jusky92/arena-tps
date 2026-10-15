@@ -72,6 +72,7 @@ func _ready() -> void:
 	_pause.class_selected.connect(_on_class_selected)
 	_pause.loadout_selected.connect(_on_loadout_selected)
 	add_to_group("projectile_host")
+	_start_ambience()
 
 	_online = Net.online and Net.in_match and _mode == "deathmatch"
 	if _online:
@@ -341,6 +342,8 @@ func _on_net_death(victim_id: int, killer_id: int, weapon: String, headshot: boo
 		var streak: int = Net.players.get(killer_id, {}).get("kills", 1)
 		_ui.show_banner(_kill_banner(streak, headshot))
 		Sfx.play("kill", -2.0)
+		if headshot:
+			Sfx.play("headshot", -3.0)
 	if victim_id == Net.my_id():
 		hud.show_death(killer_name if killer_name != "Arène" else "")
 		# Compte à rebours affiché ; la réapparition viendra du serveur.
@@ -638,10 +641,24 @@ func _on_net_effect(kind: String, value: float, duration: float, direction: Vect
 		player.apply_effect(kind, value, duration, direction, null)
 
 
+## Fond sonore de NEO-EDO en boucle (rumeur de la ville, vent, néons), très discret.
+func _start_ambience() -> void:
+	var loop := Sfx.looping("ambience")
+	if loop == null:
+		return
+	var player_node := AudioStreamPlayer.new()
+	player_node.name = "Ambience"
+	player_node.stream = loop
+	player_node.bus = Settings.SFX_BUS
+	player_node.volume_db = -16.0
+	player_node.autoplay = true
+	add_child(player_node)
+
+
 func _explosion_fx(position: Vector3, data: WeaponData) -> void:
 	var cartoon := data.model == WeaponData.Model.POOP
 	Effects.explosion(self, position, data.splash_radius, data.tracer_color, cartoon)
 	if cartoon:
-		Sfx.play_at("deflect", position, 0.0, 0.55)
+		Sfx.play_at("poop_splat", position, 0.0, 1.0, 60.0)
 	else:
-		Sfx.play_at("shot_shotgun", position, 6.0, 0.45)
+		Sfx.play_at("explosion", position, 6.0, 1.0, 160.0)
