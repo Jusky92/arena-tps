@@ -30,7 +30,7 @@ var _content: PanelContainer
 var _pages := {}                 # nom -> Control
 var _menu_buttons := {}          # nom de page -> bouton du menu de gauche
 var _info_label: Label
-var _class_cards := []           # [ClassData, bouton, style normal, carte]
+var _class_cards := []           # [ClassData, mention d'état, style normal, carte]
 var _current_class: ClassData
 var _pending_class: ClassData
 var _pending_loadout := false
@@ -240,9 +240,16 @@ func _build_classes_page() -> Control:
 	return page
 
 
+## Carte d'un spécialiste : un clic n'importe où sur la carte le choisit.
 func _class_card(data: ClassData) -> Control:
 	var card := PanelContainer.new()
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	card.mouse_entered.connect(func() -> void: _refresh_class_cards(card))
+	card.mouse_exited.connect(func() -> void: _refresh_class_cards())
+	card.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			_choose_class(data))
 	var style := UiTheme.box(Color(0.05, 0.065, 0.1, 0.95), Color(data.color, 0.35), 1, 6, 12, 12)
 	card.add_theme_stylebox_override("panel", style)
 	var box := VBoxContainer.new()
@@ -271,14 +278,22 @@ func _class_card(data: ClassData) -> Control:
 	box.add_child(ability)
 	box.add_child(UiTheme.spacer(Vector2.ZERO, false, true))
 
-	var button := UiTheme.button("CHOISIR", false, data.color, 42)
-	button.add_theme_font_override("font", UiTheme.title_font())
-	button.add_theme_font_size_override("font_size", 11)
-	button.clip_text = true                 # « ✓ PROCHAINE APPARITION » ne doit pas élargir la carte
-	button.pressed.connect(_choose_class.bind(data))
-	box.add_child(button)
-	_class_cards.append([data, button, style, card])
+	var status := UiTheme.label("", 11, Color.WHITE)
+	status.add_theme_font_override("font", UiTheme.title_font())
+	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	status.custom_minimum_size.y = 30
+	status.clip_text = true                 # le texte ne doit pas élargir la carte
+	box.add_child(status)
+	_ignore_mouse(box)                      # les clics sur le contenu reviennent à la carte
+	_class_cards.append([data, status, style, card])
 	return card
+
+
+func _ignore_mouse(node: Node) -> void:
+	for child in node.get_children():
+		if child is Control:
+			(child as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_ignore_mouse(child)
 
 
 func _info_row(title: String, value: String) -> Control:
@@ -291,33 +306,38 @@ func _info_row(title: String, value: String) -> Control:
 
 
 func _choose_class(data: ClassData) -> void:
+	if data == _current_class and _pending_class == null:
+		return                              # déjà le spécialiste joué
 	Sfx.ui("ui_click")
 	_pending_class = null if data == _current_class else data
 	_refresh_class_cards()
 	class_selected.emit(data)
 
 
-func _refresh_class_cards() -> void:
+## Met en avant le spécialiste joué ou prévu ; `hovered` = carte sous la souris.
+func _refresh_class_cards(hovered: Control = null) -> void:
 	for entry in _class_cards:
 		var data: ClassData = entry[0]
-		var button: Button = entry[1]
+		var status: Label = entry[1]
 		var card: PanelContainer = entry[3]
 		var is_current := data == _current_class and _pending_class == null
 		var is_next := data == _pending_class
 		var was_current := data == _current_class and _pending_class != null
 		if is_next:
-			button.text = "✓ AU RETOUR"          # prochaine apparition
+			status.text = "✓ AU RETOUR"          # prochaine apparition
 		elif is_current:
-			button.text = "✓ ACTUEL"
+			status.text = "✓ ACTUEL"
 		elif was_current:
-			button.text = "GARDER"
+			status.text = "CLIQUER POUR GARDER"
 		else:
-			button.text = "CHOISIR"
-		button.disabled = is_current
+			status.text = "CLIQUER POUR CHOISIR"
 		var highlight := is_next or is_current
+		status.add_theme_color_override("font_color", data.color.lightened(0.35) if highlight else Color(1, 1, 1, 0.45))
+		var lit := highlight or card == hovered
 		card.add_theme_stylebox_override("panel", UiTheme.box(
 			Color(data.color, 0.12) if highlight else Color(0.05, 0.065, 0.1, 0.95),
-			data.color if highlight else Color(data.color, 0.35), 2 if highlight else 1, 6, 12, 12))
+			data.color if lit else Color(data.color, 0.35), 2 if lit else 1, 6, 12, 12))
+		card.mouse_default_cursor_shape = Control.CURSOR_ARROW if is_current else Control.CURSOR_POINTING_HAND
 
 
 # ---------------------------------------------------------------- Page : classes (équipement)
