@@ -132,7 +132,8 @@ func attach(bone_name: String, offset: Vector3, size: Vector3, roundness: float,
 	var rest := skeleton.get_bone_global_rest(bone)
 	var wanted := flip * Transform3D(Basis.from_euler(rotation_deg * (PI / 180.0)), (flip.affine_inverse() * rest.origin) + offset)
 	var part := MeshInstance3D.new()
-	part.mesh = PartMesh.shape(size, roundness, vertical, taper)
+	var r := PartMesh.smooth(roundness, vertical, PartMesh.SMOOTH_GEAR)
+	part.mesh = PartMesh.shape(size, r.x, r.y, taper)
 	part.material_override = material
 	attachment.add_child(part)
 	part.transform = rest.affine_inverse() * wanted
@@ -144,7 +145,8 @@ func attach(bone_name: String, offset: Vector3, size: Vector3, roundness: float,
 func add_part(bone: Node3D, size: Vector3, roundness: float, offset: Vector3, material: Material,
 		rotation_deg := Vector3.ZERO, taper := Vector2.ONE, vertical := -1.0) -> MeshInstance3D:
 	var part := MeshInstance3D.new()
-	part.mesh = PartMesh.shape(size, roundness, vertical, taper)
+	var r := PartMesh.smooth(roundness, vertical, PartMesh.SMOOTH_WEAPON)
+	part.mesh = PartMesh.shape(size, r.x, r.y, taper)
 	part.material_override = material
 	bone.add_child(part)
 	part.position = offset

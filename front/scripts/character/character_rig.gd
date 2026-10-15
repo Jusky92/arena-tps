@@ -125,7 +125,8 @@ func _bone(parent: Node3D, bone_name: String, offset: Vector3) -> Node3D:
 func add_part(bone: Node3D, size: Vector3, roundness: float, offset: Vector3, material: Material,
 		rotation_deg := Vector3.ZERO, taper := Vector2.ONE, vertical := -1.0) -> MeshInstance3D:
 	var part := MeshInstance3D.new()
-	part.mesh = PartMesh.shape(size, roundness, vertical, taper)
+	var r := PartMesh.smooth(roundness, vertical, PartMesh.SMOOTH_GEAR)
+	part.mesh = PartMesh.shape(size, r.x, r.y, taper)
 	part.material_override = material
 	bone.add_child(part)
 	part.position = offset
