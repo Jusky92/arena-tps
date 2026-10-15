@@ -389,59 +389,13 @@ func _build_play_page() -> Control:
 	play.custom_minimum_size.x = PLAY_WIDTH
 	page.add_child(play)
 
-	# --- En bas à gauche : classe (équipement), map hors ligne, LAN ---
+	# --- En bas à gauche : LAN par adresse (hors ligne seulement) ---
 	var left := VBoxContainer.new()
 	left.add_theme_constant_override("separation", 4)
 	left.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	left.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	left.custom_minimum_size.x = 400
 	page.add_child(left)
-
-	# Classe (2 armes + 2 grenades) pour la prochaine partie.
-	var class_row := HBoxContainer.new()
-	class_row.add_theme_constant_override("separation", 8)
-	class_row.add_child(_side_label("CLASSE"))
-	var picker := OptionButton.new()
-	picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	picker.fit_to_longest_item = false
-	picker.clip_text = true
-	_compact(picker)
-	for i in GameState.loadouts.size():
-		var l: Dictionary = GameState.loadouts[i]
-		var p := WeaponCatalog.find(l.primary)
-		var sec := WeaponCatalog.find(l.secondary)
-		picker.add_item("%s  ·  %s + %s" % [l.name, p.display_name if p else "?", sec.display_name if sec else "?"], i)
-	picker.select(GameState.selected_loadout)
-	picker.item_selected.connect(func(index: int) -> void:
-		GameState.select_loadout(index)
-		_lineup_key = ""            # l'arme du personnage change
-		_refresh_lineup())
-	class_row.add_child(picker)
-	var edit := UiTheme.button("MODIFIER", false, UiTheme.MAGENTA, 34)
-	_compact(edit)
-	edit.tooltip_text = "Modifier mes classes"
-	edit.pressed.connect(_show_page.bind("classes"))
-	class_row.add_child(edit)
-	left.add_child(class_row)
-
-	# Map de la partie solo et de l'entraînement.
-	var map_row := HBoxContainer.new()
-	map_row.add_theme_constant_override("separation", 8)
-	map_row.add_child(_side_label("MAP HORS LIGNE"))
-	var map_picker := OptionButton.new()
-	map_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	map_picker.fit_to_longest_item = false
-	map_picker.clip_text = true
-	_compact(map_picker)
-	for i in MapCatalog.MAPS.size():
-		var m: Dictionary = MapCatalog.MAPS[i]
-		map_picker.add_item("%s  ·  %s" % [m.name, m.subtitle], i)
-		if m.id == GameState.map_id:
-			map_picker.select(i)
-	map_picker.tooltip_text = "Map de la partie solo et de l'entraînement (en LAN, c'est le chef du salon qui choisit)"
-	map_picker.item_selected.connect(func(index: int) -> void: GameState.map_id = MapCatalog.MAPS[index].id)
-	map_row.add_child(map_picker)
-	left.add_child(map_row)
 
 	# LAN par adresse : seulement hors ligne (back simulé) ; avec le vrai back on
 	# passe par les tickets.
@@ -484,11 +438,11 @@ func _build_play_page() -> Control:
 	# Hors ligne (ne compte pas dans les statistiques).
 	var solo := UiTheme.button("SOLO (BOTS)", false, UiTheme.CYAN, 44)
 	solo.tooltip_text = "Match à mort hors ligne contre des bots (ne compte pas dans les statistiques)"
-	solo.pressed.connect(_start_solo)
+	solo.pressed.connect(_pick_offline_map.bind(_start_solo))
 	buttons.add_child(solo)
 	var training := UiTheme.button("ENTRAÎNEMENT", false, UiTheme.CYAN, 44)
 	training.tooltip_text = "Seul sur la map avec des mannequins d'entraînement"
-	training.pressed.connect(_start_training)
+	training.pressed.connect(_pick_offline_map.bind(_start_training))
 	buttons.add_child(training)
 	for b in buttons.get_children():
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -498,7 +452,7 @@ func _build_play_page() -> Control:
 	return page
 
 
-## Contrôle plus bas que ceux du thème (lignes du bas à gauche).
+## Contrôle plus bas que ceux du thème (ligne LAN du bas à gauche).
 func _compact(control: Control) -> void:
 	control.add_theme_font_size_override("font_size", 14)
 	for state in ["normal", "hover", "pressed", "focus", "disabled", "read_only"]:
@@ -508,14 +462,6 @@ func _compact(control: Control) -> void:
 			style.content_margin_top = 5
 			style.content_margin_bottom = 5
 			control.add_theme_stylebox_override(state, style)
-
-
-## Petit titre de ligne, de largeur fixe pour aligner les listes du bas à gauche.
-func _side_label(text: String) -> Label:
-	var l := UiTheme.label(text, 13, UiTheme.MUTED, true)
-	l.custom_minimum_size.x = 120
-	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	return l
 
 
 func _update_launch_button() -> void:
@@ -1293,6 +1239,42 @@ func _friend_row(f: Dictionary) -> Control:
 
 
 # =========================================================================== hors ligne
+
+## Choix de la map avant une partie hors ligne (solo ou entraînement), puis `start`.
+## En ligne, la map se choisit dans le salon du serveur.
+func _pick_offline_map(start: Callable) -> void:
+	Sfx.ui("ui_click")
+	_close_overlay()
+	_overlay = ColorRect.new()
+	(_overlay as ColorRect).color = Color(0.01, 0.015, 0.03, 0.88)
+	_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_overlay)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_overlay.add_child(center)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	box.custom_minimum_size.x = 520
+	center.add_child(box)
+	var title := UiTheme.title("CHOIX DE LA MAP", 30, UiTheme.CYAN)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+	var first: Button = null
+	for m in MapCatalog.MAPS:
+		var current: bool = m.id == GameState.map_id
+		var button := UiTheme.button("%s  ·  %s" % [m.name, m.subtitle], current, UiTheme.CYAN, 54)
+		button.pressed.connect(func() -> void:
+			GameState.map_id = m.id
+			start.call())
+		box.add_child(button)
+		if current or first == null:
+			first = button
+	var cancel := UiTheme.button("ANNULER", false, UiTheme.RED, 44)
+	cancel.pressed.connect(func() -> void:
+		Sfx.ui("ui_close")
+		_close_overlay())
+	box.add_child(cancel)
+	first.grab_focus()
 
 func _start_solo() -> void:
 	GameState.mode = "deathmatch"

@@ -120,7 +120,7 @@ Effets sonores générés par `tools/generate_sounds.py` (tirs des 3 armes, impa
 Deux choix séparés, décrits par des fichiers de données modifiables dans l'inspecteur de Godot :
 
 - le **spécialiste** est le personnage : apparence, points de vie, vitesse et capacité (`front/data/classes/*.tres`, écran SPÉCIALISTES) ;
-- la **classe** est l'équipement : une arme principale, une arme secondaire et 2 grenades. Chaque joueur crée jusqu'à 10 classes (onglet CLASSES), enregistrées sur son compte, et choisit la sienne sur la page JOUER. N'importe quel spécialiste peut prendre n'importe quelle classe.
+- la **classe** est l'équipement : une arme principale, une arme secondaire et 2 grenades. Chaque joueur crée jusqu'à 10 classes (onglet CLASSES), enregistrées sur son compte, et l'équipe depuis l'onglet CLASSES (**ÉQUIPER POUR JOUER**) et en change en partie depuis le menu pause. N'importe quel spécialiste peut prendre n'importe quelle classe.
 
 Les armes sont dans `front/data/weapons/*.tres` (dégâts, cadence, chargeur, dispersion, zoom, modèle 3D) et listées dans `front/scripts/data/weapon_catalog.gd`. Le serveur arbitre les tirs à la tête.
 
@@ -150,7 +150,7 @@ L'animation est pilotée par l'état du personnage (vitesse, au sol, accroupi, a
 
 ## Maps
 
-Deux maps, listées dans `front/scripts/maps/map_catalog.gd` : **NEO-EDO** (par défaut) et **Hikari Mall**, un centre commercial abandonné de 100 x 100 m sur 2 niveaux (`front/scripts/maps/mall_map.gd`, `front/scenes/maps/mall.tscn`). La map d'une partie est choisie par le serveur (`--map`), par le chef du salon en LAN, ou sur la page JOUER pour la partie solo et l'entraînement.
+Deux maps, listées dans `front/scripts/maps/map_catalog.gd` : **NEO-EDO** (par défaut) et **Hikari Mall**, un centre commercial abandonné de 100 x 100 m sur 2 niveaux (`front/scripts/maps/mall_map.gd`, `front/scenes/maps/mall.tscn`). La map se choisit avant chaque partie : par le chef dans le salon du serveur (en LAN comme en ligne ; sinon celle de `--map`), ou dans la fenêtre « Choix de la map » qui s'ouvre en cliquant SOLO ou ENTRAÎNEMENT.
 
 ### NEO-EDO
 
