@@ -59,7 +59,7 @@ func _build_showcase() -> Control:
 	tps.add_theme_constant_override("outline_size", 0)
 	logo.add_child(tps)
 	box.add_child(logo)
-	box.add_child(UiTheme.label("MULTIJOUEUR  ·  CHACUN POUR SOI  ·  8 JOUEURS", 18, UiTheme.MAGENTA, true))
+	box.add_child(UiTheme.label("MULTIJOUEUR  ·  CHACUN POUR SOI  ·  16 JOUEURS", 18, UiTheme.MAGENTA, true))
 	box.add_child(UiTheme.spacer(Vector2(0, 6)))
 	box.add_child(UiTheme.label("Projet Architecture SI · M2 · CFA INSTA", 16, UiTheme.MUTED))
 

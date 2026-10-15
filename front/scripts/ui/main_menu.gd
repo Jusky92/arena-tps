@@ -126,7 +126,7 @@ func _build_top_bar() -> Control:
 	var bar := PanelContainer.new()
 	bar.add_theme_stylebox_override("panel", UiTheme.box(Color(0.02, 0.03, 0.05, 0.9), Color(0, 0, 0, 0), 0, 0, 24, 10))
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 14)
+	row.add_theme_constant_override("separation", 12)
 	bar.add_child(row)
 
 	var logo := HBoxContainer.new()
@@ -1008,12 +1008,16 @@ func _build_stats_page() -> Control:
 	scroll.add_child(rows)
 	board.add_child(table)
 
-	# Succès.
+	# Succès : la liste défile, pour que la page tienne entre les deux bandeaux.
 	var achievements_panel := UiTheme.panel()
 	achievements_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var achievements_scroll := ScrollContainer.new()
+	achievements_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	achievements_panel.add_child(achievements_scroll)
 	var achievements := VBoxContainer.new()
 	achievements.add_theme_constant_override("separation", 8)
-	achievements_panel.add_child(achievements)
+	achievements.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	achievements_scroll.add_child(achievements)
 	middle.add_child(achievements_panel)
 
 	var fill_profile := func() -> void:
