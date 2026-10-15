@@ -15,6 +15,8 @@ const KEY_ACTIONS := {
 	"ability":      [KEY_E],
 	"weapon_1":     [KEY_1],
 	"weapon_2":     [KEY_2],
+	"weapon_3":     [KEY_3],
+	"super":        [KEY_F],
 	"grenade":      [KEY_G],
 	"pause":        [KEY_ESCAPE],
 	"scoreboard":   [KEY_TAB],

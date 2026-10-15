@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_w"]
+
+[resource]
+script = ExtResource("1_w")
+id = "shockwave"
+display_name = "Onde de choc"
+model = 8
+slot = 2
+kind = 4
+damage = 0
+max_range = 8.0
+headshot_multiplier = 1.0
+fire_rate = 1.0
+mag_size = 1
+reload_time = 0.0
+splash_radius = 8.0
+splash_damage = 100
+splash_min_damage = 30
+self_damage_factor = 0.0
+knockback = 12.0
+tracer_color = Color(1, 0.55, 0.2, 1)

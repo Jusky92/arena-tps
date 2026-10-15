@@ -19,6 +19,7 @@ extends CharacterBody3D
 ##   ZQSD : se déplacer      Maj : courir            Espace : sauter
 ##   Ctrl ou C : s'accroupir R : recharger           E : capacité
 ##   1 / 2 ou molette : arme principale / secondaire G : grenade
+##   3 : arme spéciale (bonus)                       F : super-pouvoir (bonus)
 ##   F9 : s'infliger 25 dégâts (test, seulement depuis l'éditeur ou un export debug)
 
 signal health_changed(health: int, max_health: int)
@@ -32,6 +33,10 @@ signal weapon_switched(slot: int)
 signal grenades_changed(count: int)
 ## Touché par le lance-caca : tache cartoon à l'écran pendant `duration` secondes.
 signal splatted(duration: float)
+## Bonus de la map : ramassé (bannière, son), armure, super-pouvoir en réserve.
+signal bonus_picked(kind: int)
+signal armor_changed(armor: int)
+signal super_changed(kind: int)
 
 const BASE_FOV := 70.0
 const SPRINT_FOV := 78.0
@@ -64,6 +69,8 @@ const STRIDE_WALK := 1.9
 const STRIDE_SPRINT := 2.4
 const STEP_RANGE := 35.0
 const LAND_SPEED := 6.0               # vitesse de chute au-delà de laquelle on entend l'atterrissage
+
+const WeaponScript := preload("res://scripts/weapon.gd")
 
 ## Temps pour changer d'arme (on ne peut pas tirer pendant ce délai).
 const SWITCH_TIME := 0.4
@@ -101,6 +108,18 @@ var weapons: Array[Node3D] = []
 var weapon_slot := 0
 ## Grenades restantes pour cette vie.
 var grenades := WeaponCatalog.GRENADES_PER_LIFE
+## Bonus de la map (phase 4) :
+## armure : points qui absorbent les dégâts avant les PV ;
+var armor := 0
+## super-pouvoir en réserve (Pickups.Super), -1 = aucun (F pour le déclencher) ;
+var super_power := -1
+## arme spéciale ramassée (3e emplacement, touche 3), null = aucune ;
+var special: Node3D = null
+## effets en cours (secondes restantes).
+var overload_time := 0.0
+var invisible_time := 0.0
+var double_jump_time := 0.0
+var speed_time := 0.0
 
 ## Corps 3D animé : HumanRig (humain cyberpunk) ou CharacterRig (robot procédural).
 ## Les deux exposent les mêmes fonctions (set_state, kick, flash, play_death, reset).
@@ -159,6 +178,12 @@ var _burn_dps := 0.0
 var _burn_time := 0.0
 var _burn_pending := 0.0
 var _burn_source: Node = null
+var _speed_bonus := 0.0
+var _air_jump_used := false
+var _special_time := 0.0
+var _reveal_time := 0.0              # invisible mais dévoilé (vient de tirer)
+var _transparency := 0.0             # transparence actuelle du corps (invisibilité)
+var _aura: Node3D                    # halo de la Surcharge néon
 
 
 func _ready() -> void:
@@ -252,6 +277,8 @@ func _physics_process(delta: float) -> void:
 		use_ability()
 	if _cmd.grenade:
 		throw_grenade()
+	if _cmd.use_super:
+		use_super()
 
 	_update_crouch(delta)
 	_update_movement(delta)
@@ -281,10 +308,13 @@ func _read_local_commands() -> void:
 	_cmd.reload = Input.is_action_just_pressed("reload")
 	_cmd.ability = Input.is_action_just_pressed("ability")
 	_cmd.grenade = captured and Input.is_action_just_pressed("grenade")
+	_cmd.use_super = captured and Input.is_action_just_pressed("super")
 	if Input.is_action_just_pressed("weapon_1"):
 		_cmd.switch_to = 0
 	elif Input.is_action_just_pressed("weapon_2"):
 		_cmd.switch_to = 1
+	elif Input.is_action_just_pressed("weapon_3") and special:
+		_cmd.switch_to = 2
 	elif _wheel_switch >= 0:
 		_cmd.switch_to = _wheel_switch
 	_wheel_switch = -1
@@ -386,8 +416,15 @@ func _can_stand() -> bool:
 # ---------------------------------------------------------------- Déplacement
 
 func _update_movement(delta: float) -> void:
+	if is_on_floor():
+		_air_jump_used = false
 	if not is_on_floor():
 		velocity.y -= _gravity * delta
+		# Bonus double saut : un second saut en l'air.
+		if _cmd.jump and double_jump_time > 0.0 and not _air_jump_used:
+			_air_jump_used = true
+			velocity.y = class_data.jump_velocity * 0.95
+			_play_sound("ability_dash", -10.0, 1.4)
 	elif _cmd.jump:
 		# Sauter depuis la position accroupie relève le joueur (s'il y a la place).
 		if crouching and _can_stand():
@@ -410,6 +447,7 @@ func _update_movement(delta: float) -> void:
 	var speed := class_data.sprint_speed if sprinting else class_data.walk_speed
 	if _slow_time > 0.0:
 		speed *= 1.0 - _slow_factor
+	speed *= 1.0 + speed_bonus()
 	if _aiming:
 		speed *= AIM_SPEED_FACTOR
 	if crouching:
@@ -649,6 +687,12 @@ func take_damage(amount: int, from: Node, headshot := false) -> bool:
 		return false     # protection d'apparition : aucun dégât (le tir est dévié, voir weapon.gd)
 	if is_shielded():
 		amount = max(int(round(amount * class_data.ability_strength)), 1)
+	# Armure (bonus) : elle prend les coups en premier.
+	if armor > 0:
+		var absorbed := mini(armor, amount)
+		armor -= absorbed
+		amount -= absorbed
+		armor_changed.emit(armor)
 	health = max(health - amount, 0)
 	_shake = min(_shake + 0.5, 1.0)
 	rig.flash()
@@ -668,6 +712,7 @@ func _die(killer: Node) -> void:
 	deaths += 1
 	streak = 0
 	_end_ability()
+	_clear_bonuses()
 	end_spawn_protection()
 	velocity = Vector3.ZERO
 	if crouching:
@@ -685,6 +730,7 @@ func net_die() -> void:
 	alive = false
 	health = 0
 	_end_ability()
+	_clear_bonuses()
 	end_spawn_protection()
 	velocity = Vector3.ZERO
 	if crouching:
@@ -785,7 +831,7 @@ func throw_grenade() -> bool:
 	var aim := -camera.global_basis.z if camera else -global_basis.z
 	var direction := (aim + Vector3.UP * 0.35).normalized()
 	var origin := chest_position() + Vector3.UP * 0.3 + (-global_basis.z) * 0.4
-	Projectile.launch(self, data, self, 2, origin, direction * data.projectile_speed + velocity * 0.5)
+	Projectile.launch(self, data, self, Projectile.GRENADE_SLOT, origin, direction * data.projectile_speed + velocity * 0.5)
 	_play_sound("grenade_throw", -2.0)
 	return true
 
@@ -811,6 +857,20 @@ func apply_effect(kind: String, value: float, duration: float, direction := Vect
 			_burn_dps = value
 			_burn_time = duration
 			_burn_source = source
+		# Bonus de la map.
+		"armor":
+			armor = int(value)
+			armor_changed.emit(armor)
+		"double_jump":
+			double_jump_time = duration
+		"speed":
+			_speed_bonus = value
+			speed_time = duration
+		"super":
+			super_power = int(value)
+			super_changed.emit(super_power)
+		"picked":
+			bonus_picked.emit(int(value))
 
 
 ## true pendant un ralentissement (affiché par le HUD).
@@ -820,6 +880,7 @@ func is_slowed() -> bool:
 
 func _update_effects(delta: float) -> void:
 	_slow_time = maxf(_slow_time - delta, 0.0)
+	_update_bonuses(delta)
 	if _burn_time > 0.0 and alive:
 		_burn_time -= delta
 		_burn_pending += _burn_dps * delta
@@ -866,3 +927,143 @@ func _step_sound(sound: String, volume_db: float) -> void:
 		Sfx.play(sound, volume_db - 14.0)          # ses propres pas : discrets
 	else:
 		Sfx.play_at(sound, global_position, volume_db - 2.0, 1.0, STEP_RANGE)
+
+
+# ---------------------------------------------------------------- Bonus de la map
+
+## Vitesse en plus : bonus Vitesse ou Surcharge néon (le plus fort des deux).
+func speed_bonus() -> float:
+	var bonus := _speed_bonus if speed_time > 0.0 else 0.0
+	if overload_time > 0.0:
+		bonus = maxf(bonus, Pickups.OVERLOAD_SPEED)
+	return bonus
+
+
+## Dégâts infligés multipliés (Surcharge néon).
+func damage_multiplier() -> float:
+	return Pickups.OVERLOAD_DAMAGE if overload_time > 0.0 else 1.0
+
+
+## true si les autres ne voient (presque) pas ce personnage.
+func is_invisible() -> bool:
+	return invisible_time > 0.0 and _reveal_time <= 0.0
+
+
+## Arme spéciale ramassée : 3e emplacement, prise en main tout de suite. Elle
+## disparaît vide, à la fin de sa durée, ou à la mort.
+func give_special(data: WeaponData) -> void:
+	drop_special()
+	var node: Node3D = WeaponScript.new()
+	node.name = "Special"
+	var muzzle := Marker3D.new()
+	muzzle.name = "Muzzle"
+	node.add_child(muzzle)
+	add_child(node)
+	rig.add_weapon(data.model, node)
+	node.ammo_changed.connect(_on_weapon_ammo_changed.bind(node))
+	node.hit_confirmed.connect(func(k, h): hit_confirmed.emit(k, h))
+	node.fired.connect(_on_weapon_fired)
+	node.emptied.connect(drop_special, CONNECT_DEFERRED)
+	node.setup(data, self, camera)
+	weapons.append(node)
+	special = node
+	_special_time = data.special_duration
+	if weapon:
+		weapon.cancel_reload()
+	_select_weapon(weapons.size() - 1)
+
+
+func drop_special() -> void:
+	if special == null or not is_instance_valid(special):
+		special = null
+		return
+	var holding := weapon == special
+	weapons.erase(special)
+	rig.remove_weapon(special)
+	special.queue_free()
+	special = null
+	if holding and not weapons.is_empty():
+		_select_weapon(0)
+
+
+## Super-pouvoir en réserve : déclenché par la partie qui fait foi (le serveur en
+## ligne, la partie locale hors ligne), qui l'applique à tout le monde.
+func use_super() -> void:
+	if super_power < 0 or not alive:
+		return
+	if Net.online and peer_id != 0 and not Net.is_server():
+		Net.use_super()
+		return
+	var host := get_tree().get_first_node_in_group("projectile_host")
+	if host:
+		host.activate_super(self)
+
+
+func set_super(kind: int) -> void:
+	super_power = kind
+	super_changed.emit(kind)
+
+
+## Effet de super-pouvoir visible par tous (annoncé par la partie qui fait foi).
+func apply_aura(kind: int, duration: float) -> void:
+	match kind:
+		Pickups.Super.OVERLOAD:
+			overload_time = duration
+		Pickups.Super.INVISIBILITY:
+			invisible_time = duration
+			_reveal_time = 0.0
+
+
+func _update_bonuses(delta: float) -> void:
+	double_jump_time = maxf(double_jump_time - delta, 0.0)
+	speed_time = maxf(speed_time - delta, 0.0)
+	overload_time = maxf(overload_time - delta, 0.0)
+	invisible_time = maxf(invisible_time - delta, 0.0)
+	_reveal_time = maxf(_reveal_time - delta, 0.0)
+	if special and _special_time > 0.0:
+		_special_time -= delta
+		if _special_time <= 0.0:
+			drop_special()
+	# Tirer en étant invisible dévoile un instant (les autres voient le tir).
+	var firing: bool = _net_trigger if is_remote else (weapon != null and weapon.firing_time > 0.0)
+	if invisible_time > 0.0 and firing:
+		_reveal_time = Pickups.INVISIBILITY_REVEAL
+	_update_aura_visuals()
+
+
+## Temps restant de l'arme spéciale (0 = sans limite de temps).
+func special_time_left() -> float:
+	return _special_time if special else 0.0
+
+
+func _clear_bonuses() -> void:
+	armor = 0
+	armor_changed.emit(0)
+	double_jump_time = 0.0
+	speed_time = 0.0
+	overload_time = 0.0
+	invisible_time = 0.0
+	drop_special()
+
+
+## Invisibilité : corps presque transparent (un peu plus visible pour soi-même) ;
+## Surcharge néon : halo lumineux autour du personnage.
+func _update_aura_visuals() -> void:
+	if Effects.headless() or rig == null:
+		return
+	var target := 0.0
+	if invisible_time > 0.0:
+		var mine := is_local and not is_remote
+		target = 0.55 if mine else (0.35 if _reveal_time > 0.0 else 0.94)
+	if not is_equal_approx(target, _transparency):
+		_transparency = target
+		for g in rig.find_children("*", "GeometryInstance3D", true, false):
+			(g as GeometryInstance3D).transparency = target
+		if has_node("NameTag"):
+			get_node("NameTag").visible = target < 0.5 and alive
+	if overload_time > 0.0 and _aura == null:
+		_aura = Effects.overload_aura()
+		add_child(_aura)
+	elif overload_time <= 0.0 and _aura:
+		_aura.queue_free()
+		_aura = null

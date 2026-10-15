@@ -18,6 +18,7 @@ var reload := false             ## appui
 var ability := false            ## appui
 var switch_to := -1             ## arme demandée (0 = principale, 1 = secondaire, -1 = aucune)
 var grenade := false            ## appui : lancer une grenade
+var use_super := false          ## appui : déclencher le super-pouvoir en réserve
 
 
 func clear() -> void:
@@ -33,3 +34,4 @@ func clear() -> void:
 	ability = false
 	switch_to = -1
 	grenade = false
+	use_super = false

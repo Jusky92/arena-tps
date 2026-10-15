@@ -37,6 +37,10 @@ const HEARTBEAT_INTERVAL := 0.9    # battement de cœur quand la vie est basse
 @onready var _other_key: Label = %OtherKey
 @onready var _grenade_icons: Array[TextureRect] = [%Grenade1, %Grenade2]
 @onready var _splat: ColorRect = %Splat
+@onready var _buffs: Label = %Buffs
+@onready var _armor_bar: ProgressBar = %ArmorBar
+@onready var _super_chip: Control = %SuperChip
+@onready var _super_label: Label = %SuperLabel
 @onready var _status: Label = %Status
 @onready var _ammo_max: Label = %AmmoMax
 @onready var _reload_bar: ProgressBar = %ReloadBar
@@ -139,6 +143,7 @@ func _process(delta: float) -> void:
 		_crosshair.set_spread(_spread_pixels(data))
 
 	_status.visible = _player.alive and _player.is_slowed()
+	_update_bonuses()
 
 	# Vie basse : battement de cœur.
 	if _player.alive and float(_player.health) / data.max_health <= LOW_HEALTH_RATIO:
@@ -216,15 +221,44 @@ func _on_damaged(_amount: int, source: Vector3) -> void:
 	_vignette_tween.tween_method(func(v: float) -> void: mat.set_shader_parameter("intensity", v), 0.7, 0.0, 0.45)
 
 
-## Arme en main : grande icône et munitions ; l'autre arme en petit, avec sa touche.
+## Arme en main : grande icône et munitions ; une autre arme en petit, avec sa touche
+## (avec une arme spéciale en main : la principale).
 func _on_weapon_switched(slot: int) -> void:
 	var current: WeaponData = _player.weapon.data
 	_weapon_icon.texture = UiIcons.weapon(current)
 	_weapon_label.text = current.display_name
-	var other: WeaponData = _player.weapons[1 - slot].data if _player.weapons.size() > 1 else null
+	var other_slot := 1 if slot == 0 else 0
+	var other: WeaponData = _player.weapons[other_slot].data if _player.weapons.size() > other_slot else null
 	_other_icon.texture = UiIcons.weapon(other)
-	_other_key.text = "[%d]" % (2 - slot)
+	_other_key.text = "[%d]" % (other_slot + 1)
 	_on_ammo_changed(_player.weapon.ammo, current.mag_size, _player.weapon.is_reloading())
+
+
+## Bonus en cours : armure, effets avec leur temps restant, super-pouvoir en réserve.
+func _update_bonuses() -> void:
+	var p := _player
+	_armor_bar.visible = p.armor > 0
+	_armor_bar.value = p.armor
+	var parts := []
+	if p.double_jump_time > 0.0:
+		parts.append("DOUBLE SAUT %d s" % ceili(p.double_jump_time))
+	if p.speed_time > 0.0:
+		parts.append("VITESSE %d s" % ceili(p.speed_time))
+	if p.overload_time > 0.0:
+		parts.append("SURCHARGE %d s" % ceili(p.overload_time))
+	if p.invisible_time > 0.0:
+		parts.append("INVISIBLE %d s" % ceili(p.invisible_time))
+	if p.special and p.special_time_left() > 0.0:
+		parts.append("%s %d s" % [p.special.data.display_name.to_upper(), ceili(p.special_time_left())])
+	if p.armor > 0:
+		parts.append("ARMURE %d" % p.armor)
+	_buffs.visible = p.alive and not parts.is_empty()
+	_buffs.text = "  ·  ".join(parts)
+	_super_chip.visible = p.alive and p.super_power >= 0
+	if _super_chip.visible:
+		var info: Dictionary = Pickups.SUPER_INFO[p.super_power]
+		_super_label.text = "[F] %s" % info.name.to_upper()
+		_super_label.add_theme_color_override("font_color", info.color)
 
 
 func _on_grenades_changed(count: int) -> void:

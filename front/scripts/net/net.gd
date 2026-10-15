@@ -31,8 +31,9 @@ extends Node
 ##
 ## Protocole (toutes les fonctions marquées @rpc) :
 ##   client -> serveur  hello, set_loadout, request_settings, request_start, state,
-##                      fire, reload, hit, fire_projectile
-##   (serveur -> clients aussi : projectile, explosion, effect)
+##                      fire, reload, hit, fire_projectile, use_super
+##   (serveur -> clients aussi : projectile, explosion, effect, pickup, pickups,
+##    special, aura)
 ##   serveur -> clients refuse, lobby, start_match, player_joined, player_left,
 ##                      states, health, hit, death, respawn, match_over
 ##
@@ -60,8 +61,16 @@ signal hit_landed(target_id: int, shooter_id: int, damage: int, headshot: bool)
 signal projectile_spawned(projectile_id: int, weapon_id: String, origin: Vector3, velocity: Vector3, shooter_id: int)
 ## Fin d'un projectile : explosion à `position` (fait foi).
 signal projectile_exploded(projectile_id: int, position: Vector3, weapon_id: String)
-## Effet reçu par MON joueur : "slow", "splat", "knockback".
+## Effet reçu par MON joueur : "slow", "splat", "knockback", et ceux des bonus
+## ("armor", "double_jump", "speed", "super", "picked").
 signal effect_received(kind: String, value: float, duration: float, direction: Vector3)
+## Bonus de la map : un socle change d'état / état de tous les socles (arrivée en cours).
+signal pickup_changed(pad_id: int, available: bool)
+signal pickups_snapshot(states: Dictionary)
+## Un joueur reçoit une arme spéciale (tout le monde l'affiche).
+signal special_given(peer_id: int, weapon_id: String)
+## Effet de super-pouvoir visible de tous (Surcharge néon, invisibilité).
+signal aura_started(peer_id: int, kind: int, duration: float)
 signal player_respawned(peer_id: int, position: Vector3, yaw: float, class_id: String, loadout: Dictionary)
 signal match_over(rows: Array)
 ## Serveur : un joueur a passé la vérification d'accès / est parti.
@@ -103,6 +112,9 @@ var in_match := false
 ## Temps restant de la partie en cours. Tenu par le serveur ; un client qui
 ## rejoint en cours de partie le reçoit avec `start_match`.
 var match_time_left := 0.0
+## Client : dernier état connu des socles de bonus (id -> disponible). Gardé ici car
+## il peut arriver avant que la scène de jeu soit prête.
+var pickup_states := {}
 ## Serveur : vérifie le ticket d'un joueur. Reçoit (ticket, user_id annoncé) et
 ## renvoie le user_id vérifié, ou "" si l'accès est refusé. Peut être une coroutine.
 var ticket_verifier: Callable = Callable()
@@ -563,6 +575,7 @@ func start_match() -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func _start_match(list: Dictionary, info: Dictionary, time_left: float) -> void:
+	pickup_states = {}
 	players = list
 	_apply_lobby_info(info)
 	match_time_left = time_left
@@ -804,6 +817,41 @@ func push_projectile(projectile_id: int, weapon_id: String, origin: Vector3, vel
 @rpc("authority", "call_remote", "reliable")
 func push_explosion(projectile_id: int, position: Vector3, weapon_id: String) -> void:
 	projectile_exploded.emit(projectile_id, position, weapon_id)
+
+
+## Client -> serveur : déclencher le super-pouvoir en réserve.
+func use_super() -> void:
+	if online and not _serving:
+		_use_super.rpc_id(1)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _use_super() -> void:
+	var id := multiplayer.get_remote_sender_id()
+	if _serving and in_match and arbiter and players.has(id):
+		arbiter.activate_super_of(id)
+
+
+@rpc("authority", "call_remote", "reliable")
+func push_pickup(pad_id: int, available: bool) -> void:
+	pickup_states[pad_id] = available
+	pickup_changed.emit(pad_id, available)
+
+
+@rpc("authority", "call_remote", "reliable")
+func push_pickups(states: Dictionary) -> void:
+	pickup_states = states.duplicate()
+	pickups_snapshot.emit(states)
+
+
+@rpc("authority", "call_local", "reliable")
+func push_special(peer_id: int, weapon_id: String) -> void:
+	special_given.emit(peer_id, weapon_id)
+
+
+@rpc("authority", "call_local", "reliable")
+func push_aura(peer_id: int, kind: int, duration: float) -> void:
+	aura_started.emit(peer_id, kind, duration)
 
 
 ## Serveur -> un joueur : effet subi (ralentissement, tache à l'écran, recul).

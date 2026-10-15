@@ -359,3 +359,8 @@ func _process(delta: float) -> void:
 	_ik.aim_pitch = aim_pitch
 	_ik.lower_body_yaw = _yaw
 	_ik.gun_extra = Transform3D(Basis(Vector3.RIGHT, _kick * 2.2) * lowered, Vector3(0, bob - 0.05 * _air, _kick))
+
+
+## Retire une arme ajoutée par add_weapon (arme spéciale perdue).
+func remove_weapon(weapon_node: Node3D) -> void:
+	_weapon_grips.erase(weapon_node)

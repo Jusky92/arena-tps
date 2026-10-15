@@ -36,9 +36,10 @@ var _result_keys := {}                  # identifiant réseau -> clé dans _resu
 var _match_id := ""
 var _started_at := ""
 var _running := false
-## Armes de chaque personnage, tenues par le serveur : identifiant -> [principale,
-## secondaire], chacune {data, ammo, reload_end, next_shot, tokens}. `tokens` = fins de
-## validité (s) des impacts autorisés par les derniers tirs annoncés.
+## Armes de chaque personnage, tenues par le serveur : identifiant -> {emplacement:
+## {data, ammo, reload_end, next_shot, tokens, expires}}. Emplacements : 0 principale,
+## 1 secondaire, 2 arme spéciale (bonus), Projectile.GRENADE_SLOT grenades. `tokens` =
+## fins de validité (s) des impacts autorisés par les derniers tirs annoncés.
 var _arsenal := {}
 
 ## Tolérances de l'arbitrage des tirs (les positions vues par le tireur ont un peu
@@ -55,7 +56,7 @@ const CLOSE_RANGE_MARGIN := 1.0         # marge de portée du katana et des flam
 const CLOSE_ARC_MARGIN := 25.0          # marge d'angle du katana et des flammes (degrés)
 const MUZZLE_MARGIN := 3.0              # distance max entre le tireur et le départ d'un projectile
 const BURN_TICK := 0.5                  # secondes entre deux dégâts de brûlure
-const GRENADE_SLOT := 2                 # emplacement de la grenade dans l'arsenal
+const SPECIAL_SLOT := 2                 # arme spéciale ramassée (bonus)
 const CHARGE_WINDOW := 0.8              # une charge de l'Oni touche pendant au plus ça (s)
 const CHARGE_REACH := 3.5               # distance max d'un ennemi percuté (m)
 
@@ -63,6 +64,8 @@ const CHARGE_REACH := 3.5               # distance max d'un ennemi percuté (m)
 var _burns := {}
 var _burn_timer := 0.0
 var _projectiles := {}                  # identifiant -> Projectile (qui fait foi)
+## Bonus de la map (socles, ramassages, réapparitions) : version qui fait foi.
+var pickups: PickupDirector
 var _charges := {}                      # tireur -> {start: début de sa dernière charge (s), hits: cibles touchées}
 var _next_projectile_id := 1
 
@@ -80,6 +83,18 @@ func _ready() -> void:
 
 	Net.arbiter = self
 	add_to_group("projectile_host")
+	pickups = PickupDirector.new()
+	pickups.name = "Pickups"
+	add_child(pickups)
+	pickups.setup(ArenaMap.PICKUP_POINTS, true)
+	pickups.players_provider = func() -> Array: return players
+	pickups.picked.connect(_on_pickup)
+	pickups.state_changed.connect(func(pad_id: int, available: bool) -> void: Net.push_pickup.rpc(pad_id, available))
+	for point in ArenaMap.PICKUP_POINTS:
+		var p: Vector3 = point[1]
+		roam_points.append(Vector3(p.x, 0, p.z))      # les bots passent par les bonus
+	Net.special_given.connect(_on_special_given)
+	Net.aura_started.connect(_on_aura_started)
 	Net.remote_states.connect(_on_remote_states)
 	Net.player_died.connect(_on_death)
 	Net.player_respawned.connect(_on_respawn)
@@ -159,6 +174,8 @@ func _on_joined(id: int, _info: Dictionary) -> void:
 	if _nodes.has(id) or not Net.players.has(id):
 		return
 	_spawn(id)
+	if not Net.is_bot(id):
+		Net.push_pickups.rpc_id(id, pickups.snapshot())     # état des bonus pour le nouveau
 	if _nodes.size() > Net.max_players:
 		var bots := _nodes.keys().filter(func(i): return Net.is_bot(i))
 		if not bots.is_empty():
@@ -265,7 +282,8 @@ func resolve_hit(target_id: int, shooter_id: int, hit_offset: Vector3, weapon: S
 		return   # aucun tir annoncé pour cet impact : ignoré sans bruit
 
 	var headshot := weapon_data.is_hitscan() and MatchRules.is_headshot(node, hit_offset)
-	_damage(target_id, shooter_id, MatchRules.hit_damage(weapon_data, headshot), weapon, headshot)
+	var amount := int(round(MatchRules.hit_damage(weapon_data, headshot) * shooter.damage_multiplier()))
+	_damage(target_id, shooter_id, amount, weapon, headshot)
 	if weapon_data.kind == WeaponData.Kind.MELEE and weapon_data.knockback > 0.0:
 		var away: Vector3 = (node.global_position - shooter.global_position).normalized()
 		_effect(target_id, "knockback", weapon_data.knockback, 0.0, away)
@@ -280,6 +298,12 @@ func _damage(target_id: int, shooter_id: int, amount: int, weapon: String, heads
 	if not is_instance_valid(node) or not node.alive or node.is_protected():
 		return
 	var damage := MatchRules.damage_taken(node, amount)
+	# Armure (bonus) : elle prend les coups en premier.
+	if node.armor > 0:
+		var absorbed := mini(node.armor, damage)
+		node.armor -= absorbed
+		damage -= absorbed
+		_effect(target_id, "armor", node.armor, 0.0)
 	node.health = maxi(node.health - damage, 0)
 	var shooter = _nodes.get(shooter_id)
 	if node.brain and is_instance_valid(shooter) and shooter != node:
@@ -357,22 +381,26 @@ func launch_projectile(data: WeaponData, shooter: Node, origin: Vector3, velocit
 
 func _on_projectile_exploded(projectile: Projectile, position: Vector3, direct_target: Node) -> void:
 	_projectiles.erase(projectile.id)
-	var data := projectile.data
-	var shooter_id := projectile.shooter_id
 	var shooter: Node = projectile.shooter if is_instance_valid(projectile.shooter) else null
+	_explode(position, projectile.data, shooter, projectile.shooter_id, direct_target)
+	Net.push_explosion.rpc(projectile.id, position, projectile.data.id)
+
+
+## Explosion qui fait foi : dégâts de zone (Surcharge comprise), recul et effets.
+func _explode(position: Vector3, data: WeaponData, shooter: Node, shooter_id: int, direct_target: Node) -> void:
+	var multiplier: float = shooter.damage_multiplier() if shooter and shooter.has_method("damage_multiplier") else 1.0
 	for victim in MatchRules.explosion_victims(get_world_3d(), position, data, shooter, direct_target):
 		var node: Node = victim.node
 		var target_id: int = node.peer_id if "peer_id" in node else 0
 		if target_id == 0 or not _nodes.has(target_id):
 			continue
-		_damage(target_id, shooter_id, victim.damage, data.display_name)
+		_damage(target_id, shooter_id, int(round(victim.damage * multiplier)), data.display_name)
 		if data.knockback > 0.0:
 			_effect(target_id, "knockback", data.knockback, 0.0, victim.direction)
 		if data.slow_time > 0.0:
 			_effect(target_id, "slow", data.slow_factor, data.slow_time)
 		if data.splat_time > 0.0:
 			_effect(target_id, "splat", 1.0, data.splat_time)
-	Net.push_explosion.rpc(projectile.id, position, data.id)
 
 
 
@@ -394,7 +422,7 @@ func _resolve_charge(node: Node3D, shooter: Node3D, target_id: int, shooter_id: 
 	if target_id in charge.hits:
 		return      # une seule fois par cible et par charge
 	charge.hits.append(target_id)
-	_damage(target_id, shooter_id, shooter.CHARGE_DAMAGE, shooter.CHARGE_NAME)
+	_damage(target_id, shooter_id, int(round(shooter.CHARGE_DAMAGE * shooter.damage_multiplier())), shooter.CHARGE_NAME)
 	var push: Vector3 = (node.global_position - shooter.global_position)
 	push.y = 0.0
 	_effect(target_id, "knockback", shooter.CHARGE_KNOCKBACK, 0.0, (push.normalized() + Vector3.UP * 0.4).normalized())
@@ -441,23 +469,29 @@ func _reset_arsenal(id: int) -> void:
 	var node = _nodes.get(id)
 	if not is_instance_valid(node):
 		return
-	var list := []
-	for w in node.weapons:
-		var data: WeaponData = w.data
-		list.append({"data": data, "ammo": data.mag_size, "reload_end": 0.0, "next_shot": 0.0, "tokens": []})
-	# Emplacement 2 : les grenades de la vie en cours.
-	list.append({"data": WeaponCatalog.GRENADE, "ammo": WeaponCatalog.GRENADES_PER_LIFE,
-		"reload_end": 0.0, "next_shot": 0.0, "tokens": []})
-	_arsenal[id] = list
+	var slots := {}
+	for i in mini(node.weapons.size(), 2):
+		slots[i] = _weapon_entry(node.weapons[i].data)
+	slots[Projectile.GRENADE_SLOT] = _weapon_entry(WeaponCatalog.GRENADE, WeaponCatalog.GRENADES_PER_LIFE)
+	_arsenal[id] = slots
+
+
+static func _weapon_entry(data: WeaponData, ammo := -1) -> Dictionary:
+	var expires := INF if data.special_duration <= 0.0 else _now() + data.special_duration + 1.0
+	return {"data": data, "ammo": data.mag_size if ammo < 0 else ammo, "reload_end": 0.0, "next_shot": 0.0,
+		"tokens": [], "expires": expires}
 
 
 ## État serveur de l'arme `slot` d'un personnage ({} si inconnue). Termine au passage
 ## un rechargement arrivé à son terme.
 func _weapon_state(id: int, slot: int) -> Dictionary:
-	var list: Array = _arsenal.get(id, [])
-	if slot < 0 or slot >= list.size():
+	var slots: Dictionary = _arsenal.get(id, {})
+	if not slots.has(slot):
 		return {}
-	var w: Dictionary = list[slot]
+	var w: Dictionary = slots[slot]
+	if _now() > w.expires:
+		slots.erase(slot)       # arme spéciale arrivée au bout de sa durée
+		return {}
 	if w.reload_end > 0.0 and _now() >= w.reload_end:
 		w.ammo = w.data.mag_size
 		w.reload_end = 0.0
@@ -466,10 +500,10 @@ func _weapon_state(id: int, slot: int) -> Dictionary:
 
 ## Emplacement de l'arme `weapon` (nom affiché) dans la classe du tireur, -1 si absente.
 func _slot_named(id: int, weapon: String) -> int:
-	var list: Array = _arsenal.get(id, [])
-	for i in list.size():
-		if list[i].data.display_name == weapon:
-			return i
+	var slots: Dictionary = _arsenal.get(id, {})
+	for slot in slots:
+		if slots[slot].data.display_name == weapon:
+			return slot
 	return -1
 
 
@@ -566,3 +600,75 @@ func _match_result() -> Dictionary:
 
 static func _now_iso() -> String:
 	return Time.get_datetime_string_from_system(true) + "Z"
+
+
+# ---------------------------------------------------------------- Bonus de la map
+
+## Un personnage a ramassé un bonus : le serveur applique l'effet et prévient le joueur.
+func _on_pickup(_pad_id: int, kind: int, node: Node) -> void:
+	var id: int = node.peer_id
+	if not _nodes.has(id):
+		return
+	match kind:
+		Pickups.Kind.HEAL:
+			node.health = mini(node.health + Pickups.HEAL_AMOUNT, node.class_data.max_health)
+			Net.push_health.rpc(id, node.health, node.class_data.max_health)
+		Pickups.Kind.ARMOR:
+			node.armor = mini(node.armor + Pickups.ARMOR_AMOUNT, Pickups.ARMOR_MAX)
+			_effect(id, "armor", node.armor, 0.0)
+		Pickups.Kind.DOUBLE_JUMP:
+			_effect(id, "double_jump", 0.0, Pickups.DOUBLE_JUMP_TIME)
+		Pickups.Kind.SPEED:
+			_effect(id, "speed", Pickups.SPEED_BONUS, Pickups.SPEED_TIME)
+		Pickups.Kind.SUPER:
+			var power := Pickups.random_super()
+			node.super_power = power
+			_effect(id, "super", power, 0.0)
+		_:
+			var data := WeaponCatalog.find(Pickups.weapon_of(kind))
+			if data:
+				_arsenal[id][SPECIAL_SLOT] = _weapon_entry(data)
+				Net.push_special.rpc(id, data.id)      # tout le monde affiche l'arme
+	_effect(id, "picked", kind, 0.0)
+
+
+## Arme spéciale annoncée (push_special s'exécute aussi ici) : le personnage du
+## serveur la reçoit aussi (bots : ils tirent avec ; humains : arsenal cohérent).
+func _on_special_given(id: int, weapon_id: String) -> void:
+	var node = _nodes.get(id)
+	var data := WeaponCatalog.find(weapon_id)
+	if is_instance_valid(node) and data:
+		node.give_special(data)
+
+
+## Effet de super-pouvoir visible (push_aura s'exécute aussi ici).
+func _on_aura_started(id: int, kind: int, duration: float) -> void:
+	var node = _nodes.get(id)
+	if is_instance_valid(node):
+		node.apply_aura(kind, duration)
+
+
+## Client : « je déclenche mon super-pouvoir » (Net.use_super).
+func activate_super_of(id: int) -> void:
+	var node = _nodes.get(id)
+	if is_instance_valid(node):
+		activate_super(node)
+
+
+## Déclenche le super-pouvoir en réserve d'un personnage (humain ou bot).
+func activate_super(node: Node) -> void:
+	var id: int = node.peer_id
+	var power: int = node.super_power
+	if power < 0 or not node.alive or not _nodes.has(id):
+		return
+	node.super_power = -1
+	_effect(id, "super", -1, 0.0)
+	match power:
+		Pickups.Super.OVERLOAD:
+			Net.push_aura.rpc(id, power, Pickups.OVERLOAD_TIME)
+		Pickups.Super.INVISIBILITY:
+			Net.push_aura.rpc(id, power, Pickups.INVISIBILITY_TIME)
+		Pickups.Super.SHOCKWAVE:
+			var center: Vector3 = node.chest_position()
+			_explode(center, Pickups.SHOCKWAVE, node, id, null)
+			Net.push_explosion.rpc(0, center, Pickups.SHOCKWAVE.id)

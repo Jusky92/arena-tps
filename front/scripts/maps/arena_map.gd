@@ -25,7 +25,7 @@ extends Node3D
 ##   Croix         deux ruelles commerçantes qui traversent la map
 ##
 ## Décor « CFA INSTA » et IoT : enseignes néon en kanji, bannières, caméras de
-## surveillance, capteurs connectés et drones de patrouille.
+## surveillance fixées sur les lampadaires.
 
 const HALF := 60.0                 # demi-côté de l'arène (120 m de côté)
 const WALL_HEIGHT := 8.0
@@ -38,6 +38,26 @@ const SPAWN_POINTS: Array[Vector3] = [
 	Vector3(34, 0, -30), Vector3(55, 0, -30), Vector3(30, 0, -55),
 	Vector3(-46, 0, 26), Vector3(-26, 0, 40), Vector3(-52, 0, 52),
 	Vector3(18, 0, 48), Vector3(55, 0, 26), Vector3(38, 0, 16),
+]
+
+## Bonus (phase 4) : [Pickups.Kind, Vector3(x, hauteur de départ du rayon, z)].
+## Le socle se pose sur la première surface sous ce point (voir PickupDirector).
+const PICKUP_POINTS := [
+	# Soins.
+	[Pickups.Kind.HEAL, Vector3(-38, 2, -14)], [Pickups.Kind.HEAL, Vector3(32, 2, -13)],
+	[Pickups.Kind.HEAL, Vector3(-36, 2, 16)], [Pickups.Kind.HEAL, Vector3(28, 2, 25)],
+	[Pickups.Kind.HEAL, Vector3(0, 2, -30)], [Pickups.Kind.HEAL, Vector3(0, 2, 36)],
+	# Armures.
+	[Pickups.Kind.ARMOR, Vector3(-26, 2, -43)], [Pickups.Kind.ARMOR, Vector3(52, 2, -6)],
+	[Pickups.Kind.ARMOR, Vector3(-52, 2, 34)],
+	# Double saut et vitesse.
+	[Pickups.Kind.DOUBLE_JUMP, Vector3(-14, 2, 22)], [Pickups.Kind.DOUBLE_JUMP, Vector3(16, 2, -44)],
+	[Pickups.Kind.SPEED, Vector3(-20, 2, -4)], [Pickups.Kind.SPEED, Vector3(18, 2, -4)],
+	# Armes spéciales.
+	[Pickups.Kind.MINIGUN, Vector3(-40, 2, 50)], [Pickups.Kind.LASER_RIFLE, Vector3(40, 2, -50)],
+	[Pickups.Kind.POWER_FIST, Vector3(-24, 2, -19)],
+	# Super-pouvoirs : sur l'estrade du sanctuaire et la mezzanine du laboratoire.
+	[Pickups.Kind.SUPER, Vector3(0, 4.5, -6)], [Pickups.Kind.SUPER, Vector3(49, 5.0, -39)],
 ]
 
 ## Emplacements des cibles d'entraînement (y = hauteur de la surface).
@@ -121,6 +141,8 @@ func build() -> void:
 	_build_streets()
 	_build_cfa_insta()
 	_build_connected_decor()
+	ArenaDressing.build_greenery(self, _root)
+	ArenaDressing.build_cover(self, _root)
 
 
 # =========================================================================== ambiance
@@ -291,7 +313,7 @@ func _build_skyline() -> void:
 			if i % 3 == 0:
 				var roof := pos + Vector3(0, height / 2 + 0.15, 0)
 				var neon_name := "neon_pink" if i % 2 == 0 else "neon_cyan"
-				_neon_ring(roof, width, depth, neon_name)
+				_neon_ring(roof, width, depth, neon_name, -angle)
 			# Enseigne verticale géante sur certaines tours.
 			if i % 4 == 1:
 				var sign_text: String = ["電気", "未来", "夜", "東京"][i % 4]
@@ -859,7 +881,7 @@ func _build_cfa_insta() -> void:
 	# Grande enseigne néon au-dessus du laboratoire (visible de toute la map).
 	var panel := Vector3(37, 10.5, -21.0)
 	_mesh_box(panel, Vector3(22, 4.2, 0.5), _mat("lacquer_black"))
-	_neon_ring(panel + Vector3(0, 0, -0.3), 22.0, 4.2, "neon_pink")
+	_neon_frame(panel + Vector3(0, 0, 0.3), 22.0, 4.2, "neon_pink")
 	_sign("CFA INSTA", panel + Vector3(0, 0.7, 0.4), PI, 150, 0.021, Color(2.4, 1.0, 2.2))
 	_jp_sign("シーエフエー インスタ", panel + Vector3(0, -0.9, 0.4), PI, 70, 0.012, Color(0.5, 2.0, 2.2))
 
@@ -881,59 +903,27 @@ func _build_cfa_insta() -> void:
 
 # =========================================================================== décor connecté (IoT)
 
-## Caméras, capteurs, drones : le fil IoT du projet, intégré au décor japonais.
+## Caméras de surveillance, fixées sur les lampadaires des ruelles par un petit bras
+## (plus rien ne flotte : les anciens capteurs et drones ont été retirés).
+## [position du pied du lampadaire, direction vers laquelle regarde la caméra]
+const CAMERA_POLES := [
+	[Vector3(-32, 0, -9), Vector3(0, 0, 1)], [Vector3(32, 0, 9), Vector3(0, 0, -1)],
+	[Vector3(-9, 0, 32), Vector3(1, 0, 0)], [Vector3(9, 0, -32), Vector3(-1, 0, 0)],
+	[Vector3(48, 0, -9), Vector3(0, 0, 1)], [Vector3(-48, 0, 9), Vector3(0, 0, -1)],
+]
+
+
 func _build_connected_decor() -> void:
-	# Caméras de surveillance sur les poteaux et les toits.
-	var cameras := [
-		[Vector3(-18, 6.4, -18), 0.6], [Vector3(18, 6.4, -18), -0.6],
-		[Vector3(18, 6.4, 18), -2.4], [Vector3(-18, 6.4, 18), 2.4],
-		[Vector3(-37, 6.6, -30), 0.4], [Vector3(22, 7.2, -24), 1.2],
-		[Vector3(52, 7.2, -24), 2.0], [Vector3(-46, 9.0, 21), -1.0],
-		[Vector3(-26, 8.2, 21), -1.6], [Vector3(34, 5.4, 30), 3.0],
-		[Vector3(0, 11.2, 8), PI],
-	]
-	for c in cameras:
+	for c in CAMERA_POLES:
+		var base: Vector3 = c[0]
+		var facing: Vector3 = c[1]
+		# Bras de fixation contre le poteau, côté opposé à la lanterne.
+		var arm_end := base + Vector3(0, 4.0, 0) + facing * 0.45
+		_mesh_box(base + Vector3(0, 4.0, 0) + facing * 0.22, Vector3(0.1, 0.1, 0.45) if absf(facing.z) > 0.5 else Vector3(0.45, 0.1, 0.1), _mat("stone_grey"))
 		var cam := SecurityCamera.new()
 		_root.add_child(cam)
-		cam.position = c[0]
-		cam.rotation.y = c[1]
-
-	# Capteurs connectés : au marché, au labo, au jardin, au sanctuaire.
-	var sensors := [
-		[Vector3(-22.4, 1.6, -34), IotSensor.Kind.TEMPERATURE, 0.0],
-		[Vector3(-37, 1.6, -57.4), IotSensor.Kind.HUMIDITY, 0.0],
-		[Vector3(24, 1.6, -22.4), IotSensor.Kind.CO2, 0.0],
-		[Vector3(44, 1.6, -22.4), IotSensor.Kind.NOISE, 0.0],
-		[Vector3(-45.4, 1.6, 25), IotSensor.Kind.LIGHT, -PI / 2],
-		[Vector3(8.4, 1.6, 0), IotSensor.Kind.PRESENCE, PI / 2],
-		[Vector3(-8.4, 1.6, 0), IotSensor.Kind.PRESENCE, -PI / 2],
-		[Vector3(34, 1.6, 31.4), IotSensor.Kind.WIND, PI],
-		[Vector3(50, 1.6, 48.4), IotSensor.Kind.TEMPERATURE, PI],
-		[Vector3(-30, 1.6, 17.4), IotSensor.Kind.HUMIDITY, PI],
-	]
-	for s in sensors:
-		var sensor := IotSensor.new()
-		sensor.kind = s[1]
-		_root.add_child(sensor)
-		sensor.position = s[0]
-		sensor.rotation.y = s[2]
-
-	# Drones de patrouille au-dessus des quartiers.
-	var drones := [
-		[Vector3(-36, 0, -44), Vector2(13, 10), 11.0, 0.22, false, 0.0],
-		[Vector3(37, 0, -39), Vector2(15, 12), 12.5, -0.18, true, 1.4],
-		[Vector3(-36, 0, 25), Vector2(12, 9), 13.0, 0.25, false, 3.0],
-		[Vector3(34, 0, 38), Vector2(14, 11), 10.5, -0.2, true, 4.6],
-	]
-	for d in drones:
-		var drone := PatrolDrone.new()
-		drone.center = d[0]
-		drone.radius = d[1]
-		drone.altitude = d[2]
-		drone.speed = d[3]
-		drone.figure_eight = d[4]
-		drone.phase = d[5]
-		_root.add_child(drone)
+		cam.position = arm_end + Vector3(0, 0.05, 0)
+		cam.rotation.y = atan2(-facing.x, -facing.z) + PI
 
 
 # =========================================================================== éléments japonais réutilisables
@@ -1158,12 +1148,28 @@ func _neon(center: Vector3, size: Vector3, material_name: String) -> MeshInstanc
 
 
 ## Liseré néon autour d'un rectangle horizontal (4 bandes fines sur les bords).
-func _neon_ring(center: Vector3, size_x: float, size_z: float, material_name: String) -> void:
+## Cadre néon rectangulaire (bord d'un toit, d'un panneau). `yaw` : rotation du
+## support, pour que le cadre reste collé à ses bords.
+func _neon_ring(center: Vector3, size_x: float, size_z: float, material_name: String, yaw := 0.0) -> void:
 	var t := 0.08
-	_neon(center + Vector3(0, 0, size_z / 2), Vector3(size_x + t, t, t), material_name)
-	_neon(center + Vector3(0, 0, -size_z / 2), Vector3(size_x + t, t, t), material_name)
-	_neon(center + Vector3(size_x / 2, 0, 0), Vector3(t, t, size_z), material_name)
-	_neon(center + Vector3(-size_x / 2, 0, 0), Vector3(t, t, size_z), material_name)
+	var basis := Basis(Vector3.UP, yaw)
+	var edges := [
+		[Vector3(0, 0, size_z / 2), Vector3(size_x + t, t, t)], [Vector3(0, 0, -size_z / 2), Vector3(size_x + t, t, t)],
+		[Vector3(size_x / 2, 0, 0), Vector3(t, t, size_z)], [Vector3(-size_x / 2, 0, 0), Vector3(t, t, size_z)],
+	]
+	for e in edges:
+		var piece := _neon(center + basis * (e[0] as Vector3), e[1], material_name)
+		if piece:
+			piece.rotation.y = yaw
+
+
+## Cadre néon vertical (contour d'un panneau dans le plan x / y).
+func _neon_frame(center: Vector3, width: float, height: float, material_name: String) -> void:
+	var t := 0.08
+	_neon(center + Vector3(0, height / 2, 0), Vector3(width + t, t, t), material_name)
+	_neon(center + Vector3(0, -height / 2, 0), Vector3(width + t, t, t), material_name)
+	_neon(center + Vector3(width / 2, 0, 0), Vector3(t, height, t), material_name)
+	_neon(center + Vector3(-width / 2, 0, 0), Vector3(t, height, t), material_name)
 
 
 ## Escalier de bois posé sur des piliers : même surface qu'une rampe, mais il ne

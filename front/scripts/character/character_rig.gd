@@ -367,3 +367,8 @@ func _orient_segment(segment: Node3D, from: Vector3, to: Vector3) -> void:
 	var x := y.cross(hint).normalized()
 	var z := x.cross(y).normalized()
 	segment.transform = Transform3D(Basis(x, y, z), from)
+
+
+## Retire une arme ajoutée par add_weapon (arme spéciale perdue).
+func remove_weapon(weapon_node: Node3D) -> void:
+	_weapon_grips.erase(weapon_node)

@@ -293,6 +293,36 @@ static func build_weapon(rig, kind: int, design_id: String, weapon_node: Node3D)
 			rig.add_part(g, Vector3(0.04, 0.11, 0.06), 0.5, Vector3(0, -0.06, 0.04), m.gun, Vector3(18, 0, 0))
 			muzzle = Vector3(0, 0.05, -0.58)
 			foregrip = 0.3
+		WeaponData.Model.MINIGUN:
+			# Sulfateuse : six canons autour d'un axe, gros carter et chargeur rond.
+			rig.add_part(g, Vector3(0.16, 0.16, 0.36), 0.7, Vector3(0, 0.03, -0.02), m.gun)
+			for i in 6:
+				var a := TAU * i / 6.0
+				rig.add_part(g, Vector3(0.028, 0.6, 0.028), 1.0, Vector3(cos(a) * 0.055, 0.04 + sin(a) * 0.055, -0.5), m.gun, Vector3(90, 0, 0))
+			rig.add_part(g, Vector3(0.15, 0.15, 0.05), 1.0, Vector3(0, 0.04, -0.78), m.armor2)
+			rig.add_part(g, Vector3(0.2, 0.2, 0.12), 1.0, Vector3(0.14, -0.06, 0.06), m.armor, Vector3(0, 0, 90))
+			rig.add_part(g, Vector3(0.012, 0.012, 0.3), 0.8, Vector3(0.085, 0.09, -0.05), m.glow)
+			rig.add_part(g, Vector3(0.04, 0.11, 0.06), 0.5, Vector3(0, -0.08, 0.06), m.gun, Vector3(18, 0, 0))
+			muzzle = Vector3(0, 0.04, -0.82)
+			foregrip = 0.3
+		WeaponData.Model.LASER_RIFLE:
+			# Fusil laser : long corps arrondi, trois anneaux lumineux, émetteur.
+			rig.add_part(g, Vector3(0.08, 0.12, 0.7), 0.7, Vector3(0, 0.03, -0.2), m.armor)
+			for i in 3:
+				rig.add_part(g, Vector3(0.1, 0.1, 0.025), 1.0, Vector3(0, 0.035, -0.32 - i * 0.12), m.glow)
+			rig.add_part(g, Vector3(0.06, 0.06, 0.12), 1.0, Vector3(0, 0.035, -0.62), m.glow)
+			rig.add_part(g, Vector3(0.065, 0.12, 0.26), 0.6, Vector3(0, -0.01, 0.22), m.armor2, Vector3.ZERO, Vector2(0.8, 1.0))
+			rig.add_part(g, Vector3(0.04, 0.11, 0.06), 0.5, Vector3(0, -0.07, 0.04), m.gun, Vector3(20, 0, 0))
+			muzzle = Vector3(0, 0.035, -0.7)
+			foregrip = 0.38
+		WeaponData.Model.FIST:
+			# Poing puissant : gantelet énorme avec jointures lumineuses.
+			rig.add_part(g, Vector3(0.24, 0.22, 0.3), 0.85, Vector3(0, 0.0, -0.16), m.armor)
+			for i in 4:
+				rig.add_part(g, Vector3(0.05, 0.05, 0.05), 1.0, Vector3(-0.08 + i * 0.055, 0.06, -0.31), m.glow)
+			rig.add_part(g, Vector3(0.16, 0.16, 0.18), 0.8, Vector3(0, -0.01, 0.04), m.armor2)
+			muzzle = Vector3(0, 0.0, -0.35)
+			foregrip = 0.05
 		_:
 			rig.add_part(g, Vector3(0.07, 0.1, 0.48), 0.25, Vector3(0, 0.03, -0.1), m.gun)
 			rig.add_part(g, Vector3(0.032, 0.62, 0.032), 1.0, Vector3(0, 0.05, -0.63), m.gun, Vector3(90, 0, 0), Vector2.ONE, 0.12)

@@ -17,6 +17,13 @@ const WEAPONS: Array[WeaponData] = [
 	preload("res://data/weapons/lance_caca.tres"),
 ]
 const GRENADE: WeaponData = preload("res://data/weapons/grenade.tres")
+## Armes spéciales des bonus (pas dans les classes) et « armes » d'effets.
+const SPECIALS: Array[WeaponData] = [
+	preload("res://data/weapons/sulfateuse.tres"),
+	preload("res://data/weapons/fusil_laser.tres"),
+	preload("res://data/weapons/poing_puissant.tres"),
+	preload("res://data/weapons/onde_de_choc.tres"),
+]
 const GRENADES_PER_LIFE := 2
 const MAX_LOADOUTS := 10
 const NAME_MAX_LENGTH := 24
@@ -31,9 +38,9 @@ const DEFAULT_LOADOUTS := [
 ]
 
 
-## Arme d'après son identifiant (null si inconnue). La grenade est incluse.
+## Arme d'après son identifiant (null si inconnue). Grenade et armes spéciales incluses.
 static func find(weapon_id: String) -> WeaponData:
-	for w in WEAPONS:
+	for w in WEAPONS + SPECIALS:
 		if w.id == weapon_id:
 			return w
 	return GRENADE if weapon_id == GRENADE.id else null
@@ -41,7 +48,7 @@ static func find(weapon_id: String) -> WeaponData:
 
 ## Arme d'après son nom affiché (le fil des éliminations ne reçoit que le nom).
 static func find_by_name(display_name: String) -> WeaponData:
-	for w in WEAPONS:
+	for w in WEAPONS + SPECIALS:
 		if w.display_name == display_name:
 			return w
 	return GRENADE if display_name == GRENADE.display_name else null

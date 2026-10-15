@@ -35,9 +35,9 @@ const PITCH_VARIATION := {
 }
 
 ## Son de tir selon le modèle d'arme (WeaponData.Model : SHOTGUN, SMG, SNIPER, ROCKET,
-## FLAMER, LASER, KATANA, POOP, GRENADE).
+## FLAMER, LASER, KATANA, POOP, GRENADE, MINIGUN, LASER_RIFLE, FIST).
 const SHOT_BY_MODEL := ["shot_shotgun", "shot_smg", "shot_sniper", "shot_rocket", "shot_flame",
-	"shot_laser", "katana_swing", "poop_launch", "grenade_throw"]
+	"shot_laser", "katana_swing", "poop_launch", "grenade_throw", "shot_smg", "shot_laser", "katana_hit"]
 ## Son de capacité selon ClassData.Ability (SHIELD, DASH, PIERCE, CHARGE).
 const ABILITY_SOUNDS := ["ability_shield", "ability_dash", "ability_pierce", "ability_charge"]
 

@@ -19,6 +19,9 @@ const WEAPONS := {
 	WeaponData.Model.KATANA: preload("res://assets/ui/icons/katana.svg"),
 	WeaponData.Model.POOP: preload("res://assets/ui/icons/poop.svg"),
 	WeaponData.Model.GRENADE: preload("res://assets/ui/icons/grenade.svg"),
+	WeaponData.Model.MINIGUN: preload("res://assets/ui/icons/minigun.svg"),
+	WeaponData.Model.LASER_RIFLE: preload("res://assets/ui/icons/laser_rifle.svg"),
+	WeaponData.Model.FIST: preload("res://assets/ui/icons/fist.svg"),
 }
 
 const ABILITIES := {

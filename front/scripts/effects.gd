@@ -231,3 +231,44 @@ static func _pbr(color: Color, metallic := 0.6, roughness := 0.35) -> StandardMa
 	material.metallic = metallic
 	material.roughness = roughness
 	return material
+
+
+## Halo de la Surcharge néon : lumière rose et coque translucide qui pulse.
+static func overload_aura() -> Node3D:
+	var root := Node3D.new()
+	root.name = "OverloadAura"
+	var light := OmniLight3D.new()
+	light.light_color = Color(0.95, 0.27, 0.78)
+	light.light_energy = 2.5
+	light.omni_range = 4.0
+	light.position.y = 1.0
+	root.add_child(light)
+	var shell := MeshInstance3D.new()
+	shell.mesh = PartMesh.shape(Vector3(1.3, 2.1, 1.3), 1.0)
+	var material := _unshaded(Color(0.95, 0.27, 0.78, 0.18))
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	shell.material_override = material
+	shell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	shell.position.y = 1.0
+	root.add_child(shell)
+	var tween := shell.create_tween().set_loops()
+	tween.tween_property(shell, "scale", Vector3.ONE * 1.12, 0.45)
+	tween.tween_property(shell, "scale", Vector3.ONE, 0.45)
+	return root
+
+
+## Onde de choc : grand anneau qui s'élargit au sol, en plus de l'explosion.
+static func shockwave(parent: Node, position: Vector3, radius: float) -> void:
+	if headless() or parent == null:
+		return
+	var ring := MeshInstance3D.new()
+	ring.mesh = PartMesh.shape(Vector3(1.0, 0.1, 1.0), 1.0)
+	var material := _unshaded(Color(1.0, 0.55, 0.2, 0.8))
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	ring.material_override = material
+	_spawn(parent, ring, 0.6)
+	ring.global_position = position + Vector3(0, 0.15, 0)
+	var tween := ring.create_tween().set_parallel()
+	tween.tween_property(ring, "scale", Vector3(radius * 2.2, 1.0, radius * 2.2), 0.5).set_ease(Tween.EASE_OUT)
+	tween.tween_property(material, "albedo_color:a", 0.0, 0.55)

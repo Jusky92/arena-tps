@@ -52,6 +52,8 @@ var _ping := randi_range(7, 14)          # ping simulé du joueur local
 var _pending_class: ClassData = null    # spécialiste choisi pour la prochaine apparition
 var _pending_loadout := false           # classe (équipement) changée pour la prochaine apparition
 var _net_projectiles := {}              # en ligne : identifiant -> projectile affiché
+## Bonus de la map : qui fait foi hors ligne, affichage seulement en ligne.
+var pickups: PickupDirector
 var _online := false                    # partie sur le serveur dédié (voir Net)
 var _net_nodes := {}                    # identifiant réseau -> personnage
 
@@ -75,17 +77,29 @@ func _ready() -> void:
 	_start_ambience()
 
 	_online = Net.online and Net.in_match and _mode == "deathmatch"
+	pickups = PickupDirector.new()
+	pickups.name = "Pickups"
+	add_child(pickups)
+	pickups.setup(ArenaMap.PICKUP_POINTS, not _online)
+	if _online:
+		pickups.apply_snapshot(Net.pickup_states)
+	else:
+		pickups.players_provider = func() -> Array: return players
+		pickups.picked.connect(_on_pickup_offline)
 	if _online:
 		_start_online_match()
 	else:
 		player = _spawn_player(GameState.selected_class, Backend.username(), true)
-		hud.bind(player)
+		_bind_player(player)
 		if _mode == "training":
 			_spawn_targets()
 			_ui.hide_timer()
 		else:
 			nav_map = MatchRules.bake_navigation(self, map)
 			roam_points = MatchRules.roam_points()
+			for point in ArenaMap.PICKUP_POINTS:
+				var p: Vector3 = point[1]
+				roam_points.append(Vector3(p.x, 0, p.z))      # les bots passent par les bonus
 			for i in GameState.bot_count:
 				var cls: ClassData = GameState.CLASSES[randi() % GameState.CLASSES.size()]
 				_spawn_player(cls, BOT_NAMES[i % BOT_NAMES.size()], false, WeaponCatalog.random_loadout())
@@ -225,7 +239,7 @@ func _replace_local_player(cls: ClassData) -> void:
 	fresh.best_streak = old.best_streak
 	fresh.input_enabled = not _pause.is_open()
 	player = fresh
-	hud.bind(fresh)
+	_bind_player(fresh)
 	hud.hide_death()
 	old.queue_free()
 	_pending_class = null
@@ -248,7 +262,7 @@ func _start_online_match() -> void:
 	player = _net_nodes.get(Net.my_id())
 	if player:
 		player.camera.make_current()   # toujours MA caméra, quel que soit l'ordre d'apparition
-		hud.bind(player)
+		_bind_player(player)
 	# Si on rejoint une partie en cours, le serveur donne le temps restant.
 	_time_left = Net.match_time_left
 	_running = true
@@ -261,6 +275,10 @@ func _start_online_match() -> void:
 	Net.projectile_spawned.connect(_on_net_projectile)
 	Net.projectile_exploded.connect(_on_net_explosion)
 	Net.effect_received.connect(_on_net_effect)
+	Net.pickup_changed.connect(func(pad_id: int, available: bool) -> void: pickups.set_available(pad_id, available))
+	Net.pickups_snapshot.connect(func(states: Dictionary) -> void: pickups.apply_snapshot(states))
+	Net.special_given.connect(_on_net_special)
+	Net.aura_started.connect(_on_net_aura)
 	Net.match_over.connect(_on_net_match_over)
 	Net.remote_spawned.connect(_on_net_joined)
 	Net.remote_left.connect(_on_net_left)
@@ -385,7 +403,7 @@ func _replace_net_player(peer_id: int, class_id: String) -> CharacterBody3D:
 	if peer_id == Net.my_id():
 		player = fresh
 		fresh.input_enabled = not _pause.is_open()
-		hud.bind(fresh)
+		_bind_player(fresh)
 	return fresh
 
 
@@ -591,16 +609,21 @@ func launch_projectile(data: WeaponData, shooter: Node, origin: Vector3, velocit
 
 ## Hors ligne : explosion d'un projectile, dégâts de zone et effets appliqués ici.
 func _on_projectile_exploded(projectile: Projectile, position: Vector3, direct_target: Node) -> void:
-	var data := projectile.data
 	var shooter: Node = projectile.shooter if is_instance_valid(projectile.shooter) else null
+	_offline_explosion(position, projectile.data, shooter, direct_target)
+
+
+## Hors ligne : explosion (roquette, grenade, lance-caca, onde de choc).
+func _offline_explosion(position: Vector3, data: WeaponData, shooter: Node, direct_target: Node) -> void:
 	_explosion_fx(position, data)
+	var multiplier: float = shooter.damage_multiplier() if shooter and shooter.has_method("damage_multiplier") else 1.0
 	var any_hit := false
 	var any_kill := false
 	for victim in MatchRules.explosion_victims(get_world_3d(), position, data, shooter, direct_target):
 		var node: Node = victim.node
 		if node != shooter:
 			any_hit = true
-		var killed: bool = node.take_damage(victim.damage, shooter)
+		var killed: bool = node.take_damage(int(round(victim.damage * multiplier)), shooter)
 		any_kill = any_kill or (killed and node != shooter)
 		if node.has_method("apply_effect"):
 			if data.knockback > 0.0:
@@ -658,7 +681,83 @@ func _start_ambience() -> void:
 func _explosion_fx(position: Vector3, data: WeaponData) -> void:
 	var cartoon := data.model == WeaponData.Model.POOP
 	Effects.explosion(self, position, data.splash_radius, data.tracer_color, cartoon)
+	if data == Pickups.SHOCKWAVE:
+		Effects.shockwave(self, position, data.splash_radius)
 	if cartoon:
 		Sfx.play_at("poop_splat", position, 0.0, 1.0, 60.0)
 	else:
 		Sfx.play_at("explosion", position, 6.0, 1.0, 160.0)
+
+
+# ---------------------------------------------------------------- Bonus de la map
+
+## Relie le HUD au joueur local, et la bannière des bonus ramassés.
+func _bind_player(p: CharacterBody3D) -> void:
+	hud.bind(p)
+	if not p.bonus_picked.is_connected(_on_bonus_picked):
+		p.bonus_picked.connect(_on_bonus_picked)
+
+
+func _on_bonus_picked(kind: int) -> void:
+	var text := Pickups.name_of(kind).to_upper()
+	match kind:
+		Pickups.Kind.HEAL:
+			text = "+%d PV" % Pickups.HEAL_AMOUNT
+		Pickups.Kind.ARMOR:
+			text = "ARMURE +%d" % Pickups.ARMOR_AMOUNT
+		Pickups.Kind.SUPER:
+			if player.super_power >= 0:
+				text = "%s  ·  [F]" % Pickups.SUPER_INFO[player.super_power].name.to_upper()
+	_ui.show_banner(text, Pickups.color_of(kind))
+	Sfx.play("powerup" if kind == Pickups.Kind.SUPER else "pickup", -4.0)
+
+
+## Hors ligne : un personnage (joueur ou bot) a ramassé un bonus.
+func _on_pickup_offline(_pad_id: int, kind: int, node: Node) -> void:
+	match kind:
+		Pickups.Kind.HEAL:
+			node.health = mini(node.health + Pickups.HEAL_AMOUNT, node.class_data.max_health)
+			node.health_changed.emit(node.health, node.class_data.max_health)
+		Pickups.Kind.ARMOR:
+			node.apply_effect("armor", mini(node.armor + Pickups.ARMOR_AMOUNT, Pickups.ARMOR_MAX), 0.0)
+		Pickups.Kind.DOUBLE_JUMP:
+			node.apply_effect("double_jump", 0.0, Pickups.DOUBLE_JUMP_TIME)
+		Pickups.Kind.SPEED:
+			node.apply_effect("speed", Pickups.SPEED_BONUS, Pickups.SPEED_TIME)
+		Pickups.Kind.SUPER:
+			node.set_super(Pickups.random_super())
+		_:
+			var data := WeaponCatalog.find(Pickups.weapon_of(kind))
+			if data:
+				node.give_special(data)
+	node.apply_effect("picked", kind, 0.0)
+
+
+## Hors ligne : déclenche le super-pouvoir en réserve (appelé par player.use_super).
+func activate_super(node: Node) -> void:
+	var power: int = node.super_power
+	if power < 0 or not node.alive:
+		return
+	node.set_super(-1)
+	match power:
+		Pickups.Super.OVERLOAD:
+			node.apply_aura(power, Pickups.OVERLOAD_TIME)
+		Pickups.Super.INVISIBILITY:
+			node.apply_aura(power, Pickups.INVISIBILITY_TIME)
+		Pickups.Super.SHOCKWAVE:
+			_offline_explosion(node.chest_position(), Pickups.SHOCKWAVE, node, null)
+
+
+## En ligne : arme spéciale donnée à un joueur (annoncée par le serveur).
+func _on_net_special(peer_id: int, weapon_id: String) -> void:
+	var node = _net_nodes.get(peer_id)
+	var data := WeaponCatalog.find(weapon_id)
+	if is_instance_valid(node) and data:
+		node.give_special(data)
+
+
+## En ligne : effet de super-pouvoir d'un joueur (Surcharge, invisibilité).
+func _on_net_aura(peer_id: int, kind: int, duration: float) -> void:
+	var node = _net_nodes.get(peer_id)
+	if is_instance_valid(node):
+		node.apply_aura(kind, duration)

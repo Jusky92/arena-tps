@@ -5,9 +5,10 @@ extends Resource
 ## La liste des armes jouables est dans WeaponCatalog (scripts/data/weapon_catalog.gd).
 
 ## Apparence 3D (modèle procédural, voir CharacterDesigns.build_weapon).
-enum Model { SHOTGUN, SMG, SNIPER, ROCKET, FLAMER, LASER, KATANA, POOP, GRENADE }
-## Emplacement dans une classe : arme principale, secondaire, ou équipement (grenade).
-enum Slot { PRIMARY, SECONDARY, EQUIPMENT }
+enum Model { SHOTGUN, SMG, SNIPER, ROCKET, FLAMER, LASER, KATANA, POOP, GRENADE, MINIGUN, LASER_RIFLE, FIST }
+## Emplacement : arme principale ou secondaire d'une classe, équipement (grenade),
+## ou arme spéciale ramassée sur la map (bonus, touche 3).
+enum Slot { PRIMARY, SECONDARY, EQUIPMENT, SPECIAL }
 ## Fonctionnement du tir.
 ##   HITSCAN    : balle instantanée (lancer de rayon)
 ##   PROJECTILE : projectile simulé par le serveur (roquette, lance-caca)
@@ -55,6 +56,10 @@ enum Kind { HITSCAN, PROJECTILE, MELEE, FLAME, THROWN }
 @export_group("Corps à corps et flammes")
 @export var arc_deg: float = 70.0             ## largeur de l'arc (katana) ou du cône (flammes)
 
+@export_group("Arme spéciale (bonus)")
+@export var special_duration: float = 0.0     ## > 0 : l'arme disparaît après ce délai (s) ; sinon quand elle est vide
+@export var pierce_always: bool = false       ## balles toujours perforantes (fusil laser)
+
 @export_group("Effets sur la cible")
 @export var slow_factor: float = 0.0          ## 0.4 = 40 % plus lent
 @export var slow_time: float = 0.0            ## secondes
@@ -74,3 +79,8 @@ func is_hitscan() -> bool:
 ## true si l'arme n'a pas de chargeur (katana).
 func unlimited() -> bool:
 	return mag_size <= 0
+
+
+## true pour une arme spéciale ramassée : pas de rechargement, elle disparaît vide.
+func is_special() -> bool:
+	return slot == Slot.SPECIAL

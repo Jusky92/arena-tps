@@ -169,6 +169,15 @@ mouse_filter = 2
 theme_override_constants/separation = 6
 alignment = 2
 
+[node name="Buffs" type="Label" parent="Root/BottomLeft"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"HudLabel"
+theme_override_colors/font_color = Color(0.85, 0.95, 1, 1)
+theme_override_font_sizes/font_size = 15
+text = "BONUS"
+
 [node name="NextClass" type="Label" parent="Root/BottomLeft"]
 unique_name_in_owner = true
 visible = false
@@ -269,6 +278,17 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
+[node name="ArmorBar" type="ProgressBar" parent="Root/BottomLeft/VitalPanel/VBox"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(0, 6)
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"AbilityBar"
+max_value = 100.0
+value = 50.0
+show_percentage = false
+
 [node name="Ability" type="HBoxContainer" parent="Root/BottomLeft/VitalPanel/VBox"]
 layout_mode = 2
 mouse_filter = 2
@@ -356,6 +376,21 @@ size_flags_vertical = 4
 mouse_filter = 2
 expand_mode = 1
 stretch_mode = 5
+
+[node name="SuperChip" type="PanelContainer" parent="Root/BottomRight/Extras"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"HudChip"
+
+[node name="SuperLabel" type="Label" parent="Root/BottomRight/Extras/SuperChip"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudLabel"
+theme_override_colors/font_color = Color(0.95, 0.27, 0.78, 1)
+theme_override_font_sizes/font_size = 14
+text = "[F] SUPER"
 
 [node name="GrenadeChip" type="PanelContainer" parent="Root/BottomRight/Extras"]
 layout_mode = 2

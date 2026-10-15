@@ -13,6 +13,8 @@ extends Node3D
 signal fired(recoil_deg: float)
 signal ammo_changed(ammo: int, mag_size: int, reloading: bool)
 signal hit_confirmed(killed: bool, headshot: bool)
+## Arme spéciale (bonus) vide : le joueur la lâche.
+signal emptied
 
 const MAX_PIERCE := 5     # nombre max de cibles traversées par une balle perforante
 const FIRING_HOLD := 0.2  # durée pendant laquelle l'arme est « en train de tirer » (vu par les autres)
@@ -82,8 +84,8 @@ func cancel_reload() -> void:
 
 
 func start_reload() -> void:
-	if data.unlimited() or is_reloading() or ammo == data.mag_size:
-		return
+	if data.unlimited() or data.is_special() or is_reloading() or ammo == data.mag_size:
+		return      # les armes spéciales ne se rechargent pas
 	_reload_timer = data.reload_time
 	ammo_changed.emit(ammo, data.mag_size, true)
 	if _networked():
@@ -94,7 +96,10 @@ func _try_fire(aiming: bool, spread_factor := 1.0) -> void:
 	if _cooldown > 0.0:
 		return
 	if not data.unlimited() and ammo <= 0:
-		start_reload()
+		if data.is_special():
+			emptied.emit()
+		else:
+			start_reload()
 		return
 
 	if not data.unlimited():
@@ -125,7 +130,10 @@ func _try_fire(aiming: bool, spread_factor := 1.0) -> void:
 	fired.emit(data.recoil_deg)
 
 	if not data.unlimited() and ammo == 0:
-		start_reload()  # rechargement automatique
+		if data.is_special():
+			emptied.emit()      # arme spéciale vide : elle disparaît
+		else:
+			start_reload()      # rechargement automatique
 
 
 # ---------------------------------------------------------------- Balles
@@ -154,7 +162,7 @@ func _fire_pellet(spread_deg: float) -> Dictionary:
 	var result := {"hit": false, "killed": false, "headshot": false}
 	var exclude: Array[RID] = []
 	var end_point := to
-	var pierce_left := MAX_PIERCE if piercing and data.is_hitscan() else 1
+	var pierce_left := MAX_PIERCE if (piercing and data.is_hitscan()) or data.pierce_always else 1
 
 	while pierce_left > 0:
 		var hit := _raycast(space, from, to, exclude)
@@ -293,6 +301,8 @@ func _deal(target: Object, offset: Vector3, damage: int, headshot: bool) -> bool
 	if Net.online and target.get("peer_id") != null and target.peer_id != 0:
 		Net.hit(target.peer_id, offset, data.display_name, _shooter.peer_id if "peer_id" in _shooter else 0)
 		return false      # l'élimination reviendra par le réseau (signal player_died)
+	if _shooter.has_method("damage_multiplier"):
+		damage = int(round(damage * _shooter.damage_multiplier()))     # Surcharge néon
 	return target.take_damage(damage, _shooter, headshot)
 
 

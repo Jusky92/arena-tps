@@ -15,6 +15,9 @@ signal exploded(projectile: Projectile, position: Vector3, direct_target: Node)
 const LIFETIME := 8.0
 const ARM_TIME := 0.08            # le tireur ne peut pas se toucher juste au départ
 const RADIUS := 0.12              # rayon de collision (lancer de rayon + marge)
+## Emplacement des grenades dans l'arsenal tenu par le serveur (0 = principale,
+## 1 = secondaire, 2 = arme spéciale).
+const GRENADE_SLOT := 9
 
 var id := 0                       ## identifiant réseau (attribué par le serveur)
 var data: WeaponData
@@ -115,7 +118,8 @@ func finish(at: Vector3) -> void:
 
 ## Lance un projectile. En ligne, c'est le serveur qui le simule et l'annonce à tous
 ## (Net.fire_projectile) ; hors ligne, la partie (groupe "projectile_host") le crée.
-## `slot` : 0 = principale, 1 = secondaire, 2 = grenade (munitions tenues par le serveur).
+## `slot` : 0 = principale, 1 = secondaire, 2 = arme spéciale, GRENADE_SLOT = grenade
+## (munitions tenues par le serveur).
 static func launch(from_node: Node, weapon: WeaponData, shooter: Node, slot: int, origin: Vector3, start_velocity: Vector3) -> void:
 	if Net.online and "peer_id" in shooter and shooter.peer_id != 0:
 		Net.fire_projectile(shooter.peer_id, slot, origin, start_velocity)
