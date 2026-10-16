@@ -24,6 +24,7 @@ const KEY_ACTIONS := {
 	"grenade":      [KEY_G],
 	"pause":        [KEY_ESCAPE],
 	"scoreboard":   [KEY_TAB],
+	"chat":         [KEY_T, KEY_ENTER],   # écrire dans le chat (partie en ligne)
 	"debug_hurt":   [KEY_F9],   # test : s'infliger 25 dégâts (à retirer plus tard)
 }
 
@@ -56,6 +57,7 @@ const REBINDABLE := [
 	["weapon_next", "Arme suivante"],
 	["weapon_prev", "Arme précédente"],
 	["scoreboard", "Tableau des scores"],
+	["chat", "Écrire dans le chat"],
 ]
 ## Touches par action sur la page Paramètres (principale, secondaire).
 const SLOTS := 2
@@ -65,6 +67,9 @@ const BINDINGS_PATH := "user://touches.cfg"
 
 
 func _ready() -> void:
+	# Premier autoload : on récupère les réglages d'avant le changement de nom du jeu,
+	# avant que les autres autoloads ne lisent les leurs.
+	UserData.migrate_old_folder()
 	_apply_defaults()
 	_load_bindings()
 

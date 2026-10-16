@@ -1,7 +1,7 @@
 # Lancer le serveur et les clients — pas à pas
 
-Ce guide explique comment lancer **le serveur dédié** (`ArenaTPS_Server`) sur un PC
-Windows ou Linux, puis **le jeu** (`ArenaTPS`) sur le PC de chaque joueur.
+Ce guide explique comment lancer **le serveur dédié** (`TPSArena_Server`) sur un PC
+Windows ou Linux, puis **le jeu** (`TPSArena`) sur le PC de chaque joueur.
 Pour les questions de réseau (Internet, Tailscale, box, dépannage), voir
 [RESEAU.md](RESEAU.md).
 
@@ -66,11 +66,11 @@ Sinon, sur un PC qui a le code et **Godot 4.7.2** :
 
    | Fichier | Rôle | Pour qui |
    |---|---|---|
-   | `../server/linux/ArenaTPS_Server.x86_64` (à côté du dépôt) | serveur Linux | le PC serveur |
-   | `../server/windows/ArenaTPS_Server.exe` **et** `ArenaTPS_Server.console.exe` | serveur Windows (garder les deux fichiers ensemble) | le PC serveur |
-   | `build/linux/ArenaTPS.x86_64` | jeu Linux | chaque joueur |
-   | `build/windows/ArenaTPS.exe` | jeu Windows | chaque joueur |
-   | `build/macos/ArenaTPS.zip` | jeu macOS (contient `ArenaTPS.app`) | chaque joueur sur Mac |
+   | `../server/linux/TPSArena_Server.x86_64` (à côté du dépôt) | serveur Linux | le PC serveur |
+   | `../server/windows/TPSArena_Server.exe` **et** `TPSArena_Server.console.exe` | serveur Windows (garder les deux fichiers ensemble) | le PC serveur |
+   | `build/linux/TPSArena.x86_64` | jeu Linux | chaque joueur |
+   | `build/windows/TPSArena.exe` | jeu Windows | chaque joueur |
+   | `build/macos/TPSArena.zip` | jeu macOS (contient `TPSArena.app`) | chaque joueur sur Mac |
 
    Chaque fichier contient tout (ressources incluses) : rien d'autre à installer.
 
@@ -78,12 +78,12 @@ Sinon, sur un PC qui a le code et **Godot 4.7.2** :
 
 ## 3. Lancer le serveur sous Linux
 
-1. **Copier** `ArenaTPS_Server.x86_64` sur le PC serveur, dans le dossier de votre choix.
+1. **Copier** `TPSArena_Server.x86_64` sur le PC serveur, dans le dossier de votre choix.
 
 2. **Ouvrir un terminal** dans ce dossier et rendre le fichier exécutable (une seule fois) :
 
    ```bash
-   chmod +x ArenaTPS_Server.x86_64
+   chmod +x TPSArena_Server.x86_64
    ```
 
 3. **Ouvrir le port** s'il y a un pare-feu (une seule fois) :
@@ -98,13 +98,13 @@ Sinon, sur un PC qui a le code et **Godot 4.7.2** :
 4. **Lancer le serveur** :
 
    ```bash
-   ./ArenaTPS_Server.x86_64
+   ./TPSArena_Server.x86_64
    ```
 
    Avec des options (toutes facultatives) :
 
    ```bash
-   ./ArenaTPS_Server.x86_64 --port 24567 --bots 2 --duration 180 --map hikari-mall --bot-level moyen --name "Arena TPS"
+   ./TPSArena_Server.x86_64 --port 24567 --bots 2 --duration 180 --map hikari-mall --bot-level moyen --name "TPS Arena"
    ```
 
    | Option | Défaut | Rôle |
@@ -115,12 +115,12 @@ Sinon, sur un PC qui a le code et **Godot 4.7.2** :
    | `--map` | `neo-edo` | map des parties : `neo-edo` ou `hikari-mall` (le chef peut changer) |
    | `--bot-level` | `moyen` | niveau des bots : `faible`, `moyen` ou `eleve` (le chef peut changer) |
    | `--max-players` | 16 | joueurs humains au plus par partie (1 à 16) |
-   | `--name` | Arena TPS | nom du serveur dans la liste des serveurs publics |
+   | `--name` | TPS Arena | nom du serveur dans la liste des serveurs publics |
 
 5. **Noter les adresses affichées**, par exemple :
 
    ```
-   === Arena TPS — serveur dédié (version 0.14.0-alpha) ===
+   === TPS Arena — serveur dédié (version 1.0.0-beta) ===
    Map : NEO-EDO (neo-edo), 16 joueurs maximum.
    Mode LAN. Les joueurs se connectent avec REJOINDRE et une de ces adresses :
        192.168.1.20:24567
@@ -135,30 +135,30 @@ Sinon, sur un PC qui a le code et **Godot 4.7.2** :
    exemple) :
 
    ```bash
-   nohup ./ArenaTPS_Server.x86_64 > serveur.log 2>&1 &   # lancer en arrière-plan
+   nohup ./TPSArena_Server.x86_64 > serveur.log 2>&1 &   # lancer en arrière-plan
    tail -f serveur.log                                    # suivre ce qu'il affiche
-   pkill -f ArenaTPS_Server                               # l'arrêter
+   pkill -f TPSArena_Server                               # l'arrêter
    ```
 
 ---
 
 ## 4. Lancer le serveur sous Windows
 
-1. **Copier les deux fichiers** `ArenaTPS_Server.exe` et `ArenaTPS_Server.console.exe`
+1. **Copier les deux fichiers** `TPSArena_Server.exe` et `TPSArena_Server.console.exe`
    dans le **même dossier** du PC serveur. Le second affiche la console et a besoin du
    premier.
 
-   > ⚠️ Ne pas double-cliquer sur `ArenaTPS_Server.exe` : le serveur tournerait
+   > ⚠️ Ne pas double-cliquer sur `TPSArena_Server.exe` : le serveur tournerait
    > **sans aucune fenêtre**, invisible. Il faudrait alors l'arrêter depuis le
-   > Gestionnaire des tâches. Toujours utiliser `ArenaTPS_Server.console.exe`.
+   > Gestionnaire des tâches. Toujours utiliser `TPSArena_Server.console.exe`.
 
 2. **Lancer le serveur.** Au choix :
-   - double-cliquer sur `ArenaTPS_Server.console.exe` (réglages par défaut) ;
+   - double-cliquer sur `TPSArena_Server.console.exe` (réglages par défaut) ;
    - ou, pour passer des options, ouvrir le dossier dans l'Explorateur, taper
      `powershell` dans la barre d'adresse puis Entrée, et lancer :
 
      ```powershell
-     .\ArenaTPS_Server.console.exe --port 24567 --bots 2 --duration 180 --map hikari-mall
+     .\TPSArena_Server.console.exe --port 24567 --bots 2 --duration 180 --map hikari-mall
      ```
 
 3. **SmartScreen** (« Windows a protégé votre ordinateur ») peut apparaître au premier
@@ -166,13 +166,13 @@ Sinon, sur un PC qui a le code et **Godot 4.7.2** :
    Exécuter quand même**.
 
 4. **Autoriser le pare-feu.** Au premier lancement, Windows demande s'il faut autoriser
-   ArenaTPS_Server sur le réseau : cocher **Réseaux privés**, puis **Autoriser**.
+   TPSArena_Server sur le réseau : cocher **Réseaux privés**, puis **Autoriser**.
 
    Si la fenêtre n'est pas apparue ou a été refusée, ouvrir un **PowerShell en
    administrateur** (clic droit sur le menu Démarrer → Terminal (administrateur)) :
 
    ```powershell
-   New-NetFirewallRule -DisplayName "Arena TPS (UDP 24567)" -Direction Inbound `
+   New-NetFirewallRule -DisplayName "TPS Arena (UDP 24567)" -Direction Inbound `
      -Protocol UDP -LocalPort 24567 -Action Allow -Profile Private
    ```
 
@@ -193,18 +193,18 @@ Sinon, sur un PC qui a le code et **Godot 4.7.2** :
 
 ### Windows
 
-1. Copier `ArenaTPS.exe` où vous voulez (Bureau, Documents…).
+1. Copier `TPSArena.exe` où vous voulez (Bureau, Documents…).
 2. Double-cliquer dessus. Si **SmartScreen** apparaît : **Informations
    complémentaires → Exécuter quand même**.
 
 ### Linux
 
-1. Copier `ArenaTPS.x86_64` où vous voulez.
+1. Copier `TPSArena.x86_64` où vous voulez.
 2. Dans un terminal, dans ce dossier :
 
    ```bash
-   chmod +x ArenaTPS.x86_64    # une seule fois
-   ./ArenaTPS.x86_64
+   chmod +x TPSArena.x86_64    # une seule fois
+   ./TPSArena.x86_64
    ```
 
    (Ou clic droit → Propriétés → Permissions → « Autoriser l'exécution », puis
@@ -216,15 +216,15 @@ Le jeu tourne sur les Mac Intel et Apple Silicon (macOS 11 ou plus récent sur
 Apple Silicon, 10.15 sur Intel). Il n'est **pas signé par Apple**, donc macOS le
 bloque au premier lancement.
 
-1. Décompresser `ArenaTPS.zip` (double-clic) et glisser `ArenaTPS.app` dans
+1. Décompresser `TPSArena.zip` (double-clic) et glisser `TPSArena.app` dans
    **Applications** (ou ailleurs).
-2. Premier lancement : **clic droit sur `ArenaTPS.app` → Ouvrir → Ouvrir**.
+2. Premier lancement : **clic droit sur `TPSArena.app` → Ouvrir → Ouvrir**.
    Si macOS ne propose pas « Ouvrir » : Réglages Système → Confidentialité et
    sécurité → en bas, **Ouvrir quand même**.
    En terminal, ceci fait sauter le blocage d'un coup :
 
    ```bash
-   xattr -dr com.apple.quarantine /Applications/ArenaTPS.app
+   xattr -dr com.apple.quarantine /Applications/TPSArena.app
    ```
 
 3. Les lancements suivants se font d'un double-clic normal.
@@ -304,12 +304,12 @@ serveur (`tools/lancer_serveur.sh --port 24568` pour un second serveur).
 
 ```bash
 # Linux
-GAME_SERVER_SECRET=<la valeur du .env> ./ArenaTPS_Server.x86_64 \
+GAME_SERVER_SECRET=<la valeur du .env> ./TPSArena_Server.x86_64 \
     --serverlist-url http://localhost:8002 --public-address 192.168.1.20
 
 # Windows (PowerShell)
 $env:GAME_SERVER_SECRET = "<la valeur du .env>"
-.\ArenaTPS_Server.console.exe --serverlist-url http://localhost:8002 --public-address 192.168.1.20
+.\TPSArena_Server.console.exe --serverlist-url http://localhost:8002 --public-address 192.168.1.20
 ```
 
 - `--public-address` : l'adresse que la Server List donne aux joueurs pour se connecter
@@ -386,15 +386,15 @@ variable d'environnement `GAME_SERVER_SECRET`.
 | « Aucune réponse de … » | Le serveur est-il lancé ? L'adresse est-elle une de celles **qu'il affiche** ? Le pare-feu **du PC serveur** autorise-t-il l'UDP 24567 ? (Windows : réseau en **privé**.) |
 | « Versions différentes » | Réexporter le serveur **et** les jeux depuis le même code, et redistribuer. |
 | « Impossible de joindre le serveur du jeu » (connexion) | Le back n'est pas lancé, ou l'**Adresse du back** est fausse, ou le pare-feu du PC serveur bloque les ports TCP 8000 / 8005. |
-| « Aucun serveur de jeu n'est libre » | Aucun `ArenaTPS_Server` en mode Server List n'est lancé (ou tous sont occupés), ou sa version diffère de celle du jeu. |
+| « Aucun serveur de jeu n'est libre » | Aucun `TPSArena_Server` en mode Server List n'est lancé (ou tous sont occupés), ou sa version diffère de celle du jeu. |
 | « La Server List refuse GAME_SERVER_SECRET » | La variable ne correspond pas à `GAME_SERVER_SECRET` dans `backend/.env`. |
 | « Accès refusé : ticket invalide ou expiré » | On a rejoint un serveur Server List par son adresse IP : avec le vrai back, on passe par **LANCER EN LIGNE** ou **SERVEURS PUBLICS**. |
-| « Le port 24567 est déjà utilisé » (ou « Couldn't create an ENet host ») | Un serveur tourne déjà sur ce PC, souvent lancé d'un double-clic donc sans fenêtre. Linux : `pgrep -af ArenaTPS_Server` pour le voir, `pkill -f ArenaTPS_Server` pour l'arrêter. Windows : Gestionnaire des tâches. Ou lancer avec `--port 24568`. |
+| « Le port 24567 est déjà utilisé » (ou « Couldn't create an ENet host ») | Un serveur tourne déjà sur ce PC, souvent lancé d'un double-clic donc sans fenêtre. Linux : `pgrep -af TPSArena_Server` pour le voir, `pkill -f TPSArena_Server` pour l'arrêter. Windows : Gestionnaire des tâches. Ou lancer avec `--port 24568`. |
 | « La partie est pleine » | Le nombre maximum de joueurs (16 par défaut, `--max-players`) est atteint. |
 | « Map inconnue : … » (au lancement du serveur) | L'option `--map` attend `neo-edo` ou `hikari-mall`. |
 | « Ce compte est déjà connecté » | Le même jeu est ouvert deux fois avec la même session : se reconnecter. |
-| Le serveur Linux ne démarre pas (« Permission non accordée ») | Oublié `chmod +x ArenaTPS_Server.x86_64`. |
-| Les options (`--port`, `--bots`…) semblent ignorées | Les placer après `--` : `./ArenaTPS_Server.x86_64 -- --port 24568`. Le serveur lit les deux formes. |
+| Le serveur Linux ne démarre pas (« Permission non accordée ») | Oublié `chmod +x TPSArena_Server.x86_64`. |
+| Les options (`--port`, `--bots`…) semblent ignorées | Les placer après `--` : `./TPSArena_Server.x86_64 -- --port 24568`. Le serveur lit les deux formes. |
 | La console Windows se ferme tout de suite | Lancer depuis PowerShell (étape 4.2) pour lire le message d'erreur. |
 
 Plus de détails, et le jeu par Internet : [RESEAU.md](RESEAU.md).

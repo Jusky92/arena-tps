@@ -2,8 +2,8 @@ extends Node
 ## Scène de démarrage (scenes/boot.tscn) : choisit entre le jeu et le serveur dédié.
 ##
 ## Un seul projet Godot donne deux exécutables (voir export_presets.cfg) :
-##   ArenaTPS         le jeu, pour les joueurs           -> écran de connexion
-##   ArenaTPS_Server  le serveur dédié, sans fenêtre     -> scenes/server/server.tscn
+##   TPSArena         le jeu, pour les joueurs           -> écran de connexion
+##   TPSArena_Server  le serveur dédié, sans fenêtre     -> scenes/server/server.tscn
 ##
 ## Le serveur démarre aussi depuis l'éditeur ou la ligne de commande :
 ##   godot --path front --headless -- --server

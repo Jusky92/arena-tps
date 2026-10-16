@@ -5,6 +5,7 @@ extends Control
 ##   CHEF   — le premier joueur connecté : il règle le nombre de bots et la durée,
 ##            puis lance la partie pour tout le monde. S'il part, le suivant prend sa place.
 ##   JOUEUR — il voit les réglages et attend le lancement ; il peut changer de classe.
+## Sous la liste des joueurs, le chat du serveur (MatchChat), qui suit en partie.
 ## Sur un serveur de la Server List (partie lancée par un groupe), le chef est celui
 ## du groupe : il arrive avec ses derniers réglages (GameState.online_settings), peut
 ## les changer ici, puis lance la partie quand tout le monde est prêt.
@@ -108,7 +109,10 @@ func _build() -> void:
 	_players_box = VBoxContainer.new()
 	_players_box.add_theme_constant_override("separation", 6)
 	left_box.add_child(_players_box)
-	left_box.add_child(UiTheme.spacer(Vector2.ZERO, false, true))
+	left_box.add_child(UiTheme.label("CHAT", 15, UiTheme.MUTED, true))
+	var chat := MatchChat.new()
+	chat.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left_box.add_child(chat)
 	var change := UiTheme.button("CHANGER DE SPÉCIALISTE")
 	change.pressed.connect(func() -> void: get_tree().change_scene_to_file(CLASS_SELECT))
 	left_box.add_child(change)

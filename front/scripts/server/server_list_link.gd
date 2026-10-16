@@ -43,7 +43,7 @@ func start(info: Dictionary) -> String:
 
 func _register() -> String:
 	var body := {
-		"name": _info.get("name", "Arena TPS"),
+		"name": _info.get("name", "TPS Arena"),
 		"address": _info.get("address", ""),
 		"port": _info.get("port", Net.DEFAULT_PORT),
 		"region": _info.get("region", "eu"),

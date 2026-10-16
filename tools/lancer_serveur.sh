@@ -19,7 +19,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SERVEUR="${SERVEUR:-$ROOT/../server/linux/ArenaTPS_Server.x86_64}"
+SERVEUR="${SERVEUR:-$ROOT/../server/linux/TPSArena_Server.x86_64}"
 ENV_BACK="${ENV_BACK:-$ROOT/../../backend/.env}"
 SERVERLIST_URL="${SERVERLIST_URL:-http://localhost:8002}"
 
@@ -62,10 +62,10 @@ if [ -z "${ADRESSE_PUBLIQUE:-}" ]; then
 	fi
 fi
 
-if pgrep -f "ArenaTPS_Server" >/dev/null; then
+if pgrep -f "TPSArena_Server" >/dev/null; then
 	echo "Un serveur de jeu tourne déjà sur ce PC :" >&2
-	pgrep -af "ArenaTPS_Server" >&2
-	echo "Arrête-le d'abord (pkill -f ArenaTPS_Server), ou lance celui-ci sur un autre port (--port 24568)." >&2
+	pgrep -af "TPSArena_Server" >&2
+	echo "Arrête-le d'abord (pkill -f TPSArena_Server), ou lance celui-ci sur un autre port (--port 24568)." >&2
 	if [[ " $* " != *" --port "* && " $* " != *" --port="* ]]; then
 		exit 1
 	fi

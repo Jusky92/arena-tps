@@ -51,13 +51,13 @@ func _build_showcase() -> Control:
 
 	var logo := HBoxContainer.new()
 	logo.add_theme_constant_override("separation", 14)
-	logo.add_child(UiTheme.title("ARENA", 64, Color.WHITE))
+	logo.add_child(UiTheme.title("TPS", 64, Color.WHITE))
 	var kana := UiTheme.label("ネオ江戸", 26, UiTheme.CYAN)
 	kana.add_theme_font_override("font", JapaneseFont.font())
 	logo.add_child(kana)
-	var tps := UiTheme.title("TPS", 64, UiTheme.CYAN)
-	tps.add_theme_constant_override("outline_size", 0)
-	logo.add_child(tps)
+	var arena := UiTheme.title("ARENA", 64, UiTheme.CYAN)
+	arena.add_theme_constant_override("outline_size", 0)
+	logo.add_child(arena)
 	box.add_child(logo)
 	box.add_child(UiTheme.label("MULTIJOUEUR  ·  CHACUN POUR SOI  ·  16 JOUEURS", 18, UiTheme.MAGENTA, true))
 	box.add_child(UiTheme.spacer(Vector2(0, 6)))
@@ -428,20 +428,27 @@ func _show_error(message: String, color := UiTheme.RED) -> void:
 
 
 ## Clé de chiffrement du fichier des identifiants : liée à cette machine.
-func _credentials_key() -> String:
+## `prefix` : "arena-tps" pour un fichier enregistré avant que le jeu ne s'appelle TPS Arena.
+func _credentials_key(prefix := "tps-arena") -> String:
 	var id := OS.get_unique_id()
-	return "arena-tps:" + (id if not id.is_empty() else OS.get_name())
+	return prefix + ":" + (id if not id.is_empty() else OS.get_name())
 
 
 ## Identifiants retenus ({identifier, password}), ou {} s'il n'y en a pas.
 func _load_credentials() -> Dictionary:
 	var cfg := ConfigFile.new()
+	var old_key := false
 	if cfg.load_encrypted_pass(REMEMBER_PATH, _credentials_key()) != OK:
-		return {}
+		if cfg.load_encrypted_pass(REMEMBER_PATH, _credentials_key("arena-tps")) != OK:
+			return {}
+		old_key = true
 	var identifier: String = cfg.get_value("compte", "identifiant", "")
 	if identifier.is_empty():
 		return {}
-	return {"identifier": identifier, "password": cfg.get_value("compte", "mot_de_passe", "")}
+	var password: String = cfg.get_value("compte", "mot_de_passe", "")
+	if old_key:
+		_save_credentials(identifier, password)     # réenregistré avec la nouvelle clé
+	return {"identifier": identifier, "password": password}
 
 
 func _save_credentials(identifier: String, password: String) -> void:

@@ -1,8 +1,8 @@
 # Jouer en ligne — guide complet
 
-Comment jouer à **Arena TPS** à plusieurs : **un PC lance le serveur dédié**
-(`ArenaTPS_Server`, sans fenêtre) et chaque joueur le rejoint avec **le jeu**
-(`ArenaTPS`, le client lourd exporté en `.exe`).
+Comment jouer à **TPS Arena** à plusieurs : **un PC lance le serveur dédié**
+(`TPSArena_Server`, sans fenêtre) et chaque joueur le rejoint avec **le jeu**
+(`TPSArena`, le client lourd exporté en `.exe`).
 
 Sommaire :
 
@@ -28,7 +28,7 @@ pour jouer, comme les autres.
 ```
                          PC serveur
                  ┌─────────────────────────┐
-                 │  ArenaTPS_Server        │
+                 │  TPSArena_Server        │
                  │  • arbitre tirs et vie  │
                  │  • compte les scores    │
                  │  • gère le chrono       │
@@ -37,7 +37,7 @@ pour jouer, comme les autres.
                               │ UDP 24567
         ┌─────────────────────┼─────────────────────┐
  ┌──────┴───────┐      ┌──────┴───────┐      ┌──────┴───────┐
- │ ArenaTPS     │      │ ArenaTPS     │      │ ArenaTPS     │
+ │ TPSArena     │      │ TPSArena     │      │ TPSArena     │
  │ • simule son │      │ • simule son │      │ • simule son │
  │   joueur     │      │   joueur     │      │   joueur     │
  │ • signale ses│      │ • signale ses│      │ • signale ses│
@@ -95,15 +95,15 @@ C'est environ 1 Go, à ne faire qu'une fois par version de Godot.
 Depuis la racine du dépôt :
 
 ```bash
-tools/build_client.sh all     # le jeu      -> build/windows/ArenaTPS.exe, build/linux/…
-tools/build_server.sh all     # le serveur  -> ../server/windows/ArenaTPS_Server.exe, ../server/linux/…
+tools/build_client.sh all     # le jeu      -> build/windows/TPSArena.exe, build/linux/…
+tools/build_server.sh all     # le serveur  -> ../server/windows/TPSArena_Server.exe, ../server/linux/…
 ```
 
 Ou dans Godot : **Projet → Exporter…**, choisir le préréglage, **Exporter le projet…**,
 en décochant « Exporter avec le débogage ».
 
 On obtient **un seul fichier** par plateforme, avec les ressources embarquées. Sous
-Windows, le serveur est aussi exporté en `ArenaTPS_Server.console.exe` : c'est celui-là
+Windows, le serveur est aussi exporté en `TPSArena_Server.console.exe` : c'est celui-là
 qu'on lance, pour voir sa console.
 
 > Le serveur et tous les jeux doivent avoir **exactement la même version**. Après
@@ -119,9 +119,9 @@ Sur le PC serveur, dans un terminal :
 
 ```bash
 # Windows
-ArenaTPS_Server.console.exe
+TPSArena_Server.console.exe
 # Linux
-./ArenaTPS_Server.x86_64
+./TPSArena_Server.x86_64
 ```
 
 Options (toutes facultatives) :
@@ -134,7 +134,7 @@ Options (toutes facultatives) :
 | `--map neo-edo` | neo-edo | map : `neo-edo` ou `hikari-mall` (le chef peut changer) |
 | `--max-players 16` | 16 | joueurs humains au plus par partie (1 à 16) |
 | `--bot-level moyen` | moyen | niveau des bots : `faible`, `moyen` ou `eleve` (le chef peut changer) |
-| `--name "Arena TPS"` | Arena TPS | nom du serveur |
+| `--name "TPS Arena"` | TPS Arena | nom du serveur |
 | `--serverlist-url http://…:8002` | (aucun : mode LAN) | branche le serveur sur le vrai back, avec la variable `GAME_SERVER_SECRET` |
 | `--public-address 1.2.3.4` | première adresse locale | adresse que la Server List donne aux joueurs |
 | `--region eu` | eu | région annoncée à la Server List |
@@ -150,8 +150,8 @@ Au démarrage, le serveur affiche les **adresses à donner aux joueurs**, par ex
 
 Si tous les PC sont sur le même Wi-Fi ou le même câble (salle de cours, appartement) :
 
-1. Le PC serveur lance `ArenaTPS_Server` (§3) et note une des adresses affichées.
-2. Chaque joueur lance `ArenaTPS`, se connecte avec « Jouer hors ligne » (le cadre
+1. Le PC serveur lance `TPSArena_Server` (§3) et note une des adresses affichées.
+2. Chaque joueur lance `TPSArena`, se connecte avec « Jouer hors ligne » (le cadre
    n'apparaît pas avec un vrai compte), saisit
    l'adresse dans le cadre **REJOINDRE PAR ADRESSE (LAN)** de la page JOUER, puis
    **REJOINDRE**.
@@ -221,18 +221,18 @@ C'est **le PC serveur** qui reçoit les connexions : c'est lui qui doit autorise
 l'UDP 24567. Les PC des joueurs n'ont rien à ouvrir.
 
 **Windows** : au premier lancement, Windows affiche une alerte « Autoriser
-ArenaTPS_Server à communiquer sur les réseaux ». Cocher **Réseaux privés** et autoriser.
+TPSArena_Server à communiquer sur les réseaux ». Cocher **Réseaux privés** et autoriser.
 Si l'alerte a été refusée, créer la règle à la main, dans un **PowerShell administrateur** :
 
 ```powershell
-New-NetFirewallRule -DisplayName "Arena TPS (UDP 24567)" -Direction Inbound `
+New-NetFirewallRule -DisplayName "TPS Arena (UDP 24567)" -Direction Inbound `
   -Protocol UDP -LocalPort 24567 -Action Allow -Profile Private
 ```
 
 Pour la retirer après la séance :
 
 ```powershell
-Remove-NetFirewallRule -DisplayName "Arena TPS (UDP 24567)"
+Remove-NetFirewallRule -DisplayName "TPS Arena (UDP 24567)"
 ```
 
 **Linux** : `sudo ufw allow 24567/udp` (Ubuntu) ou
@@ -262,7 +262,7 @@ arguments `--headless -- --server`.
 
 | Symptôme | Cause probable et solution |
 |---|---|
-| « Aucune réponse de … » (après 6 s) | Le **serveur** ne reçoit rien. Dans l'ordre : `ArenaTPS_Server` est-il lancé ? l'adresse est-elle une de celles qu'il affiche ? le pare-feu du PC serveur autorise-t-il l'**UDP 24567** (§7) ? |
+| « Aucune réponse de … » (après 6 s) | Le **serveur** ne reçoit rien. Dans l'ordre : `TPSArena_Server` est-il lancé ? l'adresse est-elle une de celles qu'il affiche ? le pare-feu du PC serveur autorise-t-il l'**UDP 24567** (§7) ? |
 | « Versions différentes : le serveur a la X, toi la Y » | Le serveur et le jeu ne viennent pas du même code. Réexporter **tout** en même temps. La version est affichée en bas du menu et au démarrage du serveur. |
 | « La partie est pleine (16 joueurs) » | Le maximum de joueurs est atteint (16, ou la valeur de `--max-players`). Attendre qu'une place se libère. |
 | « Ce compte est déjà connecté à ce serveur » | Le même compte est déjà dans la partie (deux jeux ouverts avec la même session ?). |
@@ -276,8 +276,8 @@ arguments `--headless -- --server`.
 joueur accepté ou refusé) est écrite dans la console du serveur et dans `reseau.log`
 (sur chaque machine) ; côté joueur, le chemin s'affiche avec l'erreur :
 
-- Windows : `%APPDATA%\Godot\app_userdata\Arena TPS\reseau.log`
-- Linux : `~/.local/share/godot/app_userdata/Arena TPS/reseau.log`
+- Windows : `%APPDATA%\Godot\app_userdata\TPS Arena\reseau.log`
+- Linux : `~/.local/share/godot/app_userdata/TPS Arena/reseau.log`
 
 Si le serveur n'affiche **aucune ligne « connexion du pair »** alors qu'un joueur a
 essayé, les paquets n'arrivent pas jusqu'à lui : c'est le pare-feu du PC serveur (ou

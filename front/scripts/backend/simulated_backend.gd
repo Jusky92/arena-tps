@@ -21,6 +21,12 @@ var _rng := RandomNumberGenerator.new()
 var _pending_username := ""
 ## Identifiants factices stables par pseudo, pour que les listes restent cohérentes.
 var _ids := {}
+## Numéro du prochain message factice entre amis.
+var _next_message_id := 1
+
+## Réponses factices des amis et des membres du groupe.
+const REPLIES := ["gg", "On lance une partie ?", "J'arrive dans 2 min", "ok", "Tu joues quel spécialiste ?",
+	"La map du mall est trop bien", "lol", "Je suis en train de régler mes touches", "go go go"]
 
 
 func setup(facade: Node) -> void:
@@ -273,6 +279,47 @@ func set_party_class(class_id: String) -> Dictionary:
 
 func launch_party(_settings: Dictionary) -> Dictionary:
 	return _err(ONLINE_ONLY)
+
+
+# =========================================================================== chat
+# Hors ligne, rien ne part : le message est ajouté tout de suite, et un ami en
+# ligne (ou un membre du groupe) répond quelque chose au hasard.
+
+func send_friend_message(friend_id: String, text: String) -> Dictionary:
+	b._add_chat(friend_id, _message(b.user_id(), text))
+	var friend: Array = b.friends.filter(func(f): return f.user_id == friend_id and f.status == "online")
+	if not friend.is_empty():
+		_reply_later(friend_id, friend_id)
+	return _ok()
+
+
+func send_party_message(_party_id: String, text: String) -> Dictionary:
+	b._add_chat(b.PARTY_CHANNEL, _message(b.user_id(), text, false))
+	var others: Array = b.party.get("members", []).filter(func(m): return m.user_id != b.user_id())
+	if not others.is_empty():
+		_reply_later(b.PARTY_CHANNEL, others[_rng.randi() % others.size()].user_id)
+	return _ok()
+
+
+func load_conversation(_friend_id: String) -> Dictionary:
+	await _latency()
+	return _ok()
+
+
+func load_party_chat(_party_id: String) -> void:
+	pass
+
+
+func _reply_later(channel: String, from: String) -> void:
+	await get_tree().create_timer(_rng.randf_range(1.0, 3.0)).timeout
+	if b.is_logged_in():
+		b._add_chat(channel, _message(from, REPLIES[_rng.randi() % REPLIES.size()], channel != b.PARTY_CHANNEL))
+
+
+func _message(from: String, text: String, with_id := true) -> Dictionary:
+	var id := str(_next_message_id) if with_id else ""
+	_next_message_id += 1
+	return {"id": id, "from_user_id": from, "body": text, "at": Time.get_datetime_string_from_system(true)}
 
 
 # =========================================================================== serveurs publics

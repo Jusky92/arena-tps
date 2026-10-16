@@ -7,7 +7,9 @@ extends Control
 ##   STATISTIQUES  stats et succès du joueur, classements (XP, victoires, éliminations)
 ##   PARAMÈTRES    roue crantée de la barre du haut : son, souris, touches (SettingsPanel)
 ##   AMIS          tiroir à droite (bouton sous la barre de navigation) : présence,
-##                 demandes d'ami, ajout, invitation dans le groupe
+##                 demandes d'ami, ajout, invitation dans le groupe, « Écrire »
+##   CHAT          panneau en bas à gauche (bouton CHAT) : groupe et conversations
+##                 avec les amis (ChatPanel)
 ## Toutes les données viennent de l'autoload Backend (vrai back, ou simulé hors ligne).
 ##
 ## Lancer une partie en ligne : le chef du groupe (ou un joueur seul) clique LANCER EN
@@ -48,6 +50,8 @@ var _lineup_key := ""
 var _selected_member := ""
 var _drawer: PanelContainer
 var _drawer_tween: Tween
+var _chat_button: Button
+var _chat_panel: ChatPanel
 
 const DRAWER_WIDTH := 340.0
 ## Largeurs de la page JOUER, en unités de l'interface (base 1280×720, agrandie à l'écran).
@@ -64,6 +68,10 @@ const LINEUP_HEIGHT := 300
 const DRAWER_MARGIN := 24.0
 ## Tiroir d'amis ouvert ou fermé, gardé d'un écran à l'autre (choix de classe, partie).
 static var _drawer_open := false
+## Panneau de chat ouvert ou fermé, gardé d'un écran à l'autre.
+static var _chat_open := false
+## Taille du panneau de chat, en unités de l'interface.
+const CHAT_SIZE := Vector2(440, 380)
 ## Réglages du panneau « Partie solo » (affichés à côté des curseurs).
 var _solo_bots_label: Label
 var _solo_duration_label: Label
@@ -104,6 +112,16 @@ func _ready() -> void:
 	_drawer = _build_social_panel()
 	body.add_child(_drawer)
 	_set_drawer(_drawer_open and not Backend.is_simulated(), false)
+	_chat_panel = ChatPanel.new()
+	_chat_panel.anchor_top = 1.0
+	_chat_panel.anchor_bottom = 1.0
+	_chat_panel.offset_left = DRAWER_MARGIN
+	_chat_panel.offset_right = DRAWER_MARGIN + CHAT_SIZE.x
+	_chat_panel.offset_bottom = -10
+	_chat_panel.offset_top = -10 - CHAT_SIZE.y
+	_chat_panel.close_requested.connect(_set_chat.bind(false))
+	body.add_child(_chat_panel)
+	_set_chat(_chat_open and not Backend.is_simulated())
 	root.add_child(_build_bottom_bar())
 
 	Backend.party_changed.connect(_refresh_party)
@@ -114,6 +132,9 @@ func _ready() -> void:
 	Backend.session_lost.connect(_on_session_lost)
 	Backend.services_changed.connect(_refresh_services)
 	Backend.toast.connect(_show_toast)
+	Backend.chat_changed.connect(func(_channel: String) -> void:
+		_update_chat_button()
+		_refresh_friends())     # messages non lus sur les boutons « Écrire »
 	Net.joined.connect(_on_net_joined)
 	Net.connection_failed.connect(_on_net_failed)
 	_refresh_profile()
@@ -137,11 +158,11 @@ func _build_top_bar() -> Control:
 
 	var logo := HBoxContainer.new()
 	logo.add_theme_constant_override("separation", 6)
-	logo.add_child(UiTheme.title("ARENA", 24, Color.WHITE))
+	logo.add_child(UiTheme.title("TPS", 24, Color.WHITE))
 	var kana := UiTheme.label("ネオ江戸", 16, UiTheme.CYAN)
 	kana.add_theme_font_override("font", JapaneseFont.font())
 	logo.add_child(kana)
-	logo.add_child(UiTheme.title("TPS", 24, UiTheme.CYAN))
+	logo.add_child(UiTheme.title("ARENA", 24, UiTheme.CYAN))
 	row.add_child(logo)
 
 	var pages := [["JOUER", "play"], ["SPÉCIALISTES", "specialists"], ["CLASSES", "classes"]]
@@ -210,6 +231,13 @@ func _build_friends_toggle() -> Control:
 	buttons.add_theme_constant_override("separation", 10)
 	buttons.alignment = BoxContainer.ALIGNMENT_END
 	row.add_child(buttons)
+	_chat_button = UiTheme.button("CHAT", false, UiTheme.CYAN, 40)
+	_chat_button.toggle_mode = true
+	_chat_button.custom_minimum_size.x = 160
+	_chat_button.tooltip_text = "Chat du groupe et conversations avec tes amis"
+	_chat_button.toggled.connect(_set_chat)
+	buttons.add_child(_chat_button)
+	buttons.add_child(UiTheme.spacer(Vector2.ZERO, true))     # CHAT à gauche, le reste à droite
 	# Pas de groupe par défaut : on en crée un ici (page JOUER), ou en invitant un ami.
 	_party_button = UiTheme.button("CRÉER UN GROUPE", false, UiTheme.CYAN, 40)
 	_party_button.custom_minimum_size.x = 240
@@ -249,6 +277,32 @@ func _set_drawer(open: bool, animate := true) -> void:
 	_drawer_tween.tween_property(_drawer, "offset_right", left + DRAWER_WIDTH, 0.22)
 	if not open:
 		_drawer_tween.chain().tween_callback(func() -> void: _drawer.visible = false)
+
+
+## Ouvre ou ferme le panneau de chat (en bas à gauche, par-dessus la page).
+func _set_chat(open: bool) -> void:
+	_chat_open = open
+	if is_instance_valid(_chat_panel):
+		_chat_panel.visible = open
+	_update_chat_button()
+
+
+## Ouvre le chat sur la conversation avec un ami (bouton « Écrire »).
+func _open_chat(friend_id: String) -> void:
+	_set_chat(true)
+	_chat_panel.show_channel(friend_id)
+
+
+## Texte du bouton : messages non lus en magenta.
+func _update_chat_button() -> void:
+	if not is_instance_valid(_chat_button):
+		return
+	_chat_button.set_pressed_no_signal(_chat_open)
+	var unread := Backend.unread_total()
+	_chat_button.text = "CHAT  ·  %d" % unread if unread > 0 else "CHAT"
+	var accent := UiTheme.MAGENTA if unread > 0 else Color.WHITE
+	for state in ["font_color", "font_hover_color", "font_pressed_color"]:
+		_chat_button.add_theme_color_override(state, accent)
 
 
 ## Texte du bouton : amis en ligne, et demandes reçues en magenta.
@@ -812,7 +866,7 @@ func _join_online() -> void:
 	Sfx.ui("ui_click")
 	var address := _address_field.text.strip_edges()
 	if address.is_empty():
-		_online_error.text = "Entre l'adresse du serveur (celle affichée par ArenaTPS_Server)."
+		_online_error.text = "Entre l'adresse du serveur (celle affichée par TPSArena_Server)."
 		return
 	var port := Net.DEFAULT_PORT
 	if address.contains(":"):
@@ -1298,6 +1352,14 @@ func _friend_row(f: Dictionary) -> Control:
 				if not r.ok:
 					_show_toast(r.message))
 			row.add_child(invite)
+	var write := Button.new()
+	var unread: int = Backend.unread.get(f.user_id, 0)
+	write.text = "Écrire · %d" % unread if unread > 0 else "Écrire"
+	write.tooltip_text = "Envoyer un message (il l'aura à sa prochaine connexion s'il est hors ligne)"
+	if unread > 0:
+		write.add_theme_color_override("font_color", UiTheme.MAGENTA)
+	write.pressed.connect(_open_chat.bind(f.user_id))
+	row.add_child(write)
 	var remove := Button.new()
 	remove.text = "⋯"
 	remove.flat = true

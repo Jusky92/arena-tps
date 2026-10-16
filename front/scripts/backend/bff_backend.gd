@@ -13,6 +13,15 @@ const PUT := HTTPClient.METHOD_PUT
 const DELETE := HTTPClient.METHOD_DELETE
 const TOKEN_ERRORS := ["invalid_token", "token_expired", "not_authenticated"]
 const PSEUDO_REGEX := "^[A-Za-z0-9_]{3,20}$"
+## Erreurs du chat renvoyées par Real-time sur le WebSocket (sans lien avec la requête :
+## on les affiche telles quelles).
+const CHAT_ERRORS := {
+	"rate_limited": "Tu envoies trop de messages : attends quelques secondes.",
+	"not_friends": "Tu ne peux écrire qu'à tes amis.",
+	"not_in_party": "Tu n'es plus dans ce groupe.",
+	"invalid_body": "Un message fait de 1 à 500 caractères.",
+	"invalid_recipient": "Destinataire inconnu.",
+}
 
 var b: Node                      # la façade (autoload Backend)
 var _api: ApiClient
@@ -25,6 +34,10 @@ var _refreshing := false
 var _presence := {}
 ## Version du dernier état de groupe appliqué (party.updated peut arriver dans le désordre).
 var _party_version := -1
+## Groupe dont on attend l'historique du chat. Real-time apprend qu'on est membre par
+## l'événement party.updated : une demande trop tôt est refusée (not_in_party), on la
+## refait à la notification party.updated.
+var _party_history_wanted := ""
 
 signal _refresh_done(ok: bool)
 
@@ -140,6 +153,7 @@ func logout() -> void:
 	_refresh = ""
 	_presence = {}
 	_party_version = -1
+	_party_history_wanted = ""
 	_refresh_timer.stop()
 	_rt.close()
 
@@ -441,6 +455,54 @@ func get_join_ticket(server_id: String) -> Dictionary:
 	return {"ok": true, "address": r.data.address, "port": int(r.data.port), "ticket": r.data.ticket}
 
 
+# =========================================================================== chat
+# Messages entre amis et chat de groupe : WebSocket Real-time (PROTOCOL.md) ;
+# historique entre amis : GET /conversations/{friendId}/messages (BFF).
+
+func send_friend_message(friend_id: String, text: String) -> Dictionary:
+	if not _rt.is_connected_to_service():
+		return _err("Chat indisponible : connexion au service temps réel en cours.")
+	_rt.send({"type": "friend_message", "to": friend_id, "body": text, "client_id": Uuid.v4()})
+	return {"ok": true, "error": "", "message": ""}
+
+
+func send_party_message(party_id: String, text: String) -> Dictionary:
+	if not _rt.is_connected_to_service():
+		return _err("Chat indisponible : connexion au service temps réel en cours.")
+	_rt.send({"type": "party_message", "party_id": party_id, "body": text})
+	return {"ok": true, "error": "", "message": ""}
+
+
+## Les 50 derniers messages avec cet ami.
+func load_conversation(friend_id: String) -> Dictionary:
+	var r := await _call(GET, "/conversations/%s/messages?limit=50" % friend_id)
+	if r.ok:
+		var list := []
+		for m in r.data.get("messages", []):
+			list.append(_friend_chat(m))
+		b._set_chat(friend_id, list)
+	return r
+
+
+## Demande l'historique du chat du groupe (réponse : party_history).
+func load_party_chat(party_id: String) -> void:
+	_party_history_wanted = party_id
+	_rt.send({"type": "party_history", "party_id": party_id})
+
+
+static func _friend_chat(m: Dictionary) -> Dictionary:
+	return {"id": str(m.id), "from_user_id": m.from_user_id, "body": m.body, "at": m.created_at}
+
+
+static func _party_chat(m: Dictionary) -> Dictionary:
+	return {"id": "", "from_user_id": m.from_user_id, "body": m.body, "at": m.sent_at}
+
+
+func _on_friend_message(m: Dictionary) -> void:
+	var other: String = m.to_user_id if m.from_user_id == b.user_id() else m.from_user_id
+	b._add_chat(other, _friend_chat(m))
+
+
 # =========================================================================== temps réel
 
 func _on_realtime(data: Dictionary) -> void:
@@ -449,13 +511,31 @@ func _on_realtime(data: Dictionary) -> void:
 			for p in data.get("friends", []):
 				_presence[p.user_id] = {"status": p.status, "activity": p.get("activity")}
 			_apply_presence()
+			# Reconnexion : des messages du groupe ont pu être manqués.
+			if not b.party.is_empty():
+				load_party_chat(b.party.party_id)
 		"presence":
 			_presence[data.user_id] = {"status": data.status, "activity": data.get("activity")}
 			_apply_presence()
 		"notification":
 			_on_notification(str(data.get("event", "")), data.get("data", {}))
+		"friend_message", "friend_message_sent":
+			_on_friend_message(data.message)
+		"party_message":
+			if data.message.party_id == b.party.get("party_id"):
+				b._add_chat(b.PARTY_CHANNEL, _party_chat(data.message))
+		"party_history":
+			if data.party_id == b.party.get("party_id"):
+				_party_history_wanted = ""
+				b._set_chat(b.PARTY_CHANNEL, data.messages.map(func(m): return _party_chat(m)))
 		"error":
-			push_warning("Real-time : %s (%s)" % [data.get("error"), data.get("message")])
+			var code := str(data.get("error"))
+			push_warning("Real-time : %s (%s)" % [code, data.get("message")])
+			# Historique demandé trop tôt : Real-time ne nous sait pas encore membre.
+			if code == "not_in_party" and not _party_history_wanted.is_empty():
+				return
+			if CHAT_ERRORS.has(code):
+				b.toast.emit(CHAT_ERRORS[code])
 
 
 ## Met à jour la présence dans la liste d'amis déjà chargée.
@@ -490,6 +570,8 @@ func _on_notification(event: String, data: Dictionary) -> void:
 					b.party = {}
 					b.party_changed.emit()
 				return
+			if data.party_id == _party_history_wanted:
+				load_party_chat(data.party_id)
 			if data.party_id == b.party.get("party_id") and int(data.get("version", 0)) <= _party_version:
 				return
 			_reload_party(data.party_id)

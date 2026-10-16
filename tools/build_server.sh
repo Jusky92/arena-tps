@@ -32,11 +32,11 @@ export_one() {
 }
 
 case "$TARGET" in
-	windows) export_one "Serveur Windows" "$OUT/windows/ArenaTPS_Server.exe" ;;
-	linux)   export_one "Serveur Linux"   "$OUT/linux/ArenaTPS_Server.x86_64" ;;
+	windows) export_one "Serveur Windows" "$OUT/windows/TPSArena_Server.exe" ;;
+	linux)   export_one "Serveur Linux"   "$OUT/linux/TPSArena_Server.x86_64" ;;
 	all)
-		export_one "Serveur Windows" "$OUT/windows/ArenaTPS_Server.exe"
-		export_one "Serveur Linux"   "$OUT/linux/ArenaTPS_Server.x86_64"
+		export_one "Serveur Windows" "$OUT/windows/TPSArena_Server.exe"
+		export_one "Serveur Linux"   "$OUT/linux/TPSArena_Server.x86_64"
 		;;
 	*)
 		echo "Cible inconnue : $TARGET (attendu : windows, linux ou all)" >&2
@@ -45,6 +45,6 @@ case "$TARGET" in
 esac
 
 echo
-echo "Terminé. Sur le PC serveur, lance ArenaTPS_Server (sous Windows : ArenaTPS_Server.console.exe"
+echo "Terminé. Sur le PC serveur, lance TPSArena_Server (sous Windows : TPSArena_Server.console.exe"
 echo "pour voir la console). Options : --port 24567 --bots 2 --duration 180"
 echo "Les joueurs le rejoignent avec REJOINDRE. Voir docs/RESEAU.md."

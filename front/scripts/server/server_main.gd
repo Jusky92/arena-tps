@@ -13,7 +13,7 @@ extends Node
 ##
 ## Arguments (tous facultatifs) :
 ##   --port 24567                      port UDP d'écoute
-##   --name "Arena TPS"                nom du serveur (liste des serveurs)
+##   --name "TPS Arena"                nom du serveur (liste des serveurs)
 ##   --public-address 1.2.3.4          adresse que la Server List donne aux joueurs
 ##   --region eu                       région annoncée à la Server List
 ##   --bots 2 --duration 180           réglages des parties (modifiables par le chef en LAN ;
@@ -70,7 +70,7 @@ func _ready() -> void:
 		_fail(error)
 		return
 	error = await _link.start({
-		"name": args.get("name", "Arena TPS"),
+		"name": args.get("name", "TPS Arena"),
 		"address": args.get("public-address", _first_address()),
 		"port": port,
 		"region": args.get("region", "eu"),
@@ -104,7 +104,7 @@ func _ready() -> void:
 	_heartbeat()
 
 	print("")
-	print("=== Arena TPS — serveur dédié (version %s) ===" % Backend.BUILD_VERSION)
+	print("=== TPS Arena — serveur dédié (version %s) ===" % Backend.BUILD_VERSION)
 	print("Map : %s (%s), %d joueurs maximum." % [MapCatalog.name_of(map_id), map_id, Net.max_players])
 	if _link.is_lan():
 		print("Mode LAN. Les joueurs se connectent avec REJOINDRE et une de ces adresses :")

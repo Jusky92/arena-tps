@@ -31,13 +31,13 @@ export_one() {
 }
 
 case "$TARGET" in
-	windows) export_one "Windows" "$ROOT/build/windows/ArenaTPS.exe" ;;
-	linux)   export_one "Linux"   "$ROOT/build/linux/ArenaTPS.x86_64" ;;
-	macos)   export_one "macOS"   "$ROOT/build/macos/ArenaTPS.zip" ;;
+	windows) export_one "Windows" "$ROOT/build/windows/TPSArena.exe" ;;
+	linux)   export_one "Linux"   "$ROOT/build/linux/TPSArena.x86_64" ;;
+	macos)   export_one "macOS"   "$ROOT/build/macos/TPSArena.zip" ;;
 	all)
-		export_one "Windows" "$ROOT/build/windows/ArenaTPS.exe"
-		export_one "Linux"   "$ROOT/build/linux/ArenaTPS.x86_64"
-		export_one "macOS"   "$ROOT/build/macos/ArenaTPS.zip"
+		export_one "Windows" "$ROOT/build/windows/TPSArena.exe"
+		export_one "Linux"   "$ROOT/build/linux/TPSArena.x86_64"
+		export_one "macOS"   "$ROOT/build/macos/TPSArena.zip"
 		;;
 	*)
 		echo "Cible inconnue : $TARGET (attendu : windows, linux, macos ou all)" >&2
