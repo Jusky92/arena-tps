@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**Arena TPS** — a 3D third-person multiplayer deathmatch shooter (up to 16 players, free-for-all, filled with bots) with two maps: "NEO-EDO", a Japanese district mixing a traditional temple area with Tokyo neon, and "Hikari Mall", an abandoned two-level shopping mall at dusk. The project is the practical support for a **micro-services architecture** course assignment.
+**TPS Arena** — a 3D third-person multiplayer deathmatch shooter (up to 16 players, free-for-all, filled with bots) with two maps: "NEO-EDO", a Japanese district mixing a traditional temple area with Tokyo neon, and "Hikari Mall", an abandoned two-level shopping mall at dusk. The project is the practical support for a **micro-services architecture** course assignment.
 
 Built by two people on separate, independent tracks:
 - **`front/`** — the Godot 4.7.2 project. It holds **both the game client and the dedicated game server** (one project, two exports). Julien's responsibility for the client; the server side (`scripts/server/`) is where it meets Elian's backend.
@@ -23,7 +23,7 @@ There is no build system, package manager, or test runner in this repo — it's 
 ```bash
 tools/build_client.sh            # Windows build (default)
 tools/build_client.sh linux
-tools/build_client.sh macos      # build/macos/ArenaTPS.zip, universal, ad-hoc signed (not notarized)
+tools/build_client.sh macos      # build/macos/TPSArena.zip, universal, ad-hoc signed (not notarized)
 tools/build_client.sh all        # all three
 ```
 Requires `godot` on PATH (or `GODOT=/path/to/godot`) and export templates installed once in the editor. Output goes to `build/` (gitignored).
@@ -56,8 +56,8 @@ This split exists so the dedicated server can later drive the simulation from co
 
 ### Back-end access (`Backend` autoload)
 
-`front/scripts/backend/backend.gd` is a facade, the only thing screens talk to. It keeps the shared state (`user`, `party` with each member's `class_id`, sent with `sync_party_class()` so the play page shows every member's character, `friends`, `incoming`/`outgoing` friend requests, `invites`) and its signals (`party_changed`, `friends_changed`, `invites_changed`, `match_ready`, `session_lost`, `services_changed`, `toast`). It delegates to one of two implementations with the same functions and the same data shapes:
-- `bff_backend.gd` is the real backend: HTTP to the BFF (`http://<host>:8000`) through `scripts/shared/api_client.gd`, and a WebSocket to Real-time (`ws://<host>:8005/ws`) through `realtime_client.gd` for presence and notifications (`party.invite_sent`, `party.updated`, `party.match_ready`, `friend.*`, `progress.*`). Tokens are kept in memory only. The access token is refreshed 60 s before expiry, or once on a 401, then re-sent to Real-time.
+`front/scripts/backend/backend.gd` is a facade, the only thing screens talk to. It keeps the shared state (`user`, `party` with each member's `class_id`, sent with `sync_party_class()` so the play page shows every member's character, `friends`, `incoming`/`outgoing` friend requests, `invites`, and the chat: `chats` per channel, `PARTY_CHANNEL` or a friend's `user_id`, with `unread` counts) and its signals (`party_changed`, `friends_changed`, `invites_changed`, `match_ready`, `session_lost`, `services_changed`, `toast`, `chat_changed`). It delegates to one of two implementations with the same functions and the same data shapes:
+- `bff_backend.gd` is the real backend: HTTP to the BFF (`http://<host>:8000`) through `scripts/shared/api_client.gd`, and a WebSocket to Real-time (`ws://<host>:8005/ws`) through `realtime_client.gd` for presence, notifications (`party.invite_sent`, `party.updated`, `party.match_ready`, `friend.*`, `progress.*`) and the menu chat (`friend_message`, `party_message`, `party_history`; friend history over HTTP, `GET /conversations/{id}/messages`). The menu shows it in `ChatPanel` (`scripts/ui/chat_panel.gd`, CHAT button and each friend's « Écrire »). Tokens are kept in memory only. The access token is refreshed 60 s before expiry, or once on a 401, then re-sent to Real-time.
 - `simulated_backend.gd` is "Jouer hors ligne" on the login screen: no network, fake data. Online launch and public servers return an error there; you play LAN by IP (the main menu shows the join-by-address box only in this mode).
 
 The mode and the backend host (typed on the login screen) are saved in `user://reseau.cfg`. Players log in with their email **or** their username (`identifier`); an unverified account that logged in by username is asked for its email on the code screen. Functions are `await`ed and return `{ok, error, message, …}`. `error` is the backend's error code (API contract), and `ApiClient.ERROR_MESSAGES` maps it to French. When adding a backend feature, add it to both implementations and the facade.
@@ -80,6 +80,7 @@ Online flow: the party leader clicks LANCER EN LIGNE, which calls `Backend.launc
 - **Identity**: the handshake (`_hello`) carries the player's `user_id` (`Backend.user_id()`), a join ticket (empty in LAN) and `BUILD_VERSION`. The server refuses a different version, a human player beyond `Net.max_players` (16 by default, `--max-players`), or an account already connected. Players can join a match in progress (a bot gives up its slot if needed).
 - **LAN lobby**: the first accepted player is the leader (`Net.leader_id`, reassigned when they leave). Only the leader can change bots/duration/map/bot level (`request_settings`, stored in `Net.settings`) and start (`request_start`); the server checks it. On a server reserved by a party, the party leader has the same role (see "Server ↔ backend").
 - Bots have negative ids, are simulated only on the server, and are puppets on clients.
+- **Lobby and match chat**: `Net.send_chat` → the server checks length and rate (`CHAT_RATE` per `CHAT_WINDOW`) and relays `push_chat` with the author's name; never stored, `Net.chat_log` is cleared on `leave()`. Shown by `MatchChat` (`scripts/ui/match_chat.gd`): docked in the lobby, an overlay above the HUD's health column in an online match, opened with the `chat` action (T / Enter); `game.gd` cuts the player's controls while typing (`_controls_free()`).
 
 ### Server ↔ backend (`BackendLink`)
 

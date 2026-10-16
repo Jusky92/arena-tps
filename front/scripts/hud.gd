@@ -132,6 +132,11 @@ func _build_invisibility_indicator() -> void:
 
 
 ## Relie le HUD à un joueur (appelé par la scène de jeu).
+## Haut de la colonne en bas à gauche (vie, capacité), en pixels : le chat se pose dessus.
+func bottom_left_top() -> float:
+	return ($Root/BottomLeft as Control).global_position.y
+
+
 func bind(player: Node) -> void:
 	if _player and is_instance_valid(_player):
 		for pair in [["health_changed", _on_health_changed], ["damaged", _on_damaged],

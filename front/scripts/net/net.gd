@@ -1,8 +1,8 @@
 extends Node
 ## Multijoueur en ligne (autoload "Net"), commun au client et au serveur dédié.
 ##
-##   SERVEUR DÉDIÉ (ArenaTPS_Server, sans fenêtre) = serveur ENet, ne joue pas.
-##   CLIENTS (ArenaTPS)                            = se connectent au serveur par IP.
+##   SERVEUR DÉDIÉ (TPSArena_Server, sans fenêtre) = serveur ENet, ne joue pas.
+##   CLIENTS (TPSArena)                            = se connectent au serveur par IP.
 ##
 ## Le même fichier tourne des deux côtés : Godot exige que les fonctions @rpc
 ## existent, à l'identique, sur le même nœud (/root/Net) chez tout le monde.
@@ -32,11 +32,15 @@ extends Node
 ##
 ## Protocole (toutes les fonctions marquées @rpc) :
 ##   client -> serveur  hello, set_loadout, request_settings, request_start, state,
-##                      fire, reload, hit, fire_projectile, use_super, use_ability
+##                      fire, reload, hit, fire_projectile, use_super, use_ability, chat
 ##   (serveur -> clients aussi : projectile, explosion, effect, pickup, pickups,
 ##    special, aura)
 ##   serveur -> clients refuse, lobby, start_match, player_joined, player_left,
-##                      states, health, hit, death, respawn, match_over
+##                      states, health, hit, death, respawn, match_over, chat
+##
+## Chat du salon et de la partie : le client envoie son texte (chat), le serveur le
+## vérifie (longueur, cadence) et le relaie à tous avec le pseudo de l'auteur
+## (push_chat). Rien n'est enregistré : il disparaît avec la connexion.
 ##
 ## Tirs : le client annonce chaque tir (fire) et chaque rechargement (reload), puis
 ## seulement « j'ai touché telle cible, à tel endroit, avec telle arme » (hit). Le
@@ -81,6 +85,8 @@ signal legendary(phase: int, position: Vector3, time_left: float)
 signal player_accepted(peer_id: int)
 ## Serveur : le chef demande le lancement.
 signal start_requested
+## Message du chat du salon et de la partie (voir send_chat), relayé par le serveur.
+signal chat_received(line: Dictionary)
 
 const DEFAULT_PORT := 24567
 ## Joueurs humains par partie (max_players de la Server List). Le serveur dédié peut
@@ -90,9 +96,16 @@ const STATE_HZ := 20.0                    ## envois d'état par seconde
 ## Au-delà de ce délai sans réponse, on abandonne (client) ou on coupe (serveur).
 const CONNECT_TIMEOUT := 6.0
 ## Journal réseau, utile pour comprendre un échec de connexion.
-## Windows : %APPDATA%\Godot\app_userdata\Arena TPS\reseau.log
-## Linux   : ~/.local/share/godot/app_userdata/Arena TPS/reseau.log
+## Windows : %APPDATA%\Godot\app_userdata\TPS Arena\reseau.log
+## Linux   : ~/.local/share/godot/app_userdata/TPS Arena/reseau.log
 const LOG_PATH := "user://reseau.log"
+## Chat : longueur maximale d'un message, et cadence (CHAT_RATE messages par
+## CHAT_WINDOW secondes et par joueur, au-delà le serveur les ignore).
+const CHAT_MAX_LENGTH := 200
+const CHAT_RATE := 5
+const CHAT_WINDOW := 5.0
+## Client : messages gardés pour l'affichage (le salon et la partie sont deux scènes).
+const CHAT_KEEP := 50
 
 ## true dès qu'on est en ligne (serveur ou client).
 var online := false
@@ -133,6 +146,9 @@ var frozen := false
 ## impacts : resolve_hit(cible, tireur, point relatif, arme), on_fire(tireur,
 ## emplacement) -> bool, on_reload(tireur, emplacement).
 var arbiter: Object = null
+## Client : derniers messages du chat, [{peer_id, name, text}] du plus ancien au plus
+## récent (CHAT_KEEP au plus). Vidé en quittant le serveur.
+var chat_log: Array = []
 
 var _peer: ENetMultiplayerPeer
 var _serving := false
@@ -143,6 +159,8 @@ var _connect_elapsed := -1.0
 var _target := ""
 ## Serveur : pairs connectés qui ne se sont pas encore présentés -> secondes écoulées.
 var _unidentified := {}
+## Serveur : heures (ms) des derniers messages de chaque joueur, pour la cadence du chat.
+var _chat_times := {}
 
 
 func _ready() -> void:
@@ -300,6 +318,8 @@ func leave() -> void:
 	players = {}
 	_last_state = {}
 	_unidentified = {}
+	_chat_times = {}
+	chat_log = []
 
 
 func player_name_of(peer_id: int) -> String:
@@ -391,6 +411,7 @@ func _on_peer_disconnected(id: int) -> void:
 		return
 	log_line("SERVEUR : %s est parti (pair %d)" % [player_name_of(id), id])
 	players.erase(id)
+	_chat_times.erase(id)
 	if leader_id == id:
 		leader_id = first_human()
 	remote_left.emit(id)
@@ -439,7 +460,7 @@ func _fail_connection() -> void:
 	leave()
 	connection_failed.emit(
 		("Aucune réponse de %s.\n" % target)
-		+ "1. Le serveur (ArenaTPS_Server) doit être lancé sur le PC serveur.\n"
+		+ "1. Le serveur (TPSArena_Server) doit être lancé sur le PC serveur.\n"
 		+ "2. L'adresse doit être une de celles affichées par le serveur au démarrage.\n"
 		+ ("3. Le pare-feu du PC serveur doit autoriser le port UDP %d (voir docs/RESEAU.md)." % DEFAULT_PORT))
 
@@ -693,6 +714,7 @@ func close_all(reason: String) -> void:
 			# que la déconnexion se termine (le départ est déjà compté).
 			players.erase(id)
 	leader_id = 0
+	_chat_times = {}
 
 
 var _close_reason := ""
@@ -716,6 +738,42 @@ func back_to_lobby() -> void:
 	log_line("SERVEUR : retour au salon")
 	lobby_changed.emit()
 	_send_lobby()
+
+
+# =========================================================================== chat
+
+## Client : envoie un message au chat du salon ou de la partie.
+func send_chat(text: String) -> void:
+	text = text.strip_edges().left(CHAT_MAX_LENGTH)
+	if online and not _serving and not text.is_empty():
+		_chat.rpc_id(1, text)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _chat(text: String) -> void:
+	var id := multiplayer.get_remote_sender_id()
+	if not _serving or not players.has(id):
+		return
+	text = text.strip_edges().left(CHAT_MAX_LENGTH)
+	if text.is_empty():
+		return
+	var now := Time.get_ticks_msec()
+	var recent: Array = _chat_times.get(id, []).filter(func(t: int) -> bool: return now - t < CHAT_WINDOW * 1000.0)
+	if recent.size() >= CHAT_RATE:
+		return
+	recent.append(now)
+	_chat_times[id] = recent
+	push_chat.rpc(id, player_name_of(id), text)
+
+
+## Serveur -> clients : un message du chat (le pseudo voyage avec : l'auteur a pu partir).
+@rpc("authority", "call_remote", "reliable")
+func push_chat(peer_id: int, name: String, text: String) -> void:
+	var line := {"peer_id": peer_id, "name": name, "text": text}
+	chat_log.append(line)
+	if chat_log.size() > CHAT_KEEP:
+		chat_log = chat_log.slice(-CHAT_KEEP)
+	chat_received.emit(line)
 
 
 # =========================================================================== en partie

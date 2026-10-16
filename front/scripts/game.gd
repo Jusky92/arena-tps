@@ -16,6 +16,9 @@ extends Node3D
 ## (bots, futurs joueurs en ligne) ; seul le joueur local perd le contrôle de son
 ## personnage. Depuis ce menu, il peut changer de classe pour sa prochaine apparition.
 ##
+## En ligne, la touche du chat (Inputs « chat », T ou Entrée) ouvre le chat de la partie
+## (MatchChat, relayé par le serveur) : le joueur lâche ses commandes pendant la saisie.
+##
 ## Chaque apparition donne quelques secondes de protection (voir player.gd).
 ##
 ## La map est une scène à part (scenes/maps/) : le serveur dédié charge exactement
@@ -59,6 +62,9 @@ var _net_nodes := {}                    # identifiant réseau -> personnage
 ## < 0 = déjà passée ou aucune), cinématique en cours.
 var _legendary_at := -1.0
 var _cinematic: LegendaryCinematic
+## En ligne : chat de la partie, en bas à gauche au-dessus de la vie (null hors ligne).
+var _chat: MatchChat
+var _chat_layer: CanvasLayer
 
 
 func _ready() -> void:
@@ -91,6 +97,7 @@ func _ready() -> void:
 		pickups.players_provider = func() -> Array: return players
 		pickups.picked.connect(_on_pickup_offline)
 	if _online:
+		_add_chat()
 		_start_online_match()
 	else:
 		player = _spawn_player(GameState.selected_class, Backend.username(), true)
@@ -146,11 +153,14 @@ func _process(delta: float) -> void:
 				_ui.set_time(_time_left, rows[0].name, rows[0].kills)
 			if _time_left <= 0.0 and not _online:
 				_finish_match()
-		var show_board: bool = _running and not _pause.is_open() and Input.is_action_pressed("scoreboard")
+		var show_board: bool = _running and not _pause.is_open() and not _chat_typing() \
+			and Input.is_action_pressed("scoreboard")
 		_ui.show_scoreboard(_scoreboard_rows(), show_board, _server_subtitle())
 
 	if _pause.is_open():
 		_pause.set_info(_pause_info())
+	if _chat:
+		_place_chat()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -161,6 +171,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_pause.back()
 		elif _running or _mode == "training":
 			_open_pause()
+		get_viewport().set_input_as_handled()
+	elif _chat and _running and not _pause.is_open() and event.is_action_pressed("chat"):
+		_chat.open()
 		get_viewport().set_input_as_handled()
 	# Si la souris a été libérée (Alt+Tab…), un clic la recapture.
 	elif event is InputEventMouseButton and event.pressed and not _pause.is_open() \
@@ -181,6 +194,41 @@ func _go_to_menu() -> void:
 	if Net.online:
 		Net.leave()
 	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+
+
+# ---------------------------------------------------------------- Chat
+
+func _add_chat() -> void:
+	_chat_layer = CanvasLayer.new()
+	_chat_layer.layer = 6                # au-dessus du HUD, sous le menu pause
+	add_child(_chat_layer)
+	_chat = MatchChat.new()
+	_chat.overlay = true
+	_chat.anchor_top = 1.0
+	_chat.anchor_bottom = 1.0
+	_chat.offset_left = 24
+	_chat.offset_right = 24 + 420
+	_chat.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_chat_layer.add_child(_chat)
+	_chat.typing_changed.connect(func(_typing: bool) -> void:
+		if is_instance_valid(player) and _running:
+			player.input_enabled = _controls_free())
+
+
+## Juste au-dessus de la colonne de vie du HUD, qui change de hauteur avec les bonus.
+func _place_chat() -> void:
+	_chat_layer.visible = hud.visible and (_running or _chat.is_typing())
+	_chat.offset_bottom = hud.bottom_left_top() - get_viewport().get_visible_rect().size.y - 12
+	_chat.offset_top = _chat.offset_bottom - _chat.get_combined_minimum_size().y
+
+
+func _chat_typing() -> bool:
+	return _chat != null and _chat.is_typing()
+
+
+## Le joueur local peut-il se servir de ses commandes ? (ni pause, ni saisie, ni cinématique)
+func _controls_free() -> bool:
+	return not _pause.is_open() and not _chat_typing() and not is_instance_valid(_cinematic)
 
 
 # ---------------------------------------------------------------- Menu pause
@@ -253,7 +301,7 @@ func _replace_local_player(cls: ClassData) -> void:
 	fresh.kills = old.kills
 	fresh.deaths = old.deaths
 	fresh.best_streak = old.best_streak
-	fresh.input_enabled = not _pause.is_open()
+	fresh.input_enabled = _controls_free()
 	player = fresh
 	_bind_player(fresh)
 	hud.hide_death()
@@ -419,7 +467,7 @@ func _replace_net_player(peer_id: int, class_id: String) -> CharacterBody3D:
 	var fresh := _spawn_net_player(peer_id)
 	if peer_id == Net.my_id():
 		player = fresh
-		fresh.input_enabled = not _pause.is_open()
+		fresh.input_enabled = _controls_free()
 		_bind_player(fresh)
 	return fresh
 
@@ -583,6 +631,9 @@ func _server_subtitle() -> String:
 func _finish_match() -> void:
 	_running = false
 	_time_left = 0.0
+	if _chat:
+		_chat.close()
+		_chat_layer.visible = false      # le chat reprend dans le salon
 	if _pause.is_open():
 		_pause.close()
 		hud.visible = true
@@ -813,6 +864,8 @@ func _start_cinematic(position: Vector3, duration: float) -> void:
 		return
 	if _pause.is_open():
 		_pause.close()
+	if _chat:
+		_chat.close()
 	hud.visible = false
 	_ui.visible = false
 	if is_instance_valid(player):
@@ -832,7 +885,7 @@ func _end_cinematic(resume := true) -> void:
 	_cinematic = null
 	if is_instance_valid(player):
 		player.camera.make_current()
-		player.input_enabled = not _pause.is_open()
+		player.input_enabled = _controls_free()
 	hud.visible = true
 	_ui.visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED

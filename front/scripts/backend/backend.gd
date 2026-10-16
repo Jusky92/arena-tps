@@ -25,13 +25,21 @@ signal match_ready(info: Dictionary)
 signal services_changed
 ## Court message à afficher (demande d'ami reçue, niveau atteint…).
 signal toast(text: String)
+## Chat : les messages de `channel` (PARTY_CHANNEL ou l'user_id d'un ami) ont changé.
+signal chat_changed(channel: String)
 
 ## Doit être identique sur le jeu et le serveur dédié (vérifiée à la connexion),
 ## et sert à filtrer la liste des serveurs.
-const BUILD_VERSION := "0.14.0-alpha"
+const BUILD_VERSION := "1.0.0-beta"
 const BFF_PORT := 8000
 const REALTIME_PORT := 8005
 const CONFIG_PATH := "user://reseau.cfg"
+## Canal du chat de groupe ; les autres canaux sont les user_id des amis.
+const PARTY_CHANNEL := "party"
+## Longueur maximale d'un message (service Real-time).
+const CHAT_MAX_LENGTH := 500
+## Messages gardés par canal.
+const CHAT_KEEP := 200
 
 ## "bff" ou "simulated".
 var mode := "bff"
@@ -50,12 +58,22 @@ var incoming: Array = []
 var outgoing: Array = []
 ## Invitations dans un groupe reçues : [{invite_id, party_id, from_user_id, from_name}].
 var invites: Array = []
+## Chat : canal -> [{id, from_user_id, body, at}] du plus ancien au plus récent. `id`
+## est celui du message entre amis ("" dans le groupe), `at` une date ISO 8601 (UTC).
+## Messages entre amis : service Real-time, gardés 90 jours. Groupe : effacés avec lui.
+var chats := {}
+## Messages non lus par canal.
+var unread := {}
+## Canal affiché par le menu ("" = aucun) : ce qui y arrive est lu tout de suite.
+var chat_open := ""
 
 var _impl: Node
 ## Groupe créé par un lancement en ligne sans groupe : le joueur le quitte au retour au menu.
 var _solo_party_id := ""
 ## Envoi de notre classe au groupe en cours (un seul à la fois).
 var _class_sending := false
+## Groupe dont le chat est chargé : un autre groupe repart d'un chat vide.
+var _chat_party_id := ""
 
 
 func _ready() -> void:
@@ -65,6 +83,7 @@ func _ready() -> void:
 		mode = cfg.get_value("back", "mode", mode)
 	_set_impl()
 	party_changed.connect(sync_party_class)
+	party_changed.connect(_on_party_for_chat)
 
 
 ## Change de mode (et d'adresse pour le vrai back), retenu pour la prochaine fois.
@@ -178,6 +197,10 @@ func _clear() -> void:
 	incoming = []
 	outgoing = []
 	invites = []
+	chats = {}
+	unread = {}
+	chat_open = ""
+	_chat_party_id = ""
 	session_changed.emit()
 	party_changed.emit()
 	friends_changed.emit()
@@ -304,6 +327,105 @@ func leave_solo_party() -> void:
 	_solo_party_id = ""
 	if not id.is_empty() and party.get("party_id") == id and party.get("members", []).size() <= 1:
 		await leave_party()
+
+
+# =========================================================================== Chat
+
+## Envoie `text` sur `channel` (PARTY_CHANNEL ou l'user_id d'un ami) : {ok, message}.
+## Le message apparaît dans `chats` quand le service l'a accepté (chat_changed).
+func send_chat(channel: String, text: String) -> Dictionary:
+	text = text.strip_edges()
+	if text.is_empty():
+		return {"ok": false, "error": "", "message": "Le message est vide."}
+	if text.length() > CHAT_MAX_LENGTH:
+		return {"ok": false, "error": "", "message": "Un message fait %d caractères au plus." % CHAT_MAX_LENGTH}
+	if channel == PARTY_CHANNEL:
+		if party.is_empty():
+			return {"ok": false, "error": "", "message": "Tu n'as pas de groupe."}
+		return await _impl.send_party_message(party.party_id, text)
+	return await _impl.send_friend_message(channel, text)
+
+
+## Charge l'historique d'une conversation avec un ami (le groupe arrive tout seul).
+func load_chat(channel: String) -> Dictionary:
+	if channel == PARTY_CHANNEL:
+		return {"ok": true, "error": "", "message": ""}
+	return await _impl.load_conversation(channel)
+
+
+func mark_chat_read(channel: String) -> void:
+	if unread.get(channel, 0) > 0:
+		unread.erase(channel)
+		chat_changed.emit(channel)
+
+
+func unread_total() -> int:
+	var total := 0
+	for channel in unread:
+		total += unread[channel]
+	return total
+
+
+## Pseudo d'un joueur connu (soi, membres du groupe, amis), sinon « Un joueur ».
+func name_of(id: String) -> String:
+	if id == user_id():
+		return username()
+	for list in [party.get("members", []), friends, incoming, outgoing]:
+		for entry in list:
+			if entry.user_id == id:
+				return entry.username
+	return "Un joueur"
+
+
+## Heure locale d'un message (« 14:05 »), à partir de sa date ISO 8601 en UTC.
+static func chat_time(at: String) -> String:
+	if at.length() < 19:
+		return ""
+	var unix := Time.get_unix_time_from_datetime_string(at.left(19))
+	unix += Time.get_time_zone_from_system().get("bias", 0) * 60
+	var t := Time.get_time_dict_from_unix_time(unix)
+	return "%02d:%02d" % [t.hour, t.minute]
+
+
+## Implémentations : un message reçu ou confirmé.
+func _add_chat(channel: String, message: Dictionary) -> void:
+	var list: Array = chats.get(channel, [])
+	if not str(message.id).is_empty() and list.any(func(m): return m.id == message.id):
+		return
+	list.append(message)
+	chats[channel] = list.slice(-CHAT_KEEP)
+	if message.from_user_id != user_id() and channel != chat_open:
+		unread[channel] = unread.get(channel, 0) + 1
+		if channel != PARTY_CHANNEL and unread[channel] == 1:     # un seul rappel par conversation
+			toast.emit("Message de %s" % name_of(message.from_user_id))
+	chat_changed.emit(channel)
+
+
+## Implémentations : historique d'un canal. Les messages entre amis ont un id, on
+## fusionne avec ceux reçus entre-temps ; le chat de groupe est remplacé.
+func _set_chat(channel: String, messages: Array) -> void:
+	var list: Array = messages
+	if channel != PARTY_CHANNEL:
+		var by_id := {}
+		for m in chats.get(channel, []) + messages:
+			by_id[m.id] = m
+		list = by_id.values()
+		list.sort_custom(func(x, y): return int(x.id) < int(y.id))
+	chats[channel] = list.slice(-CHAT_KEEP)
+	chat_changed.emit(channel)
+
+
+## Nouveau groupe (ou plus de groupe) : son chat repart de zéro, puis l'historique.
+func _on_party_for_chat() -> void:
+	var id: String = party.get("party_id", "")
+	if id == _chat_party_id:
+		return
+	_chat_party_id = id
+	chats.erase(PARTY_CHANNEL)
+	unread.erase(PARTY_CHANNEL)
+	chat_changed.emit(PARTY_CHANNEL)
+	if not id.is_empty():
+		_impl.load_party_chat(id)
 
 
 # =========================================================================== Serveurs publics

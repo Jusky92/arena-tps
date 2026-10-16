@@ -1,4 +1,4 @@
-# Arena TPS
+# TPS Arena
 
 Jeu de tir multijoueur en 3D, en vue à la troisième personne, en mode chacun pour soi (**jusqu'à 16 joueurs** par partie, complétés par des bots). Deux maps : **« NEO-EDO »**, un quartier japonais où un temple traditionnel côtoie les néons de Tokyo, et **« Hikari Mall »**, un centre commercial abandonné sur deux niveaux. Le projet sert de support à la mise en œuvre d'une **architecture micro-services**.
 
@@ -54,18 +54,19 @@ Les micro-services (Auth, Social, Server List, Stats, Real-time, BFF) sont dans 
 | Accueil — SPÉCIALISTES | Choix du personnage (Samouraï, Shinobi, Archer, Oni) avec aperçu 3D animé, au clic sur sa carte |
 | Accueil — CLASSES | Jusqu'à 10 classes personnalisées : arme principale + arme secondaire (+ 2 grenades) |
 | Accueil — STATISTIQUES | Statistiques du joueur, succès, classements (XP, victoires, éliminations : le haut ou autour de soi) ; avec le vrai back seulement |
-| Amis | Tiroir à droite : recherche, demandes, présence, invitation dans le groupe ; avec le vrai back seulement |
+| Amis | Tiroir à droite : recherche, demandes, présence, invitation dans le groupe, « Écrire » ; avec le vrai back seulement |
+| Chat | Bouton CHAT (en bas à gauche) : chat du groupe et conversations avec les amis, messages non lus comptés (service Real-time ; messages entre amis gardés 90 jours, remis à la connexion) ; avec le vrai back seulement |
 | Paramètres (roue crantée) | Vidéo (qualité, affichage, résolution), son, commandes (souris, touches réassignables) |
-| Salon | Joueurs connectés ; le chef (premier joueur en LAN, chef du groupe sur un serveur réservé) choisit la map, le nombre et le niveau des bots, et la durée, puis lance la partie |
-| Partie | HUD (vie, armure, munitions, bonus, super-pouvoir), fil des éliminations, tableau des scores (Tab), écran de fin avec podium |
+| Salon | Joueurs connectés, chat du serveur ; le chef (premier joueur en LAN, chef du groupe sur un serveur réservé) choisit la map, le nombre et le niveau des bots, et la durée, puis lance la partie |
+| Partie | HUD (vie, armure, munitions, bonus, super-pouvoir), fil des éliminations, tableau des scores (Tab), chat en ligne (T ou Entrée), écran de fin avec podium |
 
 ## Jouer en ligne
 
-Le jeu se joue à plusieurs **en vrai réseau**, sur un **serveur dédié** : un PC lance `ArenaTPS_Server` (sans fenêtre, il ne joue pas) et les joueurs le rejoignent avec le jeu. Le jeu et le serveur sont exportés depuis le même projet Godot.
+Le jeu se joue à plusieurs **en vrai réseau**, sur un **serveur dédié** : un PC lance `TPSArena_Server` (sans fenêtre, il ne joue pas) et les joueurs le rejoignent avec le jeu. Le jeu et le serveur sont exportés depuis le même projet Godot.
 
 **En LAN** (sans back) :
 
-1. Le PC serveur lance `ArenaTPS_Server`, qui affiche ses adresses.
+1. Le PC serveur lance `TPSArena_Server`, qui affiche ses adresses.
 2. Chaque joueur saisit l'adresse dans le cadre « Rejoindre par adresse » de la page JOUER, puis clique **REJOINDRE**.
 3. Le premier joueur connecté (le chef) choisit la map, le nombre et le niveau des bots, et la durée, puis lance la partie. On peut aussi rejoindre une partie en cours.
 
@@ -118,6 +119,7 @@ est annulé au bout de 15 s s'il n'est pas confirmé) et **SON**.
 | E | Capacité du spécialiste |
 | F | Déclencher le super-pouvoir en réserve |
 | Tab (maintenir) | Tableau des scores |
+| T ou Entrée | Écrire dans le chat (partie en ligne) : Entrée envoie, Échap ferme |
 | Échap | Menu pause (la partie continue) |
 | F9 | S'infliger 25 dégâts (test, versions de développement) |
 
@@ -372,6 +374,7 @@ docs: complète le README
 - [x] Multijoueur en ligne sur serveur dédié (Godot sans écran), 16 joueurs, mode LAN
 - [x] Export du client lourd Windows / Linux / macOS (macOS non testé) et du serveur dédié Windows / Linux
 - [x] Connexion au vrai back (BFF + temps réel côté jeu, Server List côté serveur), mode hors ligne conservé
+- [x] Chat : groupe et amis dans le menu (service Real-time), salon et partie (relayé par le serveur de jeu, jamais enregistré)
 - [x] Micro-services et bases de données (dépôt séparé `TPSArena_backend`), envoi des codes par e-mail (Gmail)
 - [ ] Serveur entièrement autoritaire (les joueurs n'envoient que leurs commandes)
 - [ ] Anti-triche sur les déplacements et compensation de la latence

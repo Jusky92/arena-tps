@@ -1,6 +1,6 @@
 # Services
 
-Les micro-services d'Arena TPS ne sont pas dans ce dépôt : ils sont dans le dépôt séparé **`TPSArena_backend`** (responsable : Elian), récupéré à côté de celui-ci, dans `../../backend/` (son `README.md` explique comment lancer la stack avec Docker Compose).
+Les micro-services d'TPS Arena ne sont pas dans ce dépôt : ils sont dans le dépôt séparé **`TPSArena_backend`** (responsable : Elian), récupéré à côté de celui-ci, dans `../../backend/` (son `README.md` explique comment lancer la stack avec Docker Compose).
 
 | Service | Rôle |
 |---|---|
